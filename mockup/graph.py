@@ -12,14 +12,19 @@ class Node:
 	"""
 	num_nodes = 0
 
-	def __init__(self, weight=1.0, tmp=None, data=None):
+	def __init__(self, weight=1.0, tmp=None, data=None, home=None):
 		self.id = Node.num_nodes
 		Node.num_nodes += 1
 		self.weight = weight
 		self.tmp = tmp
 		self.data = data
+		self.home = home
 		self.neighbors = {}
 		self.incidents = {}
+		self.active = False
+
+	def __str__(self):
+		return "Node " + str(self.id)
 
 	def get_neighbors(self):
 		return self.neighbors.keys()
@@ -34,12 +39,16 @@ class Edge:
 
 	Edges can have a weight, a temporary value to assist with computations/algorithms, and attached data.
 	"""
-	def __init__(self, source, sink, weight=1.0, tmp=None, data=None):
+	def __init__(self, source, sink, weight=1.0, tmp=None, data=None, home=None):
 		self.source = source
 		self.sink = sink
 		self.weight = weight
 		self.tmp = tmp
 		self.data = data
+		self.home = home
+
+	def __str__(self):
+		return "Edge ({},{})".format(self.source.id, self.sink.id)
 
 
 class Graph:
@@ -79,7 +88,8 @@ class Graph:
 		Takes the same arguments as the Edge() constructor.
 		"""
 		if sink in source.neighbors:
-			raise GraphError("Edge already exists!")
+			return
+			# raise GraphError("Edge already exists!")
 		edge = Edge(source, sink, **kwargs)
 		source.neighbors[sink] = edge 
 		sink.incidents[source] = edge
@@ -122,7 +132,7 @@ class Graph:
 				# it's an edge
 				source = args[0]
 				sink = args[1]
-				weight = args[2]
+				weight = float(args[2])
 				if source not in nodes:
 					nodes[source] = self.add_node()
 				if sink not in nodes:
@@ -143,41 +153,3 @@ class Graph:
 			to_file.write(ret)
 		else:
 			return ret
-
-def breadth_first_search(graph, startNode):
-	"""
-	Run a BFS on graph starting from startNode.
-	"""
-	q = deque()
-	q.appendleft(startNode)
-	startNode.tmp = True
-
-	while len(q) > 0:
-		currentnode = q.pop()
-		txt = "Visiting node " + str(currentnode.id) + ". It has neighbors:"
-		for nextnode in currentnode.get_neighbors():
-			if not nextnode.tmp:
-				q.appendleft(nextnode)
-				nextnode.tmp = True
-				txt += " " + str(nextnode.id)
-		print(txt)
-	print("Done!")
-	num_not_visited = 0
-	for node in graph.nodes:
-		if not node.tmp:
-			num_not_visited += 1
-	if num_not_visited:
-		print(str(num_not_visited) + " nodes were not visited.")
-
-
-def main():
-	if len(sys.argv) < 2:
-		print("Usage: {} graph_file".format(sys.argv[0]))
-		return
-	with open(sys.argv[1]) as graph_file:
-		graph = Graph(from_file=graph_file)
-		breadth_first_search(graph, graph.nodes[0])
-
-if __name__ == '__main__':
-	import sys
-	main()
