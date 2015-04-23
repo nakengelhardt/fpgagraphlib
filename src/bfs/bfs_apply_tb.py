@@ -17,26 +17,27 @@ class TB(Module):
 		msgs_sent = 0
 
 		scatter = []
-		selfp.dut.scatter_ready = 1
+		selfp.dut.scatter_interface.ready = 1
 		yield
 
 		while msgs_sent < len(msg):
 			a, b = msg[msgs_sent]
-			selfp.dut.recv_msg = (b << 16) + a
-			selfp.dut.recv_msg_valid = 1
-			if selfp.dut.recv_ready:
+			selfp.dut.apply_interface.msg.dest_id = a
+			selfp.dut.apply_interface.msg.parent = b
+			selfp.dut.apply_interface.we = 1
+			if selfp.dut.apply_interface.ready:
 				msgs_sent += 1
 
-			if selfp.dut.scatter_msg_valid:
-				scatter.append(selfp.dut.scatter_msg)
+			if selfp.dut.scatter_interface.we:
+				scatter.append(selfp.dut.scatter_interface.msg)
 
 			yield
 
-		selfp.dut.recv_msg_valid = 0
+		selfp.dut.apply_interface.we = 0
 
 		for i in range(3):
-			if selfp.dut.scatter_msg_valid:
-				scatter.append(selfp.dut.scatter_msg)
+			if selfp.dut.scatter_interface.we:
+				scatter.append(selfp.dut.scatter_interface.msg)
 
 			yield
 

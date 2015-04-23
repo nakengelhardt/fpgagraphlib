@@ -2,22 +2,20 @@ from migen.fhdl.std import *
 # from migen.genlib.fsm import FSM, NextState, NextValue
 # from migen.fhdl import verilog
 
+from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
+
 # assumes 0 is not a valid nodeID
 class BFSApply(Module):
 	def __init__(self, nodeidsize, num_nodes_per_pe):
 		# input Q interface
-		# indicate ready, receive one message with valid
-		# message format (dest_node_id, parent)
-		self.recv_ready = Signal()
-		self.recv_msg = Signal(2 * nodeidsize)
-		self.recv_msg_valid = Signal()
+		# indicate ready, receive one message with we
+		self.apply_interface = BFSApplyInterface(nodeidsize)
 
 		# scatter interface
 		# send update message to all neighbors
 		# message format (sending_node_id) (normally would be (sending_node_id, payload), but for BFS payload = sending_node_id)
-		self.scatter_ready = Signal()
-		self.scatter_msg = Signal(nodeidsize)
-		self.scatter_msg_valid = Signal()
+		self.scatter_interface = BFSScatterInterface(nodeidsize)
+
 
 		####
 
@@ -29,14 +27,14 @@ class BFSApply(Module):
 		self.specials.wr_port = wr_port = self.mem.get_port(write_capable=True)
 
 		# input handling
-		self.comb += self.recv_ready.eq(clock_enable)
+		self.comb += self.apply_interface.ready.eq(clock_enable)
 
 		# divide up msg (could be registered if necessary)
 		dest_node_id1 = Signal(nodeidsize)
 		parent1 = Signal(nodeidsize)
 		valid1 = Signal()
 
-		self.comb += dest_node_id1.eq(self.recv_msg[0:nodeidsize]), parent1.eq(self.recv_msg[nodeidsize:2*nodeidsize]), valid1.eq(self.recv_msg_valid)
+		self.comb += dest_node_id1.eq(self.apply_interface.msg.dest_id), parent1.eq(self.apply_interface.msg.parent), valid1.eq(self.apply_interface.we)
 
 		# computation stage 1
 
@@ -67,7 +65,7 @@ class BFSApply(Module):
 		# output handling
 		# if update (= node hadn't been previously visited), scatter own id (= visit children)
 		
-		self.comb += self.scatter_msg.eq(dest_node_id2), self.scatter_msg_valid.eq(update)
+		self.comb += self.scatter_interface.msg.eq(dest_node_id2), self.scatter_interface.we.eq(update)
 
 		# stall if we can't send message
-		self.comb += clock_enable.eq(self.scatter_ready)
+		self.comb += clock_enable.eq(self.scatter_interface.ready)
