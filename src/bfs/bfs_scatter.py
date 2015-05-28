@@ -5,7 +5,8 @@ from bfs_interfaces import BFSScatterInterface, BFSMessage
 
 def make_test_graph(num_nodes_per_pe, max_edges_per_pe):
 	## TODO
-	return [0 for i in range(num_nodes_per_pe)], [0 for i in range(max_edges_per_pe)]
+	return [(0,0) for i in range(num_nodes_per_pe)], [0 for i in range(max_edges_per_pe)]
+
 
 class BFSScatter(Module):
 	def __init__(self, num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, fifo, adj_mat=None):
@@ -13,6 +14,8 @@ class BFSScatter(Module):
 		
 
 		###
+		def _pack_adj_idx(adj_idx):
+			return [b<<log2_int(max_edges_per_pe)|a for a,b in adj_idx]
 
 		if adj_mat != None:
 			adj_idx, adj_val = adj_mat
@@ -21,7 +24,7 @@ class BFSScatter(Module):
 
 		# CSR edge storage: (idx, val) tuple of arrays
 		# idx: array of (start_adr, num_neighbors)
-		self.specials.mem_idx = Memory(log2_int(max_edges_per_pe) *2, num_nodes_per_pe, init=adj_idx)
+		self.specials.mem_idx = Memory(log2_int(max_edges_per_pe) *2, num_nodes_per_pe, init=_pack_adj_idx(adj_idx))
 		self.specials.rd_port_idx = rd_port_idx = self.mem_idx.get_port()
 		# self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
 
@@ -39,8 +42,8 @@ class BFSScatter(Module):
 
 		# keep input for next stage
 		scatter_msg1 = Signal(nodeidsize)
-		stage2_start = Signal()
-		self.sync += If( self.scatter_interface.we, scatter_msg1.eq(self.scatter_interface.msg), stage2_start.eq(self.scatter_interface.we) )
+		scatter_msg_valid1 = Signal()
+		self.sync += If( enable_pipeline & self.scatter_interface.we, scatter_msg1.eq(self.scatter_interface.msg), scatter_msg_valid1.eq(self.scatter_interface.we) )
 
 		## stage 2
 
