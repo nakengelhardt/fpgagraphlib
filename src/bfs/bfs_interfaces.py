@@ -10,14 +10,14 @@ _msg_layout = [
 
 class BFSMessage(Record):
 	def __init__(self, nodeidsize):
-		Record.__init__(self, set_layout_parameters(_scatter_layout, nodeidsize=nodeidsize))
+		Record.__init__(self, set_layout_parameters(_msg_layout, nodeidsize=nodeidsize))
 
 ## interface between arbiter / apply
 
 _apply_layout = [
 	( "msg" , _msg_layout ),
-	( "we", 1, DIR_M_TO_S ),
-	( "ready", 1, DIR_S_TO_M)
+	( "valid", 1, DIR_M_TO_S ),
+	( "ack", 1, DIR_S_TO_M)
 ]
 
 class BFSApplyInterface(Record):
@@ -29,8 +29,8 @@ class BFSApplyInterface(Record):
 
 _scatter_layout = [
 	( "msg" ,"nodeidsize", DIR_M_TO_S ),
-	( "we", 1, DIR_M_TO_S ),
-	( "ready", 1, DIR_S_TO_M)
+	( "valid", 1, DIR_M_TO_S ),
+	( "ack", 1, DIR_S_TO_M)
 ]
 
 class BFSScatterInterface(Record):

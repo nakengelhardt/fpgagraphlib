@@ -2,7 +2,7 @@ from migen.fhdl.std import *
 from migen.sim.generic import run_simulation
 
 from bfs_apply import BFSApply
-
+import random
 
 class TB(Module):
 	def __init__(self):
@@ -17,26 +17,34 @@ class TB(Module):
 		msgs_sent = 0
 
 		scatter = []
-		selfp.dut.scatter_interface.ready = 1
+		selfp.dut.scatter_interface.ack = 0
 		yield
 
 		while msgs_sent < len(msg):
 			a, b = msg[msgs_sent]
 			selfp.dut.apply_interface.msg.dest_id = a
 			selfp.dut.apply_interface.msg.parent = b
-			selfp.dut.apply_interface.we = 1
-			if selfp.dut.apply_interface.ready:
-				msgs_sent += 1
-
-			if selfp.dut.scatter_interface.we:
-				scatter.append(selfp.dut.scatter_interface.msg)
-
+			selfp.dut.apply_interface.valid = 1
+			selfp.dut.scatter_interface.ack = 0
+			if selfp.dut.scatter_interface.valid:
+				ack = random.choice([0,1])
+				selfp.dut.scatter_interface.ack = ack
+				
 			yield
 
-		selfp.dut.apply_interface.we = 0
+			if selfp.dut.apply_interface.ack:
+				msgs_sent += 1
 
+			if selfp.dut.scatter_interface.ack:
+				scatter.append(selfp.dut.scatter_interface.msg)
+					
+
+			
+
+		selfp.dut.apply_interface.valid = 0
+		selfp.dut.scatter_interface.ack = 1
 		for i in range(3):
-			if selfp.dut.scatter_interface.we:
+			if selfp.dut.scatter_interface.valid:
 				scatter.append(selfp.dut.scatter_interface.msg)
 
 			yield
