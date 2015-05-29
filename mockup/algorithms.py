@@ -46,7 +46,7 @@ def distributed_bfs(graph, startNode, num_pe):
 	"""
 	Run a BFS on graph starting from startNode.
 	"""
-	random_edge_cut(graph)
+	random_edge_cut(graph, num_pe)
 	localq = [[] for i in range(num_pe)]
 	localq[startNode.home].append(startNode)
 	next = [[set() for i in range(num_pe)] for j in range(num_pe)]
@@ -69,7 +69,7 @@ def distributed_bfs(graph, startNode, num_pe):
 						else:
 							next[i][nextnode.home].add(nextnode)
 							txt += "?"
-					# print(txt)
+					print(txt)
 		# prepare next iteration
 		for i in range(num_pe):
 			localq[i] = set()
@@ -104,10 +104,46 @@ def shortest_path(graph, startNode):
 
 
 
+# def shortest_path_dist(graph, startNode, num_pe):
+# 	pe_nodes = random_vertex_cut(graph, num_pe)
+# 	startNode.tmp = 0
+# 	startNode.active = True
+# 	for pe in range(num_pe):
+# 		for node in get_active_nodes(pe_nodes[pe]):
+# 			for neighbor in node.get_incidents():
+# 				if neighbor.home == pe and neighbor.tmp != None and neighbor.tmp + node.neighbors[neighbor].weight < new_tmp:
+# 					new_tmp = neighbor.tmp + node.neighbors[neighbor].weight
+# 			if node.home[pe] == None or new_tmp < node.home[pe]:
+# 				node.home[pe] = new_tmp
 				
 
+# 			# 	for neighbor in node.get_neighbors():
+# 			# 		neighbor.active = True
+# 			# node.active = False
 
-
+def shortest_path_dist(graph, startNode, num_pe):
+	random_edge_cut(graph, num_pe)
+	num_local_accesses = 0
+	num_remote_accesses = 0
+	startNode.tmp = 0
+	for node in startNode.get_neighbors():
+		node.active = True
+	while get_active_nodes(graph.nodes):
+		for node in get_active_nodes(graph.nodes):
+			new_tmp = node.tmp if node.tmp != None else float("inf")
+			for neighbor in node.get_incidents():
+				if neighbor.home == node.home:
+					num_local_accesses += 1
+				else:
+					num_remote_accesses += 1
+				if neighbor.tmp != None and neighbor.tmp + node.neighbors[neighbor].weight < new_tmp:
+					new_tmp = neighbor.tmp + node.neighbors[neighbor].weight
+			if node.tmp == None or new_tmp < node.tmp:
+				node.tmp = new_tmp
+				for neighbor in node.get_neighbors():
+					neighbor.active = True
+			node.active = False
+	print("Done! Local accesses: " + str(num_local_accesses) + " Remote accesses: " + str(num_remote_accesses) + " Ratio local/remote: {:.2f}".format(num_local_accesses/num_remote_accesses))
 
 
 
@@ -118,23 +154,23 @@ def main():
 	with open(sys.argv[1]) as graph_file:
 		graph = Graph(from_file=graph_file, directed=False)
 		random.seed(27)
-		num_pe = 3
+		num_pe = 30
 		startNode = random.choice(graph.nodes)
 		before = time.perf_counter()
-		shortest_path(graph, startNode)
+		# shortest_path_dist(graph, startNode, 3)
 		# breadth_first_search(graph, startNode)
-		# distributed_bfs(graph, startNode, num_pe)
+		distributed_bfs(graph, startNode, num_pe)
 		after = time.perf_counter()
 		print("Execution took {:2f} seconds.".format(after-before))
 		print("Source: " + str(startNode))
+		# for node in graph.nodes[0: min(20, len(graph.nodes))]:
+		# 	print(str(node) +": at distance " + str(node.tmp) + " from source.")
+		num_not_visited = 0
 		for node in graph.nodes:
-			print(str(node) +": at distance " + str(node.tmp) + " from source.")
-		# num_not_visited = 0
-		# for node in graph.nodes:
-		# 	if not node.tmp:
-		# 		num_not_visited += 1
-		# if num_not_visited:
-		# 	print(str(num_not_visited) + " out of " + str(len(graph.nodes)) + " nodes were not visited.")
+			if not node.tmp:
+				num_not_visited += 1
+		if num_not_visited:
+			print(str(num_not_visited) + " out of " + str(len(graph.nodes)) + " nodes were not visited.")
 
 if __name__ == '__main__':
 	import sys

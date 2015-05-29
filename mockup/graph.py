@@ -1,4 +1,4 @@
-from collections import deque
+
 
 class GraphError(RuntimeError):
 	pass
@@ -13,8 +13,8 @@ class Node:
 	num_nodes = 0
 
 	def __init__(self, weight=1.0, tmp=None, data=None, home=None):
-		self.id = Node.num_nodes
 		Node.num_nodes += 1
+		self.id = Node.num_nodes
 		self.weight = weight
 		self.tmp = tmp
 		self.data = data
