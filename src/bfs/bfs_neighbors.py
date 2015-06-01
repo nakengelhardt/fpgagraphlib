@@ -43,9 +43,12 @@ class BFSNeighbors(Module):
 			self.ack.eq(0),
 			idx_valid.eq(1),
 			If(self.neighbor_ack,
-				NextValue(curr_node_idx, curr_node_idx + 1),
 				If(last_neighbor,
+					NextValue(curr_node_idx, 0),
+					NextValue(end_node_idx, 0),
 					NextState("IDLE")
+				).Else(
+					NextValue(curr_node_idx, curr_node_idx + 1)
 				)
 			)
 		)

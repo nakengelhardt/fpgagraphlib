@@ -73,10 +73,10 @@ class BFSScatter(Module):
 		neighbor_pe = Signal(log2_int(num_pe))
 		self.comb += neighbor_pe.eq(self.get_neighbors.neighbor[-log2_int(num_pe):])
 
-		self.comb += If(stage3_ack, 
+		self.comb += self.get_neighbors.neighbor_ack.eq(stage3_ack), If(stage3_ack, 
 			If(self.get_neighbors.neighbor_valid, 
 				array_dest_id[neighbor_pe].eq(self.get_neighbors.neighbor),
-				array_parent[neighbor_pe].eq(scatter_msg1),
+				array_parent[neighbor_pe].eq(scatter_msg2),
 				array_we[neighbor_pe].eq(1)
 			)
 		)
