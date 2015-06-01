@@ -12,11 +12,11 @@ class FifoReader(Module):
 	def gen_simulation(self, selfp):
 		while True:
 			for i in len(self.fifos):
+				selfp.fifos[i].re = 0
 				if selfp.fifos[i].readable:
 					print("Message sent to PE " + str(i) + ": (" + str(selfp.fifos[i].dout.dest_id) + ", " + str(selfp.fifos[i].dout.parent) + ")")
 					selfp.fifos[i].re = 1
-					yield
-					selfp.fifos[i].re = 0
+			yield
 
 	gen_simulation.passive = True
 
@@ -41,10 +41,10 @@ class TB(Module):
 	def gen_simulation(self, selfp):
 		msg = [6, 5, 2, 7, 3, 4, 1]
 		msgs_sent = 0
-
 		while msgs_sent < len(msg):
 			selfp.dut.scatter_interface.msg = msg[msgs_sent]
 			selfp.dut.scatter_interface.valid = 1
+			print(str(msgs_sent))
 			yield
 			if selfp.dut.scatter_interface.ack == 1:	
 				msgs_sent += 1
