@@ -1,7 +1,7 @@
 from migen.fhdl.std import *
 from migen.genlib.misc import optree
 
-from bfs_interfaces import BFSScatterInterface, BFSMessage
+from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface
 from bfs_neighbors import BFSNeighbors
 
 def make_test_graph(num_nodes_per_pe, max_edges_per_pe):
@@ -10,9 +10,9 @@ def make_test_graph(num_nodes_per_pe, max_edges_per_pe):
 
 
 class BFSScatter(Module):
-	def __init__(self, num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, fifos, adj_mat=None):
+	def __init__(self, num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=None):
 		self.scatter_interface = BFSScatterInterface(nodeidsize)
-		
+		self.network_interface = BFSNetworkInterface(nodeidsize, log2_int(num_pe))
 
 		###
 		def _pack_adj_idx(adj_idx):
@@ -40,7 +40,7 @@ class BFSScatter(Module):
 		## stage 1
 
 		# address idx with incoming message
-		self.comb += rd_port_idx.adr.eq(self.scatter_interface.msg),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
+		self.comb += rd_port_idx.adr.eq(self.scatter_interface.msg[:log2_int(num_nodes_per_pe)]),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
 		self.comb += stage1_ack.eq(self.get_neighbors.ack)
 
 		# keep input for next stage
@@ -64,24 +64,18 @@ class BFSScatter(Module):
 
 		## stage 3
 
-		array_dest_id = Array(fifo.din.dest_id for fifo in fifos)
-		array_parent = Array(fifo.din.parent for fifo in fifos)
-		array_we = Array(fifo.we for fifo in fifos)
-		array_writable = Array(fifo.writable for fifo in fifos)
-
 		# send out messages
-		neighbor_pe = Signal(log2_int(num_pe))
-		self.comb += neighbor_pe.eq(self.get_neighbors.neighbor[-log2_int(num_pe):])
+		if num_pe > 1:
+			neighbor_pe = Signal(log2_int(num_pe))
+			self.comb += neighbor_pe.eq(self.get_neighbors.neighbor[-log2_int(num_pe):])
+		else:
+			neighbor_pe = 0
 
-		self.comb += self.get_neighbors.neighbor_ack.eq(stage3_ack), If(stage3_ack, 
-			If(self.get_neighbors.neighbor_valid, 
-				array_dest_id[neighbor_pe].eq(self.get_neighbors.neighbor),
-				array_parent[neighbor_pe].eq(scatter_msg2),
-				array_we[neighbor_pe].eq(1)
-			)
-		)
+		self.comb += self.get_neighbors.neighbor_ack.eq(stage3_ack), \
+					 self.network_interface.msg.dest_id.eq(self.get_neighbors.neighbor),\
+					 self.network_interface.msg.parent.eq(scatter_msg2),\
+					 self.network_interface.valid.eq(self.get_neighbors.neighbor_valid),\
+					 self.network_interface.dest_pe.eq(neighbor_pe),\
+					 stage3_ack.eq(self.network_interface.ack)
 
-		# stall pipeline if not able to send
-		self.comb += stage3_ack.eq(array_writable[neighbor_pe])
-		
 

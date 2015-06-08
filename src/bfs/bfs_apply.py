@@ -12,7 +12,7 @@ class BFSApply(Module):
 		self.apply_interface = BFSApplyInterface(nodeidsize)
 
 		# scatter interface
-		# send update message to all neighbors
+		# send self.update message to all neighbors
 		# message format (sending_node_id) (normally would be (sending_node_id, payload), but for BFS payload = sending_node_id)
 		self.scatter_interface = BFSScatterInterface(nodeidsize)
 
@@ -54,18 +54,18 @@ class BFSApply(Module):
 
 		# computation stage 2
 
-		# find out if we have an update
-		update = Signal()
-		self.comb += update.eq(valid2 & (rd_port.dat_r == 0))
+		# find out if we have an self.update
+		self.update = Signal()
+		self.comb += self.update.eq(valid2 & (rd_port.dat_r == 0))
 
 		# if yes write parent value
-		self.comb += wr_port.adr.eq(dest_node_id2), wr_port.dat_w.eq(parent2), wr_port.we.eq(update)
-		# TODO: if next msg + one after is for same node, will not see updated value
+		self.comb += wr_port.adr.eq(dest_node_id2[:log2_int(num_nodes_per_pe)]), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
+		# TODO: if next msg + one after is for same node, will not see self.updated value
 
 		# output handling
-		# if update (= node hadn't been previously visited), scatter own id (= visit children)
+		# if self.update (= node hadn't been previously visited), scatter own id (= visit children)
 		
-		self.comb += self.scatter_interface.msg.eq(dest_node_id2), self.scatter_interface.valid.eq(update)
+		self.comb += self.scatter_interface.msg.eq(dest_node_id2), self.scatter_interface.valid.eq(self.update)
 
 		# stall if we can't send message
-		self.comb += clock_enable.eq(self.scatter_interface.ack | ~update)
+		self.comb += clock_enable.eq(self.scatter_interface.ack | ~self.update)

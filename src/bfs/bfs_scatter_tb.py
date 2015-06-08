@@ -2,20 +2,18 @@ from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
 from migen.sim.generic import run_simulation
 
-from bfs_interfaces import BFSMessage
+from bfs_interfaces import BFSMessage, BFSNetworkInterface
 from bfs_scatter import BFSScatter
 
-class FifoReader(Module):
-	def __init__(self, fifos):
-		self.fifos = fifos
+class NetReader(Module):
+	def __init__(self, net):
+		self.net = net
 
 	def gen_simulation(self, selfp):
+		selfp.net.ack = 1
 		while True:
-			for i in range(len(self.fifos)):
-				selfp.fifos[i].re = 0
-				if selfp.fifos[i].readable:
-					print("Message sent to PE " + str(i) + ": (" + str(selfp.fifos[i].dout.dest_id) + ", " + str(selfp.fifos[i].dout.parent) + ")")
-					selfp.fifos[i].re = 1
+			if selfp.net.valid:
+				print("Message sent to PE " + str(selfp.net.dest_pe) + ": (" + str(selfp.net.msg.dest_id) + ", " + str(selfp.net.msg.parent) + ")")
 			yield
 
 	gen_simulation.passive = True
@@ -28,16 +26,12 @@ class TB(Module):
 		max_edges_per_pe = 2**8
 		num_pe = 8
 
-		fifos = [SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=32) for _ in range(num_pe)]
-		self.submodules += fifos
-
-		self.submodules += FifoReader(fifos)
-
 		adj_idx = [(0,0),(0,3),(3,3),(6,3),(9,3),(12,3),(15,3),(18,2)]
 		adj_val = [2,3,4,1,5,6,1,4,7,1,3,5,2,4,6,2,5,7,3,6]
 
-		self.submodules.dut = BFSScatter(num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, fifos, adj_mat=(adj_idx,adj_val))
+		self.submodules.dut = BFSScatter(num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=(adj_idx,adj_val))
 
+		self.submodules += NetReader(self.dut.network_interface)
 		
 
 	def gen_simulation(self, selfp):
@@ -56,3 +50,5 @@ class TB(Module):
 if __name__ == "__main__":
 	tb = TB()
 	run_simulation(tb, vcd_name="tb.vcd", ncycles=200)
+
+		
