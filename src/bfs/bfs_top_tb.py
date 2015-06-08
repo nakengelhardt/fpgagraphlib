@@ -17,6 +17,7 @@ class TB(Module):
 		self.submodules.dut = BFS(self.num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=(adj_idx, adj_val))
 
 	def gen_simulation(self, selfp):
+		# inject start message
 		root = 6
 		root_pe = root % self.num_pe
 		selfp.dut.arbiter[root_pe].start_message.msg.dest_id = root
@@ -26,6 +27,8 @@ class TB(Module):
 		while selfp.dut.arbiter[root_pe].start_message.ack == 0:
 			yield
 		selfp.dut.arbiter[root_pe].start_message.valid = 0
+
+		# check nodes are visited
 		num_visited = 0
 		num_nodes = 7
 		while num_visited < num_nodes:

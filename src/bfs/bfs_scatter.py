@@ -4,24 +4,25 @@ from migen.genlib.misc import optree
 from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface
 from bfs_neighbors import BFSNeighbors
 
-def make_test_graph(num_nodes_per_pe, max_edges_per_pe):
-	## TODO
-	return [(0,0) for i in range(num_nodes_per_pe)], [0 for i in range(max_edges_per_pe)]
-
 
 class BFSScatter(Module):
 	def __init__(self, num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=None):
+		# input
 		self.scatter_interface = BFSScatterInterface(nodeidsize)
+
+		#output
 		self.network_interface = BFSNetworkInterface(nodeidsize, log2_int(num_pe))
 
 		###
+
+		# memory layout (TODO: replace with an actual record)
 		def _pack_adj_idx(adj_idx):
-			return [b<<log2_int(max_edges_per_pe) | a for a,b in adj_idx]
+			return [b<<log2_int(max_edges_per_pe) | a for a,b in adj_idx] if adj_idx else None
 
 		if adj_mat != None:
 			adj_idx, adj_val = adj_mat
 		else:
-			adj_idx, adj_val = make_test_graph(num_nodes_per_pe, max_edges_per_pe)
+			adj_idx, adj_val = None, None
 
 		# CSR edge storage: (idx, val) tuple of arrays
 		# idx: array of (start_adr, num_neighbors)
@@ -34,9 +35,12 @@ class BFSScatter(Module):
 		self.submodules.get_neighbors = BFSNeighbors(nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_val)
 
 
+		# flow control variables
 		stage1_ack = Signal()
 		stage2_ack = Signal()
 		stage3_ack = Signal()
+
+
 		## stage 1
 
 		# address idx with incoming message
@@ -50,13 +54,14 @@ class BFSScatter(Module):
 
 		## stage 2
 
-
+		# ask get_neighbors submodule for all neighbors of input node
+		# stage2_ack will only go up again when all neighbors done
 		self.comb += self.get_neighbors.start_idx.eq(rd_port_idx.dat_r[:log2_int(max_edges_per_pe)]), \
 					 self.get_neighbors.num_neighbors.eq(rd_port_idx.dat_r[log2_int(max_edges_per_pe):]), \
 					 self.get_neighbors.valid.eq(scatter_msg_valid1), \
 					 stage2_ack.eq(self.get_neighbors.ack)
 
-		# next stage read data valid
+		# keep input for next stage
 		scatter_msg2 = Signal(nodeidsize)
 		scatter_msg_valid2 = Signal()
 		self.sync += If( stage2_ack, scatter_msg2.eq(scatter_msg1), scatter_msg_valid2.eq(scatter_msg_valid1) )
@@ -64,13 +69,14 @@ class BFSScatter(Module):
 
 		## stage 3
 
-		# send out messages
+		# TODO: formalize address fields
 		if num_pe > 1:
 			neighbor_pe = Signal(log2_int(num_pe))
 			self.comb += neighbor_pe.eq(self.get_neighbors.neighbor[-log2_int(num_pe):])
 		else:
 			neighbor_pe = 0
 
+		# send out messages
 		self.comb += self.get_neighbors.neighbor_ack.eq(stage3_ack), \
 					 self.network_interface.msg.dest_id.eq(self.get_neighbors.neighbor),\
 					 self.network_interface.msg.parent.eq(scatter_msg2),\

@@ -8,7 +8,6 @@ from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
 class BFSApply(Module):
 	def __init__(self, nodeidsize, num_nodes_per_pe):
 		# input Q interface
-		# indicate ready, receive one message with we
 		self.apply_interface = BFSApplyInterface(nodeidsize)
 
 		# scatter interface
@@ -54,17 +53,17 @@ class BFSApply(Module):
 
 		# computation stage 2
 
-		# find out if we have an self.update
+		# find out if we have an update
 		self.update = Signal()
 		self.comb += self.update.eq(valid2 & (rd_port.dat_r == 0))
 
 		# if yes write parent value
 		self.comb += wr_port.adr.eq(dest_node_id2[:log2_int(num_nodes_per_pe)]), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
-		# TODO: if next msg + one after is for same node, will not see self.updated value
+		# TODO: if next msg + one after is for same node, will not see updated value b/c write not completed yet
+		# not correctness issue, just wasted effort (will send out messages twice)
 
 		# output handling
 		# if self.update (= node hadn't been previously visited), scatter own id (= visit children)
-		
 		self.comb += self.scatter_interface.msg.eq(dest_node_id2), self.scatter_interface.valid.eq(self.update)
 
 		# stall if we can't send message

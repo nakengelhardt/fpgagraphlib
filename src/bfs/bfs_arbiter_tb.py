@@ -8,9 +8,10 @@ from bfs_arbiter import BFSArbiter
 class FifoWriter(Module):
 	def __init__(self, fifos, messages):
 		self.fifos = fifos
-		self.messages = messages.copy()
+		self.messages = messages 
 
 	def gen_simulation(self, selfp):
+		# send inputs
 		msgs_sent = 0
 		for i in range(len(self.fifos)):
 				selfp.fifos[i].we = 0
@@ -43,9 +44,12 @@ class TB(Module):
 
 		self.messages = [(2, 6), (5, 6), (7, 6), (2, 5), (4, 5), (6, 5), (1, 2), (5, 2), (6, 2), (3, 7), (6, 7), (1, 3), (4, 3), (7, 3), (1, 4), (3, 4), (5, 4), (2, 1), (3, 1)]
 		
-		self.submodules += FifoWriter(fifos, self.messages)
+		# delegate input to submodule
+		self.submodules += FifoWriter(fifos, self.messages.copy()) # messages modified afterwards!
 
 	def gen_simulation(self, selfp):
+		# check output
+		# TODO: add testing of pipeline stall by sometimes turning ack off?
 		selfp.dut.apply_interface.ack = 1
 		msgs_received = 0
 		total_msgs = len(self.messages)
@@ -53,7 +57,7 @@ class TB(Module):
 		while msgs_received < total_msgs:
 			if selfp.dut.apply_interface.valid:
 				msg = (selfp.dut.apply_interface.msg.dest_id, selfp.dut.apply_interface.msg.parent)
-				txt = str(msgs_received) + " Message received: " + str(msg)
+				txt = "{0:{1}d}: ".format(msgs_received, len(str(total_msgs-1))) + str(msg)
 				try:
 					self.messages.remove(msg)
 					msgs_received += 1
@@ -63,6 +67,8 @@ class TB(Module):
 			yield
 		if self.messages:
 			print("Messages not received: " + str(self.messages))
+		else:
+			print("All messages received.")
 
 
 if __name__ == "__main__":

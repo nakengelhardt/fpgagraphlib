@@ -7,25 +7,26 @@ from migen.genlib.roundrobin import *
 
 class BFSArbiter(Module):
 	def __init__(self, num_pe, nodeidsize, fifos):
+		# output
 		self.apply_interface = BFSApplyInterface(nodeidsize)
+
+		# input override for injecting the message starting the computation
 		self.start_message = BFSApplyInterface(nodeidsize)
 
 		self.submodules.roundrobin = RoundRobin(num_pe, switch_policy=SP_CE)
 
-		array_dest_id = Array(fifo.dout.dest_id for fifo in fifos)
-		array_parent = Array(fifo.dout.parent for fifo in fifos)
+		# arrays for choosing incoming fifo to use
+		array_data = Array(fifo.dout for fifo in fifos)
 		array_re = Array(fifo.re for fifo in fifos)
 		array_readable = Array(fifo.readable for fifo in fifos)
 
-		self.comb += If(self.start_message.valid,
-						self.apply_interface.msg.dest_id.eq(self.start_message.msg.dest_id),
-						self.apply_interface.msg.parent.eq(self.start_message.msg.parent),
+		self.comb += If(self.start_message.valid, # override
+						self.apply_interface.msg.eq(self.start_message.msg),
 						self.apply_interface.valid.eq(self.start_message.valid),
 						self.start_message.ack.eq(self.apply_interface.ack),
 						self.roundrobin.ce.eq(0)
-					 ).Else(
-						self.apply_interface.msg.dest_id.eq(array_dest_id[self.roundrobin.grant]), 
-						self.apply_interface.msg.parent.eq(array_parent[self.roundrobin.grant]), 
+					 ).Else( # normal roundrobin
+						self.apply_interface.msg.eq(array_data[self.roundrobin.grant]),
 						self.apply_interface.valid.eq(array_readable[self.roundrobin.grant]),
 						array_re[self.roundrobin.grant].eq(self.apply_interface.ack), 
 						[self.roundrobin.request[i].eq(array_readable[i]) for i in range(len(fifos))], 

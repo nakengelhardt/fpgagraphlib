@@ -15,9 +15,11 @@ class BFS(Module):
 		self.submodules.apply = [BFSApply(nodeidsize, num_nodes_per_pe) for _ in range(num_pe)]
 		self.submodules.scatter = [BFSScatter(num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=adj_mat) for _ in range(num_pe)]
 
+		# connect within PEs
 		self.comb += [self.arbiter[i].apply_interface.connect(self.apply[i].apply_interface) for i in range(num_pe)],\
 					 [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
 
+		# connect fifos across PEs
 		for i in range(num_pe):
 			array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[j][i] for j in range(num_pe)])
 			array_parent = Array(fifo.din.parent for fifo in [fifos[j][i] for j in range(num_pe)])
