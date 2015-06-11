@@ -19,7 +19,7 @@ class BFSNeighbors(Module):
 		# val: array of nodeids
 		self.specials.mem_val = Memory(nodeidsize, max_edges_per_pe, init=adj_val)
 		self.specials.rd_port_val = rd_port_val = self.mem_val.get_port()
-		# self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
+		self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
 
 
 		curr_node_idx = Signal(log2_int(max_edges_per_pe))

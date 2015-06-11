@@ -37,6 +37,8 @@ class BFSScatterInterface(Record):
 	def __init__(self, nodeidsize):
 		Record.__init__(self, set_layout_parameters(_scatter_layout, nodeidsize=nodeidsize))
 
+## interface between scatter / network
+
 _network_layout = [
 	( "msg" , _msg_layout ),
 	( "dest_pe", "peadrsize", DIR_M_TO_S ),

@@ -6,20 +6,20 @@ from bfs_top import BFS
 
 class TB(Module):
 	def __init__(self):
-		nodeidsize = 8
-		num_nodes_per_pe = 2**4
-		max_edges_per_pe = 2**5
+		self.nodeidsize = 8
+		self.num_nodes_per_pe = 2**2
+		self.max_edges_per_pe = 2**5
 		self.num_pe = 2
 
 		adj_idx = [(0,0),(0,3),(3,3),(6,3),(9,3),(12,3),(15,3),(18,2)]
 		adj_val = [2,3,4,1,5,6,1,4,7,1,3,5,2,4,6,2,5,7,3,6]
 
-		self.submodules.dut = BFS(self.num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=(adj_idx, adj_val))
+		self.submodules.dut = BFS(self.num_pe, self.nodeidsize, self.num_nodes_per_pe, self.max_edges_per_pe, adj_mat=(adj_idx, adj_val))
 
 	def gen_simulation(self, selfp):
 		# inject start message
 		root = 6
-		root_pe = root % self.num_pe
+		root_pe = root//self.num_nodes_per_pe
 		selfp.dut.arbiter[root_pe].start_message.msg.dest_id = root
 		selfp.dut.arbiter[root_pe].start_message.msg.parent = root
 		selfp.dut.arbiter[root_pe].start_message.valid = 1

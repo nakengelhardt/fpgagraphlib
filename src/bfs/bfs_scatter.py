@@ -3,7 +3,7 @@ from migen.genlib.misc import optree
 
 from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface
 from bfs_neighbors import BFSNeighbors
-
+from bfs_address import BFSAddressGenerator
 
 class BFSScatter(Module):
 	def __init__(self, num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=None):
@@ -25,10 +25,12 @@ class BFSScatter(Module):
 			adj_idx, adj_val = None, None
 
 		# CSR edge storage: (idx, val) tuple of arrays
+		# address format handler
+		addressgenerator = BFSAddressGenerator(nodeidsize, num_pe, num_nodes_per_pe)
 		# idx: array of (start_adr, num_neighbors)
 		self.specials.mem_idx = Memory(log2_int(max_edges_per_pe) *2, num_nodes_per_pe, init=_pack_adj_idx(adj_idx))
 		self.specials.rd_port_idx = rd_port_idx = self.mem_idx.get_port(has_re=True)
-		# self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
+		self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
 
 		# val: array of nodeids
 		# resides in submodule
@@ -43,8 +45,9 @@ class BFSScatter(Module):
 
 		## stage 1
 
+
 		# address idx with incoming message
-		self.comb += rd_port_idx.adr.eq(self.scatter_interface.msg[:log2_int(num_nodes_per_pe)]),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
+		self.comb += rd_port_idx.adr.eq(addressgenerator.local_adr(self.scatter_interface.msg)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
 		self.comb += stage1_ack.eq(self.get_neighbors.ack)
 
 		# keep input for next stage
@@ -72,7 +75,7 @@ class BFSScatter(Module):
 		# TODO: formalize address fields
 		if num_pe > 1:
 			neighbor_pe = Signal(log2_int(num_pe))
-			self.comb += neighbor_pe.eq(self.get_neighbors.neighbor[-log2_int(num_pe):])
+			self.comb += neighbor_pe.eq(addressgenerator.pe_adr(self.get_neighbors.neighbor))
 		else:
 			neighbor_pe = 0
 
