@@ -4,6 +4,7 @@ from migen.sim.generic import run_simulation
 
 from bfs_interfaces import BFSMessage, BFSNetworkInterface
 from bfs_scatter import BFSScatter
+from bfs_address import BFSAddressLayout
 
 class NetReader(Module):
 	def __init__(self, net):
@@ -21,15 +22,19 @@ class NetReader(Module):
 
 class TB(Module):
 	def __init__(self):
-		nodeidsize = 16
-		num_nodes_per_pe = 2**8
-		max_edges_per_pe = 2**8
-		num_pe = 8
+		nodeidsize = 8
+		num_nodes_per_pe = 2**4
+		edgeidsize = 8
+		max_edges_per_pe = 2**4
+		peidsize = 2
+		num_pe = 2
+
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
 
 		adj_idx = [(0,0),(0,3),(3,3),(6,3),(9,3),(12,3),(15,3),(18,2)]
 		adj_val = [2,3,4,1,5,6,1,4,7,1,3,5,2,4,6,2,5,7,3,6]
 
-		self.submodules.dut = BFSScatter(num_pe, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_mat=(adj_idx,adj_val))
+		self.submodules.dut = BFSScatter(self.addresslayout, adj_mat=(adj_idx, adj_val))
 
 		self.submodules += NetReader(self.dut.network_interface)
 		

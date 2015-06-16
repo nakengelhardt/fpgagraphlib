@@ -4,6 +4,7 @@ from migen.sim.generic import run_simulation
 
 from bfs_interfaces import BFSApplyInterface, BFSMessage
 from bfs_arbiter import BFSArbiter
+from bfs_address import BFSAddressLayout
 
 class FifoWriter(Module):
 	def __init__(self, fifos, messages):
@@ -32,15 +33,20 @@ class FifoWriter(Module):
 
 class TB(Module):
 	def __init__(self):
-		nodeidsize = 16
-		num_nodes_per_pe = 2**8
-		max_edges_per_pe = 2**8
+		nodeidsize = 8
+		num_nodes_per_pe = 2**4
+		edgeidsize = 8
+		max_edges_per_pe = 2**4
+		peidsize = 2
 		num_pe = 2
+
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+
 
 		fifos = [SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=32) for _ in range(num_pe)]
 		self.submodules += fifos
 
-		self.submodules.dut = BFSArbiter(num_pe, nodeidsize, fifos)
+		self.submodules.dut = BFSArbiter(self.addresslayout, fifos)
 
 		self.messages = [(2, 6), (5, 6), (7, 6), (2, 5), (4, 5), (6, 5), (1, 2), (5, 2), (6, 2), (3, 7), (6, 7), (1, 3), (4, 3), (7, 3), (1, 4), (3, 4), (5, 4), (2, 1), (3, 1)]
 		

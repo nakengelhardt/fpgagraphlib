@@ -3,10 +3,13 @@ from migen.fhdl.std import *
 # from migen.fhdl import verilog
 
 from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
-from bfs_address import BFSAddressGenerator
+from bfs_address import BFSAddressLayout
 
 class BFSApply(Module):
-	def __init__(self, nodeidsize, num_pe, num_nodes_per_pe):
+	def __init__(self, addresslayout):
+		nodeidsize = addresslayout.nodeidsize
+		num_nodes_per_pe = addresslayout.num_nodes_per_pe
+
 		# input Q interface
 		self.apply_interface = BFSApplyInterface(nodeidsize)
 
@@ -38,9 +41,8 @@ class BFSApply(Module):
 
 		# computation stage 1
 
-		addressgenerator = BFSAddressGenerator(nodeidsize, num_pe, num_nodes_per_pe)
 		# look up parent(dest_node_id) to see if already visited
-		self.comb += rd_port.adr.eq(addressgenerator.local_adr(dest_node_id_in)), rd_port.re.eq(clock_enable)
+		self.comb += rd_port.adr.eq(addresslayout.local_adr(dest_node_id_in)), rd_port.re.eq(clock_enable)
 
 		# registers to next stage
 		dest_node_id2 = Signal(nodeidsize)
@@ -60,7 +62,7 @@ class BFSApply(Module):
 		self.comb += self.update.eq(valid2 & (rd_port.dat_r == 0))
 
 		# if yes write parent value
-		self.comb += wr_port.adr.eq(addressgenerator.local_adr(dest_node_id2)), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
+		self.comb += wr_port.adr.eq(addresslayout.local_adr(dest_node_id2)), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
 		# TODO: if next msg + one after is for same node, will not see updated value b/c write not completed yet
 		# not correctness issue, just wasted effort (will send out messages twice)
 

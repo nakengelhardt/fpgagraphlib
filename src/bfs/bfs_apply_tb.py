@@ -2,14 +2,22 @@ from migen.fhdl.std import *
 from migen.sim.generic import run_simulation
 
 from bfs_apply import BFSApply
+from bfs_address import BFSAddressLayout
 import random
 
 class TB(Module):
 	def __init__(self):
-		nodeidsize = 16
-		num_nodes_per_pe = 2**8
+		nodeidsize = 8
+		num_nodes_per_pe = 2**4
+		edgeidsize = 8
+		max_edges_per_pe = 2**4
+		peidsize = 2
+		num_pe = 2
 
-		self.submodules.dut = BFSApply(nodeidsize, num_nodes_per_pe)
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+
+
+		self.submodules.dut = BFSApply(self.addresslayout)
 
 
 	def gen_simulation(self, selfp):
@@ -54,7 +62,7 @@ class TB(Module):
 
 		print("Visit order: " + str(scatter))
 		print("Parent data:")
-		for i in range(1,8):
+		for i in range(1, self.addresslayout.num_nodes_per_pe):
 			print(str(i) + ": " + str(selfp.simulator.rd(self.dut.mem, i)))
 
 				

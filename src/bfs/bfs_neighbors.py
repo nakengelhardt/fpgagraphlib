@@ -2,10 +2,16 @@ from migen.fhdl.std import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 
 class BFSNeighbors(Module):
-	def __init__(self, nodeidsize, num_nodes_per_pe, max_edges_per_pe, adj_val):
+	def __init__(self, addresslayout, adj_val):
+		nodeidsize = addresslayout.nodeidsize
+		num_nodes_per_pe = addresslayout.num_nodes_per_pe
+		num_pe = addresslayout.num_pe
+		edgeidsize = addresslayout.edgeidsize
+		max_edges_per_pe = addresslayout.max_edges_per_pe
+
 		# input
-		self.start_idx = Signal(log2_int(max_edges_per_pe))
-		self.num_neighbors = Signal(log2_int(max_edges_per_pe))
+		self.start_idx = Signal(edgeidsize)
+		self.num_neighbors = Signal(edgeidsize)
 		self.valid = Signal()
 		self.ack = Signal()
 
@@ -22,8 +28,8 @@ class BFSNeighbors(Module):
 		self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
 
 
-		curr_node_idx = Signal(log2_int(max_edges_per_pe))
-		end_node_idx = Signal(log2_int(max_edges_per_pe))
+		curr_node_idx = Signal(edgeidsize)
+		end_node_idx = Signal(edgeidsize)
 		idx_valid = Signal()
 		last_neighbor = Signal()
 

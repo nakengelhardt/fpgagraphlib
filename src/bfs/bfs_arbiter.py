@@ -6,7 +6,10 @@ from migen.genlib.roundrobin import *
 
 
 class BFSArbiter(Module):
-	def __init__(self, num_pe, nodeidsize, fifos):
+	def __init__(self, addresslayout, fifos):
+		nodeidsize = addresslayout.nodeidsize
+		num_pe = addresslayout.num_pe
+
 		# output
 		self.apply_interface = BFSApplyInterface(nodeidsize)
 
@@ -32,12 +35,3 @@ class BFSArbiter(Module):
 						[self.roundrobin.request[i].eq(array_readable[i]) for i in range(len(fifos))], 
 						self.roundrobin.ce.eq(self.apply_interface.ack)
 					 )
-
-if __name__ == '__main__':
-	from migen.fhdl import verilog
-
-	nodeidsize = 16
-	num_pe = 2
-
-	m = BFSArbiter(num_pe, nodeidsize, [SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=32) for _ in range(num_pe)])
-	print(verilog.convert(m))
