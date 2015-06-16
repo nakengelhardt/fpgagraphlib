@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+*.egg-info/
+*.o
+*.v
+*.vvp
+*.vcd
