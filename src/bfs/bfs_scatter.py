@@ -1,5 +1,4 @@
 from migen.fhdl.std import *
-from migen.genlib.misc import optree
 
 from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface
 from bfs_neighbors import BFSNeighbors
@@ -12,12 +11,13 @@ class BFSScatter(Module):
 		num_pe = addresslayout.num_pe
 		edgeidsize = addresslayout.edgeidsize
 		max_edges_per_pe = addresslayout.max_edges_per_pe
+		peidsize = addresslayout.peidsize
 
 		# input
 		self.scatter_interface = BFSScatterInterface(nodeidsize)
 
 		#output
-		self.network_interface = BFSNetworkInterface(nodeidsize, log2_int(num_pe))
+		self.network_interface = BFSNetworkInterface(nodeidsize, peidsize)
 
 		###
 		
@@ -50,7 +50,6 @@ class BFSScatter(Module):
 
 		## stage 1
 
-
 		# address idx with incoming message
 		self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.msg)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
 		self.comb += stage1_ack.eq(self.get_neighbors.ack)
@@ -58,7 +57,13 @@ class BFSScatter(Module):
 		# keep input for next stage
 		scatter_msg1 = Signal(nodeidsize)
 		scatter_msg_valid1 = Signal()
-		self.sync += If( stage1_ack , scatter_msg1.eq(self.scatter_interface.msg), scatter_msg_valid1.eq(self.scatter_interface.valid) )
+		scatter_barrier1 = Signal()
+		# valid1 requests get_neighbors, so don't set for barrier
+		self.sync += If( stage1_ack,\
+						 scatter_msg1.eq(self.scatter_interface.msg),\
+						 scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier), \
+						 scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier) \
+					 )
 
 		## stage 2
 
@@ -72,13 +77,14 @@ class BFSScatter(Module):
 		# keep input for next stage
 		scatter_msg2 = Signal(nodeidsize)
 		scatter_msg_valid2 = Signal()
-		self.sync += If( stage2_ack, scatter_msg2.eq(scatter_msg1), scatter_msg_valid2.eq(scatter_msg_valid1) )
+		scatter_barrier2 = Signal()
+		self.sync += If( stage2_ack, scatter_msg2.eq(scatter_msg1), scatter_msg_valid2.eq(scatter_msg_valid1), scatter_barrier2.eq(scatter_barrier1) )
 
 
 		## stage 3
 
 		if num_pe > 1:
-			neighbor_pe = Signal(log2_int(num_pe))
+			neighbor_pe = Signal(peidsize)
 			self.comb += neighbor_pe.eq(addresslayout.pe_adr(self.get_neighbors.neighbor))
 		else:
 			neighbor_pe = 0
@@ -87,7 +93,9 @@ class BFSScatter(Module):
 		self.comb += self.get_neighbors.neighbor_ack.eq(stage3_ack), \
 					 self.network_interface.msg.dest_id.eq(self.get_neighbors.neighbor),\
 					 self.network_interface.msg.parent.eq(scatter_msg2),\
-					 self.network_interface.valid.eq(self.get_neighbors.neighbor_valid),\
+					 self.network_interface.msg.barrier.eq(scatter_barrier2),\
+					 self.network_interface.broadcast.eq(scatter_barrier2),\
+					 self.network_interface.valid.eq(self.get_neighbors.neighbor_valid | scatter_barrier2),\
 					 self.network_interface.dest_pe.eq(neighbor_pe),\
 					 stage3_ack.eq(self.network_interface.ack)
 

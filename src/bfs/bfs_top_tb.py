@@ -41,18 +41,22 @@ class TB(Module):
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_idx_flat)
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_val_flat)
 
-
-
 		# check nodes are visited
 		num_visited = 0
 		num_nodes = 7
 		while num_visited < num_nodes:
 			for i in range(self.addresslayout.num_pe):
 				if selfp.dut.scatter[i].scatter_interface.valid & selfp.dut.scatter[i].scatter_interface.ack:
-					num_visited += 1
-					print("Visiting " + str(selfp.dut.scatter[i].scatter_interface.msg))
+					if not selfp.dut.scatter[i].scatter_interface.barrier:
+						num_visited += 1
+						print("Visiting " + str(selfp.dut.scatter[i].scatter_interface.msg) + " (level " + str(selfp.dut.apply[i].level) + ")")
 			yield
-		yield 10
+		yield 100
+
+		# verify in-memory spanning tree
+		for pe in range(self.addresslayout.num_pe):
+			for adr in range(self.addresslayout.num_nodes_per_pe):
+				print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.dut.apply[pe].mem, adr)))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ class FifoWriter(Module):
 		msgs_sent = 0
 		for i in range(len(self.fifos)):
 				selfp.fifos[i].we = 0
+				selfp.fifos[i].din.barrier = 0
 		while msgs_sent < len(self.messages):
 			dest_id, parent = self.messages[msgs_sent]
 			pe = dest_id % len(self.fifos)
@@ -28,6 +29,14 @@ class FifoWriter(Module):
 			yield
 			for i in range(len(self.fifos)):
 				selfp.fifos[i].we = 0
+		yield
+		for i in range(len(self.fifos)):
+				selfp.fifos[i].we = 1
+				selfp.fifos[i].din.barrier = 1
+		yield
+		for i in range(len(self.fifos)):
+				selfp.fifos[i].we = 0
+				selfp.fifos[i].din.barrier = 0
 
 
 
@@ -39,8 +48,9 @@ class TB(Module):
 		max_edges_per_pe = 2**4
 		peidsize = 2
 		num_pe = 2
+		pcie_width = 128
 
-		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width)
 
 
 		fifos = [SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=32) for _ in range(num_pe)]
@@ -75,7 +85,8 @@ class TB(Module):
 			print("Messages not received: " + str(self.messages))
 		else:
 			print("All messages received.")
-
+		if selfp.dut.apply_interface.valid & selfp.dut.apply_interface.msg.barrier:
+			print("Barrier reached.")
 
 if __name__ == "__main__":
 	tb = TB()

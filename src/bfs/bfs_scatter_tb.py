@@ -28,8 +28,9 @@ class TB(Module):
 		max_edges_per_pe = 2**4
 		peidsize = 2
 		num_pe = 2
+		pcie_width = 128
 
-		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width)
 
 		adj_idx = [(0,0),(0,3),(3,3),(6,3),(9,3),(12,3),(15,3),(18,2)]
 		adj_val = [2,3,4,1,5,6,1,4,7,1,3,5,2,4,6,2,5,7,3,6]

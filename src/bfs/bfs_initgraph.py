@@ -1,11 +1,12 @@
 from migen.fhdl.std import *
 from migen.genlib.fsm import FSM, NextState, NextValue
+from migen.genlib.misc import optree
 
 from bfs_address import BFSAddressLayout
 from bfs_interfaces import BFSApplyInterface
 
 class BFSInitGraph(Module):
-	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rx, tx, start_message, init_node=1):
+	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rx, tx, start_message, end, init_node=1):
 		nodeidsize = addresslayout.nodeidsize
 		edgeidsize = addresslayout.edgeidsize
 		peidsize = addresslayout.peidsize
@@ -13,10 +14,12 @@ class BFSInitGraph(Module):
 		num_pe = addresslayout.num_pe
 		max_edges_per_pe = addresslayout.max_edges_per_pe
 
-
 		num_idx_per_line = addresslayout.num_idx_per_line
 		num_val_per_line = addresslayout.num_val_per_line
 		pcie_width = addresslayout.pcie_width
+
+		init_node_pe = init_node//num_nodes_per_pe
+
 
 		curr_address = Signal(nodeidsize)
 		end_address = Signal(nodeidsize)
@@ -69,10 +72,34 @@ class BFSInitGraph(Module):
 			)
 		)
 		fsm.act("INIT_CALC",
-			start_message.msg.dest_id.eq(init_node),
-			start_message.msg.parent.eq(init_node),
-			start_message.valid.eq(1),
-			If(start_message.ack,
+			start_message[init_node_pe].msg.dest_id.eq(init_node),
+			start_message[init_node_pe].msg.parent.eq(init_node),
+			start_message[init_node_pe].msg.barrier.eq(0),
+			start_message[init_node_pe].valid.eq(1),
+			If(start_message[init_node_pe].ack,
+				NextState("ADD_BARRIER")
+			)
+		)
+
+		barrier_ack = Array(Signal() for _ in range(num_pe))
+		barrier_done = Signal()
+
+		self.comb += barrier_done.eq(optree("&", barrier_ack))
+
+		fsm.act("ADD_BARRIER",
+			[start_message[i].msg.dest_id.eq(0) for i in range(num_pe)],
+			[start_message[i].msg.parent.eq(0) for i in range(num_pe)],
+			[start_message[i].msg.barrier.eq(1) for i in range(num_pe)],
+			[start_message[i].valid.eq(~barrier_ack[i]) for i in range(num_pe)],
+			[NextValue(barrier_ack[i], barrier_ack[i] | start_message[init_node_pe].ack) for i in range(num_pe)],
+			If(barrier_done,
+				[NextValue(barrier_ack[i], 0) for i in range(num_pe)],
 				NextState("WAIT_IDX")
 			)
 		)
+		fsm.act("WAIT_END",
+			If(end,
+				NextState("READ_RESULT")
+			)
+		)
+		fsm.act("READ_RESULT")

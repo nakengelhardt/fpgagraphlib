@@ -13,8 +13,9 @@ class TB(Module):
 		max_edges_per_pe = 2**4
 		peidsize = 2
 		num_pe = 2
+		pcie_width = 128
 
-		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width)
 
 
 		self.submodules.dut = BFSApply(self.addresslayout)

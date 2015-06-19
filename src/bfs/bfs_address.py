@@ -27,6 +27,9 @@ class BFSAddressLayout:
 	def local_adr(self, nodeid):
 		return nodeid[:log2_int(self.num_nodes_per_pe)]
 
+	def global_adr(self, pe_adr, local_adr):
+		return (pe_adr << log2_int(self.num_nodes_per_pe)) | local_adr
+
 	def generate_partition(self, adj_dict):
 		adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
 		adj_val = [[] for _ in range(self.num_pe)]
