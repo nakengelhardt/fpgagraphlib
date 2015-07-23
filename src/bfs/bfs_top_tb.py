@@ -51,14 +51,17 @@ class TB(Module):
 						num_visited += 1
 						print("Visiting " + str(selfp.dut.scatter[i].scatter_interface.msg) + " (level " + str(selfp.dut.apply[i].level) + ")")
 			yield
+
+		ret = yield from riffa.channel_read(selfp.simulator, self.tx)
+
 		yield 100
+		print(ret)
 
 		# verify in-memory spanning tree
 		for pe in range(self.addresslayout.num_pe):
 			for adr in range(self.addresslayout.num_nodes_per_pe):
 				print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.dut.apply[pe].mem, adr)))
 
-
 if __name__ == "__main__":
 	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=250)
+	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=1000)

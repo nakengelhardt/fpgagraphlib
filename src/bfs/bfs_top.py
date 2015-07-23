@@ -1,7 +1,9 @@
 from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
 from migen.genlib.misc import optree
+from migen.fhdl import verilog
 
+import riffa
 from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
 from bfs_arbiter import BFSArbiter
 from bfs_apply import BFSApply
@@ -63,8 +65,53 @@ class BFS(Module):
 
 		# state of calculation
 		global_inactive = Signal()
-		self.comb += global_inactive.eq(optree("&", [pe.inactive for pe in self.submodules.apply]))
+		self.comb += global_inactive.eq(optree("&", [pe.inactive for pe in self.apply]))
 
 		# module for controlling execution
 		init_node = 6
-		self.submodules.initgraph = BFSInitGraph(addresslayout=addresslayout, wr_ports_idx=[self.scatter[i].wr_port_idx for i in range(num_pe)], wr_ports_val=[self.scatter[i].get_neighbors.wr_port_val for i in range(num_pe)], rx=rx, tx=tx, start_message=[self.arbiter[i].start_message for i in range(num_pe)], end=global_inactive, init_node=init_node)
+		self.submodules.initgraph = BFSInitGraph(addresslayout=addresslayout, wr_ports_idx=[self.scatter[i].wr_port_idx for i in range(num_pe)], wr_ports_val=[self.scatter[i].get_neighbors.wr_port_val for i in range(num_pe)], rd_ports_node=[appli.extern_rd_port for appli in self.apply], rx=rx, tx=tx, start_message=[self.arbiter[i].start_message for i in range(num_pe)], end=global_inactive, init_node=init_node)
+
+class WrappedBFS(riffa.GenericRiffa):
+	def __init__(self, addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=32):
+		riffa.GenericRiffa.__init__(self, combined_interface_rx=combined_interface_rx, combined_interface_tx=combined_interface_tx, c_pci_data_width=c_pci_data_width)
+		self.clock_domains.cd_sys = ClockDomain()
+		rx, tx = self.get_channel(0)
+		self.bfs = BFS(addresslayout, rx, tx)
+
+def main():
+	c_pci_data_width = 128
+	num_chnls = 2
+	combined_interface_tx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
+	combined_interface_rx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
+
+	nodeidsize = 8
+	num_nodes_per_pe = 2**2
+	edgeidsize = 8
+	max_edges_per_pe = 2**4
+	peidsize = 1
+	num_pe = 2
+
+	pcie_width = 128
+
+	addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width)
+
+	m = WrappedBFS(addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=pcie_width)
+
+	# add a loopback to test responsiveness
+	test_rx, test_tx = m.get_channel(num_chnls - 1)
+	m.comb += test_rx.connect(test_tx)
+
+	m.cd_sys.clk.name_override="clk"
+	m.cd_sys.rst.name_override="rst"
+	for name in "ack", "last", "len", "off", "data", "data_valid", "data_ren":
+		getattr(combined_interface_rx, name).name_override="chnl_rx_{}".format(name)
+		getattr(combined_interface_tx, name).name_override="chnl_tx_{}".format(name)
+	combined_interface_rx.start.name_override="chnl_rx"
+	combined_interface_tx.start.name_override="chnl_tx"
+	m.rx_clk.name_override="chnl_rx_clk"
+	m.tx_clk.name_override="chnl_tx_clk"
+	print(verilog.convert(m, name="top", ios={getattr(combined_interface_rx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} | {getattr(combined_interface_tx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} | {m.rx_clk, m.tx_clk, m.cd_sys.clk, m.cd_sys.rst} ))
+
+
+if __name__ == '__main__':
+	main()

@@ -6,7 +6,7 @@ from bfs_address import BFSAddressLayout
 from bfs_interfaces import BFSApplyInterface
 
 class BFSInitGraph(Module):
-	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rx, tx, start_message, end, init_node=1):
+	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rd_ports_node, rx, tx, start_message, end, init_node=1):
 		nodeidsize = addresslayout.nodeidsize
 		edgeidsize = addresslayout.edgeidsize
 		peidsize = addresslayout.peidsize
@@ -94,12 +94,47 @@ class BFSInitGraph(Module):
 			[NextValue(barrier_ack[i], barrier_ack[i] | start_message[init_node_pe].ack) for i in range(num_pe)],
 			If(barrier_done,
 				[NextValue(barrier_ack[i], 0) for i in range(num_pe)],
-				NextState("WAIT_IDX")
+				NextState("WAIT_END")
 			)
 		)
 		fsm.act("WAIT_END",
 			If(end,
-				NextState("READ_RESULT")
+				NextValue(curr_address, 0),
+				NextValue(end_address, num_pe*num_nodes_per_pe*4 - 1),
+				NextState("TX_RESULT_START")
 			)
 		)
-		fsm.act("READ_RESULT")
+
+		rd_ports_data = Array(rd_port.dat_r for rd_port in rd_ports_node)
+		rd_ports_re = Array(rd_port.re for rd_port in rd_ports_node)
+
+		# which port to take read result from
+		# is used one cycle later than curr_address
+		pe_adr = Signal(peidsize)
+		self.sync += pe_adr.eq(addresslayout.pe_adr(curr_address))
+
+		self.comb += [rd_port.adr.eq(addresslayout.local_adr(curr_address)) for rd_port in rd_ports_node], \
+					 tx.data.eq(rd_ports_data[pe_adr])
+		
+		fsm.act("TX_RESULT_START",
+			[rd_port_re.eq(1) for rd_port_re in rd_ports_re],
+			tx.start.eq(1),
+			tx.len.eq(num_pe*num_nodes_per_pe*4),
+			tx.last.eq(1),
+			tx.off.eq(0),
+			If(tx.ack,
+				NextState("TX_RESULT_TRANSMIT")
+			)
+		)
+
+		fsm.act("TX_RESULT_TRANSMIT",
+			[rd_port_re.eq(1) for rd_port_re in rd_ports_re],
+			NextValue(tx.data_valid, 1),
+			If(tx.data_ren,
+				NextValue(curr_address, curr_address+1)
+			),
+			If(curr_address >= end_address,
+				NextValue(tx.data_valid, 0),
+				NextState("WAIT_IDX")
+			)
+		)

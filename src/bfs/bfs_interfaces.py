@@ -52,3 +52,6 @@ _network_layout = [
 class BFSNetworkInterface(Record):
 	def __init__(self, nodeidsize, peidsize):
 		Record.__init__(self, set_layout_parameters(_network_layout, nodeidsize=nodeidsize, peidsize=peidsize))
+
+
+
