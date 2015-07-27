@@ -5,3 +5,4 @@ __pycache__
 *.v
 *.vvp
 *.vcd
+src/bfs/pcie_integration/
