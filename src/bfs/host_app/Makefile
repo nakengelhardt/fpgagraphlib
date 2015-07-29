@@ -6,7 +6,7 @@ program_CXX_OBJS := ${program_CXX_SRCS:.cpp=.o}
 program_OBJS := $(program_C_OBJS) $(program_CXX_OBJS)
 program_INCLUDE_DIRS :=
 program_LIBRARY_DIRS :=
-program_LIBRARIES := riffa
+program_LIBRARIES := riffa judy
 CPPFLAGS += -g -Wall -std=gnu99
 
 CPPFLAGS += $(foreach includedir,$(program_INCLUDE_DIRS),-I$(includedir))

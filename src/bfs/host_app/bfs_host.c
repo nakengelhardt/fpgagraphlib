@@ -1,37 +1,29 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdint.h>
 #include "riffa.h"
+#include "bfs.h"
 
-/*  nodeidsize = 8
-	num_nodes_per_pe = 2**2
-	edgeidsize = 8
-	max_edges_per_pe = 2**4
-	peidsize = 3
-	num_pe = 8 */
+char testmessage[] = "This is the Happiness and Peace of Mind Committee";
 
-#define NUM_PE 8
-#define NUM_NODES 4
-#define NUM_EDGES 16
+nodeRet_t node_out_buffers[NUM_PE][NUM_NODES];
+const int node_out_buffers_size = NUM_PE*NUM_NODES*sizeof(nodeRet_t);
 
-char* testmessage = "This is the Happiness and Peace of Mind Committee";
-
-typedef uint8_t NODEID;
-typedef uint8_t EDGEID;
-typedef struct {EDGEID start; EDGEID num;} EDGE_IDX;
-typedef struct {uint32_t parent; uint32_t pad0; uint32_t pad1; uint32_t pad2;} NODERETURNSTRUCT;
-
-NODERETURNSTRUCT node_out_buffers[NUM_PE][NUM_NODES];
-int node_out_buffers_size = NUM_PE*NUM_NODES*sizeof(NODERETURNSTRUCT);
-
-EDGE_IDX edge_idx_in_buffers[NUM_PE][NUM_NODES];
-int edge_idx_in_buffers_size = NUM_PE*NUM_NODES*sizeof(EDGE_IDX);
-NODEID edge_val_in_buffers[NUM_PE][NUM_EDGES];
-int edge_val_in_buffers_size = NUM_PE*NUM_EDGES*sizeof(NODEID);
-
-
+edgeIdx_t edge_idx_in_buffers[NUM_PE][NUM_NODES];
+const int edge_idx_in_buffers_size = NUM_PE*NUM_NODES*sizeof(edgeIdx_t);
+nodeID_t edge_val_in_buffers[NUM_PE][NUM_EDGES];
+const int edge_val_in_buffers_size = NUM_PE*NUM_EDGES*sizeof(nodeID_t);
 
 int main (int argc, char *argv[]) {
+
+	if(argc < 2){
+		fprintf(stderr, "Usage: %s graphfile\n", argv[0]);
+	}
+
+	FILE* fp = fopen(argv[1], "r");
+
+	parse_graph(fp, 0);
 
 	fpga_t * fpga;
 	int id = 0;
@@ -72,7 +64,7 @@ int main (int argc, char *argv[]) {
 
 	sent = fpga_send(fpga, chnl, edge_idx_in_buffers, edge_idx_in_buffers_size/4, 0, 1, 25000);
 	printf("Sent edge index array: %d bytes\n", sent*4);
-	sent = fpga_send(fpga, chnl, edge_val_in_buffers, edge_idx_in_buffers_size/4, 0, 1, 25000);
+	sent = fpga_send(fpga, chnl, edge_val_in_buffers, edge_val_in_buffers_size/4, 0, 1, 25000);
 	printf("Sent edge value array: %d bytes\n", sent*4);
 
 	recvd = fpga_recv(fpga, chnl, node_out_buffers, node_out_buffers_size/4, 25000);
@@ -82,7 +74,7 @@ int main (int argc, char *argv[]) {
 	printf("Minimal spanning tree:\n");
 	for(pe=0; pe<NUM_PE; pe++){
 		for(n=0; n<NUM_NODES; n++){
-			printf("%d <- %d\n", pe*NUM_NODES+n, node_out_buffers[pe][m].parent);
+			printf("%d <- %d\n", pe*NUM_NODES+n, node_out_buffers[pe][n].parent);
 		}
 	}
 	fpga_close(fpga);
