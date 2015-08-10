@@ -74,7 +74,6 @@ class BFS(Module):
 class WrappedBFS(riffa.GenericRiffa):
 	def __init__(self, addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=32):
 		riffa.GenericRiffa.__init__(self, combined_interface_rx=combined_interface_rx, combined_interface_tx=combined_interface_tx, c_pci_data_width=c_pci_data_width)
-		self.clock_domains.cd_sys = ClockDomain()
 		rx, tx = self.get_channel(0)
 		self.submodules.bfs = BFS(addresslayout, rx, tx)
 
@@ -84,12 +83,12 @@ def main():
 	combined_interface_tx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 	combined_interface_rx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 
-	nodeidsize = 8
-	num_nodes_per_pe = 2**2
-	edgeidsize = 8
-	max_edges_per_pe = 2**4
-	peidsize = 3
-	num_pe = 8
+	nodeidsize = 16
+	num_nodes_per_pe = 2**8
+	edgeidsize = 16
+	max_edges_per_pe = 2**12
+	peidsize = 8
+	num_pe = 16
 
 	pcie_width = 128
 

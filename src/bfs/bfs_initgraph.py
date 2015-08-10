@@ -27,6 +27,8 @@ class BFSInitGraph(Module):
 		we_idx_array = Array(wr_port_idx.we for wr_port_idx in wr_ports_idx)
 		we_val_array = Array(wr_port_val.we for wr_port_val in wr_ports_val)
 
+		self.cycles_calc = Signal(64)
+
 		fsm = FSM()
 		self.submodules += fsm
 		fsm.act("WAIT_IDX",
@@ -94,13 +96,15 @@ class BFSInitGraph(Module):
 			[NextValue(barrier_ack[i], barrier_ack[i] | start_message[init_node_pe].ack) for i in range(num_pe)],
 			If(barrier_done,
 				[NextValue(barrier_ack[i], 0) for i in range(num_pe)],
+				NextValue(self.cycles_calc, 0),
 				NextState("WAIT_END")
 			)
 		)
 		fsm.act("WAIT_END",
+			NextValue(self.cycles_calc, self.cycles_calc+1),
 			If(end,
 				NextValue(curr_address, 0),
-				NextValue(end_address, num_pe*num_nodes_per_pe*4 - 1),
+				NextValue(end_address, num_pe*num_nodes_per_pe),
 				NextState("TX_RESULT_START")
 			)
 		)
@@ -117,20 +121,29 @@ class BFSInitGraph(Module):
 					 tx.data.eq(rd_ports_data[pe_adr])
 		
 		fsm.act("TX_RESULT_START",
-			[rd_port_re.eq(1) for rd_port_re in rd_ports_re],
+			[rd_port.enable.eq(1) for rd_port in rd_ports_node],
+			[rd_port.re.eq(1) for rd_port in rd_ports_node],
 			tx.start.eq(1),
 			tx.len.eq(num_pe*num_nodes_per_pe*4),
 			tx.last.eq(1),
 			tx.off.eq(0),
 			If(tx.ack,
+				[rd_port.re.eq(0) for rd_port in rd_ports_node],
+				NextValue(curr_address, curr_address+1),
+				NextValue(tx.data_valid, 1),
 				NextState("TX_RESULT_TRANSMIT")
 			)
 		)
 
 		fsm.act("TX_RESULT_TRANSMIT",
-			[rd_port_re.eq(1) for rd_port_re in rd_ports_re],
-			NextValue(tx.data_valid, 1),
-			If(tx.data_ren,
+			[rd_port.enable.eq(1) for rd_port in rd_ports_node],
+			tx.start.eq(1),
+			tx.len.eq(num_pe*num_nodes_per_pe*4),
+			tx.last.eq(1),
+			tx.off.eq(0),
+			If(tx.data_ren & tx.data_valid,
+				[rd_port.re.eq(1) for rd_port in rd_ports_node],
+				NextValue(tx.data_valid, 1),
 				NextValue(curr_address, curr_address+1)
 			),
 			If(curr_address >= end_address,

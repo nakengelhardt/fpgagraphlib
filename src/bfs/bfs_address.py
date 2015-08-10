@@ -51,12 +51,12 @@ class BFSAddressLayout:
 			assert len(adj_val[i]) == self.max_edges_per_pe
 			assert len(adj_idx[i]) == self.num_nodes_per_pe 
 
-		print("adj_idx:")
-		for i, ai in enumerate(adj_idx):
-			print(str(i) + ": " + str(ai))
-		print("adj_val:")
-		for i, av in enumerate(adj_val):
-			print(str(i) + ": " + str(av))
+		# print("adj_idx:")
+		# for i, ai in enumerate(adj_idx):
+		# 	print(str(i) + ": " + str(ai))
+		# print("adj_val:")
+		# for i, av in enumerate(adj_val):
+		# 	print(str(i) + ": " + str(av))
 
 		return [n<<self.edgeidsize | idx for sublist in adj_idx for (idx,n) in sublist], [item for sublist in adj_val for item in sublist]
 

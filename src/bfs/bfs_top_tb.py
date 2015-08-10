@@ -4,19 +4,27 @@ from migen.sim.generic import run_simulation
 
 from bfs_top import BFS
 from bfs_address import BFSAddressLayout
+from bfs_graph_input import read_graph
 
 import riffa
 
+import sys
+
 class TB(Module):
-	def __init__(self):
-		nodeidsize = 8
-		num_nodes_per_pe = 2**2
-		edgeidsize = 8
-		max_edges_per_pe = 2**4
-		peidsize = 1
-		num_pe = 2
+	def __init__(self, graphfile=None):
+		nodeidsize = 16
+		num_nodes_per_pe = 2**8
+		edgeidsize = 16
+		max_edges_per_pe = 2**12
+		peidsize = 8
+		num_pe = 16
 
 		pcie_width = 128
+
+		if graphfile:
+			self.adj_dict = read_graph(graphfile)
+		else:
+			self.adj_dict = {1:[2,3,4], 2:[1,5,6], 3:[1,4,7], 4:[1,3,5], 5:[2,4,6], 6:[2,5,7], 7:[3,6]}
 
 		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width)
 
@@ -29,14 +37,13 @@ class TB(Module):
 		self.submodules.dut = BFS(self.addresslayout, self.rx, self.tx)
 
 	def gen_simulation(self, selfp):
-		adj_dict = {1:[2,3,4], 2:[1,5,6], 3:[1,4,7], 4:[1,3,5], 5:[2,4,6], 6:[2,5,7], 7:[3,6]}
-		adj_idx, adj_val = self.addresslayout.generate_partition(adj_dict)
-		print("adj_idx: " + str([hex(x) for x in adj_idx]))
-		print("adj_val: " + str(adj_val))
+		adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+		# print("adj_idx: " + str([hex(x) for x in adj_idx]))
+		# print("adj_val: " + str(adj_val))
 		adj_idx_flat = self.addresslayout.repack(adj_idx, 2*self.addresslayout.edgeidsize, self.addresslayout.pcie_width)
 		adj_val_flat = self.addresslayout.repack(adj_val, self.addresslayout.nodeidsize, self.addresslayout.pcie_width)
-		print("adj_idx_flat: " + str([hex(x) for x in adj_idx_flat]))
-		print("adj_val_flat: " + str([hex(x) for x in adj_val_flat]))
+		# print("adj_idx_flat: " + str([hex(x) for x in adj_idx_flat]))
+		# print("adj_val_flat: " + str([hex(x) for x in adj_val_flat]))
 
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_idx_flat)
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_val_flat)
@@ -55,13 +62,18 @@ class TB(Module):
 		ret = yield from riffa.channel_read(selfp.simulator, self.tx)
 
 		yield 100
-		print(ret)
+		print(ret[0:64:4])
 
-		# verify in-memory spanning tree
-		for pe in range(self.addresslayout.num_pe):
-			for adr in range(self.addresslayout.num_nodes_per_pe):
-				print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.dut.apply[pe].mem, adr)))
+		print(str(selfp.dut.initgraph.cycles_calc) + " cycles taken for algorithm itself.")
+		# # verify in-memory spanning tree
+		# for pe in range(self.addresslayout.num_pe):
+		# 	for adr in range(self.addresslayout.num_nodes_per_pe):
+		# 		print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.dut.apply[pe].mem, adr)))
 
 if __name__ == "__main__":
-	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=1000)
+	if len(sys.argv) > 1:
+		graphfile = open(sys.argv[1])
+	else:
+		graphfile = None
+	tb = TB(graphfile=graphfile)
+	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=100000)

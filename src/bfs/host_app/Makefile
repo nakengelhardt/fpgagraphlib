@@ -1,17 +1,17 @@
 program_NAME := bfs_host
-program_C_SRCS := $(wildcard *.c)
+program_C_SRCS := bfs_host.c graph_parse.c
 program_CXX_SRCS := $(wildcard *.cpp)
 program_C_OBJS := ${program_C_SRCS:.c=.o}
 program_CXX_OBJS := ${program_CXX_SRCS:.cpp=.o}
 program_OBJS := $(program_C_OBJS) $(program_CXX_OBJS)
 program_INCLUDE_DIRS :=
 program_LIBRARY_DIRS :=
-program_LIBRARIES := riffa judy
+program_LIBRARIES := riffa
 CPPFLAGS += -g -Wall -std=gnu99
 
 CPPFLAGS += $(foreach includedir,$(program_INCLUDE_DIRS),-I$(includedir))
 LDFLAGS += $(foreach librarydir,$(program_LIBRARY_DIRS),-L$(librarydir))
-LDFLAGS += $(foreach library,$(program_LIBRARIES),-l$(library))
+LDFLAGS += $(foreach library,$(program_LIBRARIES),-l$(library)) libJudy.a
 
 .PHONY: all clean distclean
 

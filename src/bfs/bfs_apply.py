@@ -7,6 +7,7 @@ from bfs_address import BFSAddressLayout
 ## for wrapping signals when multiplexing memory port
 
 _memory_port_layout = [
+	( "enable", 1 ),
 	( "adr", "adrsize" ),
 	( "re", 1 ),
 	( "dat_r", "datasize" )
@@ -38,9 +39,10 @@ class BFSApply(Module):
 		# multiplex read port
 		# during computation, update locally; after computation, controller sends contents back to host
 		self.extern_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=flen(rd_port.adr), datasize=flen(rd_port.dat_r)))
+
 		local_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=flen(rd_port.adr), datasize=flen(rd_port.dat_r)))
 
-		self.comb += If(self.extern_rd_port.re, 
+		self.comb += If(self.extern_rd_port.enable, 
 						rd_port.adr.eq(self.extern_rd_port.adr),
 						rd_port.re.eq(self.extern_rd_port.re)
 					 ).Else(
