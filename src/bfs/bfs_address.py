@@ -4,7 +4,7 @@ import riffa
 
 class BFSAddressLayout:
 	"""Partition NodeID into PE number and local address"""
-	def __init__(self, nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, pcie_width):
+	def __init__(self, nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe):
 		assert nodeidsize >= peidsize + log2_int(num_nodes_per_pe)
 		assert peidsize >= bits_for(num_pe-1)
 		assert edgeidsize >= bits_for(max_edges_per_pe-1)
@@ -14,12 +14,6 @@ class BFSAddressLayout:
 		self.num_pe = num_pe
 		self.num_nodes_per_pe = num_nodes_per_pe
 		self.max_edges_per_pe = max_edges_per_pe
-
-		self.pcie_width = pcie_width
-
-		self.num_idx_per_line = pcie_width//(2*edgeidsize)
-
-		self.num_val_per_line = pcie_width//nodeidsize
 
 	def pe_adr(self, nodeid):
 		return nodeid[log2_int(self.num_nodes_per_pe):log2_int(self.num_nodes_per_pe)+self.peidsize]
@@ -51,12 +45,10 @@ class BFSAddressLayout:
 			assert len(adj_val[i]) == self.max_edges_per_pe
 			assert len(adj_idx[i]) == self.num_nodes_per_pe 
 
-		# print("adj_idx:")
-		# for i, ai in enumerate(adj_idx):
-		# 	print(str(i) + ": " + str(ai))
-		# print("adj_val:")
-		# for i, av in enumerate(adj_val):
-		# 	print(str(i) + ": " + str(av))
+		return adj_idx, adj_val
+
+	def generate_partition_flat(self, adj_dict):
+		adj_idx, adj_val = self.generate_partition(adj_dict)
 
 		return [n<<self.edgeidsize | idx for sublist in adj_idx for (idx,n) in sublist], [item for sublist in adj_val for item in sublist]
 

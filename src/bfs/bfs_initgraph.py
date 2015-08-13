@@ -14,12 +14,11 @@ class BFSInitGraph(Module):
 		num_pe = addresslayout.num_pe
 		max_edges_per_pe = addresslayout.max_edges_per_pe
 
-		num_idx_per_line = addresslayout.num_idx_per_line
-		num_val_per_line = addresslayout.num_val_per_line
-		pcie_width = addresslayout.pcie_width
-
 		init_node_pe = init_node//num_nodes_per_pe
 
+		pcie_width = rx.data_width
+		num_idx_per_line = pcie_width//(2*edgeidsize)
+		num_val_per_line = pcie_width//nodeidsize
 
 		curr_address = Signal(nodeidsize)
 		end_address = Signal(nodeidsize)

@@ -2,6 +2,7 @@ import re
 import sys
 
 def read_graph(f):
+	print("Loading input graph...", end='')
 	d = {}
 	for line in f:
 		match = re.match("(\d+)\s(\d+)", line)
@@ -14,7 +15,8 @@ def read_graph(f):
 				d[sink] =  set()
 			d[source].add(sink)
 			d[sink].add(source)
-	print(d)
+	# print(d)
+	print(" done.")
 	return d
 
 
