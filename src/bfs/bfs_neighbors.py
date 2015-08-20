@@ -38,7 +38,7 @@ class BFSNeighbors(Module):
 		fsm.act("IDLE", # wait for input
 			idx_valid.eq(0),
 			self.ack.eq(1),
-			If(self.valid,
+			If(self.valid & (self.num_neighbors != 0),
 				NextValue(curr_node_idx, self.start_idx),
 				NextValue(end_node_idx, self.start_idx + self.num_neighbors - 1),
 				NextState("GET_NEIGHBORS")

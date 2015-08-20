@@ -45,7 +45,7 @@ class TB(Module):
 		adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
 
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=1024) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(self.addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(self.addresslayout) for _ in range(num_pe)]
@@ -131,7 +131,7 @@ class TB(Module):
 				if selfp.scatter[i].scatter_interface.valid & selfp.scatter[i].scatter_interface.ack:
 					if not selfp.scatter[i].scatter_interface.barrier:
 						num_visited += 1
-						print("Visiting " + str(selfp.scatter[i].scatter_interface.msg) + " (level " + str(selfp.apply[i].level) + ")")
+						# print("Visiting " + str(selfp.scatter[i].scatter_interface.msg) + " (level " + str(selfp.apply[i].level) + ")")
 			yield
 
 		if num_visited < num_nodes:

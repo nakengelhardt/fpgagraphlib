@@ -41,8 +41,9 @@ class TB(Module):
 		dummy_rx = Signal()
 		dummy_tx = Signal()
 		self.comb += dummy_rx.eq(self.rx.raw_bits()), dummy_tx.eq(self.tx.raw_bits())
+		self.cmd_tx = riffa.Interface(data_width=self.pcie_width)
 
-		self.submodules.dut = BFS(self.addresslayout, self.rx, self.tx)
+		self.submodules.dut = BFS(self.addresslayout, self.rx, self.tx, self.cmd_tx)
 
 	def gen_simulation(self, selfp):
 		adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
@@ -53,8 +54,15 @@ class TB(Module):
 		# print("adj_idx_flat: " + str([hex(x) for x in adj_idx_flat]))
 		# print("adj_val_flat: " + str([hex(x) for x in adj_val_flat]))
 
+		print("Sending adj_idx...")
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_idx_flat)
+		print("...done.")
+		print("Sending adj_val...")
 		yield from riffa.channel_write(selfp.simulator, self.rx, adj_val_flat)
+		print("...done.")
+
+		cmd = yield from riffa.channel_read(selfp.simulator, self.cmd_tx)
+		print("cmd")
 
 		# check nodes are visited
 		num_visited = 0
@@ -72,14 +80,14 @@ class TB(Module):
 
 		ret = yield from riffa.channel_read(selfp.simulator, self.tx)
 
-		yield 100
-		print(ret[0:64:4])
+		print("{} words received: {} ...".format(len(ret), ret[0:64:4]))
 
 		print(str(selfp.dut.initgraph.cycles_calc) + " cycles taken for algorithm itself.")
-		# # verify in-memory spanning tree
+
+		# verify in-memory spanning tree
 		# for pe in range(self.addresslayout.num_pe):
 		# 	for adr in range(self.addresslayout.num_nodes_per_pe):
-		# 		print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.apply[pe].mem, adr)))
+		# 		print("{}: {}".format(self.addresslayout.global_adr(pe, adr), selfp.simulator.rd(self.dut.apply[pe].mem, adr)))
 
 if __name__ == "__main__":
 	if len(sys.argv) > 1:

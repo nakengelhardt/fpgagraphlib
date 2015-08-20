@@ -12,14 +12,14 @@ from bfs_address import BFSAddressLayout
 from bfs_initgraph import BFSInitGraph
 
 class BFS(Module):
-	def __init__(self, addresslayout, rx, tx, adj_mat=None, init_node=6):
+	def __init__(self, addresslayout, rx, tx, cmd_tx, adj_mat=None, init_node=6):
 		self.addresslayout = addresslayout
 		nodeidsize = addresslayout.nodeidsize
 		num_nodes_per_pe = addresslayout.num_nodes_per_pe
 		num_pe = addresslayout.num_pe
 		max_edges_per_pe = addresslayout.max_edges_per_pe
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=1024) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(addresslayout) for _ in range(num_pe)]
@@ -68,13 +68,20 @@ class BFS(Module):
 		self.comb += self.global_inactive.eq(optree("&", [pe.inactive for pe in self.apply]))
 
 		# module for controlling execution
-		self.submodules.initgraph = BFSInitGraph(addresslayout=addresslayout, wr_ports_idx=[self.scatter[i].wr_port_idx for i in range(num_pe)], wr_ports_val=[self.scatter[i].get_neighbors.wr_port_val for i in range(num_pe)], rd_ports_node=[appli.extern_rd_port for appli in self.apply], rx=rx, tx=tx, start_message=[self.arbiter[i].start_message for i in range(num_pe)], end=self.global_inactive, init_node=init_node)
+		self.submodules.initgraph = BFSInitGraph(addresslayout=addresslayout, 
+			wr_ports_idx=[self.scatter[i].wr_port_idx for i in range(num_pe)], 
+			wr_ports_val=[self.scatter[i].get_neighbors.wr_port_val for i in range(num_pe)], 
+			rd_ports_node=[appli.extern_rd_port for appli in self.apply], 
+			rx=rx, tx=tx, cmd_tx=cmd_tx, 
+			start_message=Array(self.arbiter[i].start_message for i in range(num_pe)), 
+			end=self.global_inactive, init_node=init_node)
 
 class WrappedBFS(riffa.GenericRiffa):
-	def __init__(self, addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=32, init_node=6):
+	def __init__(self, addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=128, init_node=6):
 		riffa.GenericRiffa.__init__(self, combined_interface_rx=combined_interface_rx, combined_interface_tx=combined_interface_tx, c_pci_data_width=c_pci_data_width)
 		rx, tx = self.get_channel(0)
-		self.submodules.bfs = BFS(addresslayout, rx, tx)
+		cmd_rx, cmd_tx = self.get_channel(1)
+		self.submodules.bfs = BFS(addresslayout=addresslayout, rx=rx, tx=tx, cmd_tx=cmd_tx)
 		self.ext_clk = Signal()
 		self.ext_rst = Signal()
 		rst1 = Signal()
@@ -88,7 +95,7 @@ class WrappedBFS(riffa.GenericRiffa):
 
 def main():
 	c_pci_data_width = 128
-	num_chnls = 2
+	num_chnls = 3
 	combined_interface_tx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 	combined_interface_rx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 

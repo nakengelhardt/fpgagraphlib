@@ -6,7 +6,7 @@ from bfs_address import BFSAddressLayout
 from bfs_interfaces import BFSApplyInterface
 
 class BFSInitGraph(Module):
-	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rd_ports_node, rx, tx, start_message, end, init_node=1):
+	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rd_ports_node, rx, tx, cmd_tx, start_message, end, init_node=1):
 		nodeidsize = addresslayout.nodeidsize
 		edgeidsize = addresslayout.edgeidsize
 		peidsize = addresslayout.peidsize
@@ -33,17 +33,17 @@ class BFSInitGraph(Module):
 		fsm.act("WAIT_IDX",
 			rx.ack.eq(1),
 			NextValue(curr_address, 0),
+			NextValue(end_address, num_pe*num_nodes_per_pe - 1),
 			If(rx.start,
-				NextValue(end_address, ((rx.len << 5) >> log2_int(2*edgeidsize)) -1),
 				NextState("FILL_IDX")
 			)
 		)
 		fsm.act("FILL_IDX",
 			[If(curr_address[0:log2_int(num_idx_per_line)]==i, wr_port_idx.dat_w.eq(rx.data[i*flen(wr_port_idx.dat_w):(i+1)*flen(wr_port_idx.dat_w)])) for wr_port_idx in wr_ports_idx for i in range(num_idx_per_line)],
 			[wr_port_idx.adr.eq(addresslayout.local_adr(curr_address)) for wr_port_idx in wr_ports_idx],
+			rx.data_ren.eq(curr_address[0:log2_int(num_idx_per_line)]==num_idx_per_line-1),
 			If(rx.data_valid,
 				we_idx_array[addresslayout.pe_adr(curr_address)].eq(1),
-				rx.data_ren.eq(curr_address[0:log2_int(num_idx_per_line)]==num_idx_per_line-1),
 				If(curr_address < end_address,
 					NextValue(curr_address, curr_address+1)
 				).Else(
@@ -54,22 +54,50 @@ class BFSInitGraph(Module):
 		fsm.act("WAIT_VAL",
 			rx.ack.eq(1),
 			NextValue(curr_address, 0),
+			NextValue(end_address, num_pe*max_edges_per_pe - 1),
 			If(rx.start,
-				NextValue(end_address, ((rx.len << 5) >> log2_int(nodeidsize)) - 1),
 				NextState("FILL_VAL")
 			)
 		)
 		fsm.act("FILL_VAL",
 			[If(curr_address[0:log2_int(num_val_per_line)]==i, wr_port_val.dat_w.eq(rx.data[i*flen(wr_ports_val[0].dat_w):(i+1)*flen(wr_ports_val[0].dat_w)])) for wr_port_val in wr_ports_val for i in range(num_val_per_line)],
 			[wr_port_val.adr.eq(curr_address[0:log2_int(max_edges_per_pe)]) for wr_port_val in wr_ports_val],
+			rx.data_ren.eq(curr_address[0:log2_int(num_val_per_line)]==num_val_per_line-1),
 			If(rx.data_valid,
 				we_val_array[curr_address[log2_int(max_edges_per_pe):]].eq(1),
-				rx.data_ren.eq(curr_address[0:log2_int(num_val_per_line)]==num_val_per_line-1),
 				If(curr_address < end_address,
 					NextValue(curr_address, curr_address+1)
 				).Else(
-					NextState("INIT_CALC")
+					NextState("TX_CMD_START")
 				)
+			)
+		)
+		fsm.act("TX_CMD_START",
+			cmd_tx.start.eq(1),
+			cmd_tx.len.eq(num_nodes_per_pe*4),
+			cmd_tx.last.eq(1),
+			cmd_tx.off.eq(0),
+			NextValue(curr_address, 0),
+			NextValue(end_address, num_nodes_per_pe-1),
+			[wr_port_idx.adr.eq(0) for wr_port_idx in wr_ports_idx],
+			[If(curr_address[0:log2_int(num_val_per_line)]==i, cmd_tx.data.eq(wr_ports_val[i].dat_r)) for i in range(num_pe)],
+			If(cmd_tx.ack,
+				NextState("TX_CMD")
+			)
+		)
+		fsm.act("TX_CMD",
+			cmd_tx.start.eq(1),
+			cmd_tx.len.eq(num_nodes_per_pe*4),
+			cmd_tx.last.eq(1),
+			cmd_tx.off.eq(0),
+			[wr_port_idx.adr.eq(addresslayout.local_adr(curr_address)) for wr_port_idx in wr_ports_idx],
+			[If(curr_address[0:log2_int(num_val_per_line)]==i, cmd_tx.data.eq(wr_ports_val[i].dat_r)) for i in range(num_pe)],
+			cmd_tx.data_valid.eq(1),
+			If(cmd_tx.data_ren & cmd_tx.data_valid,
+				NextValue(curr_address, curr_address+1)
+			),
+			If(curr_address >= end_address,
+				NextState("INIT_CALC")
 			)
 		)
 		fsm.act("INIT_CALC",
@@ -103,7 +131,6 @@ class BFSInitGraph(Module):
 			NextValue(self.cycles_calc, self.cycles_calc+1),
 			If(end,
 				NextValue(curr_address, 0),
-				NextValue(end_address, num_pe*num_nodes_per_pe),
 				NextState("TX_RESULT_START")
 			)
 		)
@@ -129,11 +156,11 @@ class BFSInitGraph(Module):
 			If(tx.ack,
 				[rd_port.re.eq(0) for rd_port in rd_ports_node],
 				NextValue(curr_address, curr_address+1),
+				NextValue(end_address, num_pe*num_nodes_per_pe),
 				NextValue(tx.data_valid, 1),
 				NextState("TX_RESULT_TRANSMIT")
 			)
 		)
-
 		fsm.act("TX_RESULT_TRANSMIT",
 			[rd_port.enable.eq(1) for rd_port in rd_ports_node],
 			tx.start.eq(1),
@@ -147,6 +174,22 @@ class BFSInitGraph(Module):
 			),
 			If(curr_address >= end_address,
 				NextValue(tx.data_valid, 0),
-				NextState("WAIT_IDX")
+				NextState("CLEAR_MEM_START")
+			)
+		)
+		fsm.act("CLEAR_MEM_START",
+			NextValue(curr_address, 0),
+			NextState("CLEAR_MEM")
+		)
+		fsm.act("CLEAR_MEM",
+			start_message[addresslayout.pe_adr(curr_address)].msg.dest_id.eq(addresslayout.local_adr(curr_address)),
+			start_message[addresslayout.pe_adr(curr_address)].msg.parent.eq(0),
+			start_message[addresslayout.pe_adr(curr_address)].msg.barrier.eq(0),
+			start_message[addresslayout.pe_adr(curr_address)].valid.eq(1),
+			If(start_message[addresslayout.pe_adr(curr_address)].ack,
+				NextValue(curr_address, curr_address + 1),
+				If(curr_address >= (end_address-1),
+					NextState("WAIT_IDX")
+				)
 			)
 		)

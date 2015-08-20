@@ -1,5 +1,6 @@
 from migen.fhdl.std import *
 from migen.genlib.record import *
+from migen.genlib.fifo import SyncFIFO
 
 from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
 from bfs_address import BFSAddressLayout
@@ -77,7 +78,7 @@ class BFSApply(Module):
 		self.sync += If(clock_enable, 
 			dest_node_id2.eq(self.apply_interface.msg.dest_id), 
 			parent2.eq(self.apply_interface.msg.parent), 
-			valid2.eq(self.apply_interface.valid & ~ self.apply_interface.msg.barrier), # valid2 used to determine if write in next stage, so don't set for barrier
+			valid2.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier), # valid2 used to determine if write in next stage, so don't set for barrier
 			barrier2.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
 		)
 
@@ -90,8 +91,10 @@ class BFSApply(Module):
 
 		# find out if we have an update
 		# assumes 0 is not a valid nodeID
+		# if we read 0, node did not have a parent yet, and we want to write one now.
+		# if value to write is 0, we're resetting
 		self.update = Signal()
-		self.comb += self.update.eq(valid2 & (local_rd_port.dat_r == 0))
+		self.comb += self.update.eq(valid2 & ((local_rd_port.dat_r == 0) | (parent2 == 0)))
 
 		# if yes write parent value
 		self.comb += wr_port.adr.eq(addresslayout.local_adr(dest_node_id2)), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
@@ -99,8 +102,20 @@ class BFSApply(Module):
 		# not correctness issue, just wasted effort (will send out messages twice)
 
 		# output handling
-		# if self.update (= node hadn't been previously visited), scatter own id (= visit children)
-		self.comb += self.scatter_interface.msg.eq(dest_node_id2), self.scatter_interface.valid.eq(self.update | barrier2), self.scatter_interface.barrier.eq(barrier2)
+		_layout = [
+		( "barrier", 1, DIR_M_TO_S ),
+		( "msg" , nodeidsize, DIR_M_TO_S )
+		]
+		self.submodules.outfifo = SyncFIFO(width_or_layout=_layout, depth=addresslayout.num_nodes_per_pe)
 
-		# stall if we can't send message (advance if receiver ready, or no data available) or if external request (has priority)
-		self.comb += clock_enable.eq((self.scatter_interface.ack | (~self.update & ~barrier2)) & ~self.extern_rd_port.re)
+		# stall if fifo full
+		self.comb += clock_enable.eq(self.outfifo.writable)
+		# if parent is 0, we're resetting the table and don't want to send out messages.
+		# if dest is 0, something went wrong before this point, but let's not make it worse.
+		self.comb += self.outfifo.we.eq((self.update & (dest_node_id2 != 0) & (parent2 != 0)) | barrier2)
+		self.comb += self.outfifo.din.msg.eq(dest_node_id2), self.outfifo.din.barrier.eq(barrier2)
+
+		self.comb += self.scatter_interface.msg.eq(self.outfifo.dout.msg), self.scatter_interface.barrier.eq(self.outfifo.dout.barrier), self.scatter_interface.valid.eq(self.outfifo.readable)
+
+		# we can't send message (advance if receiver ready, or no data available) or if external request (has priority)
+		self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)

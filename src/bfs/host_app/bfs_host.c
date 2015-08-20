@@ -27,7 +27,7 @@ int main (int argc, char *argv[]) {
 	FILE* fp = fopen(argv[1], "r");
 
 	parse_graph(fp, 0);
-	print_graph();
+	// print_graph();
 
 	fpga_t * fpga;
 	int id = 0;
@@ -41,8 +41,8 @@ int main (int argc, char *argv[]) {
 	// Reset
 	fpga_reset(fpga);
 
-	// Test communication on channel 1 (loopback)
-	int chnl = 1;
+	// Test communication on channel 2 (loopback)
+	int chnl = 2;
 	int sent, recvd;
 	char* recvBuffer = (char*) malloc(sizeof(testmessage));
 	if (recvBuffer == NULL) {
@@ -67,20 +67,36 @@ int main (int argc, char *argv[]) {
 	// Launch graph calc
 
 	chnl = 0;
+	int cmd_chnl = 1;
 
 	sent = fpga_send(fpga, chnl, edge_idx_in_buffers, RIFFABUFSZ(edge_idx_in_buffers_size), 0, 1, 5000);
 	printf("Sent edge index array: %d bytes\n", sent*4);
 	sent = fpga_send(fpga, chnl, edge_val_in_buffers, RIFFABUFSZ(edge_val_in_buffers_size), 0, 1, 5000);
 	printf("Sent edge value array: %d bytes\n", sent*4);
 
+	int idx_echo_buffers_size = NUM_NODES*sizeof(nodeRet_t);
+	nodeRet_t* idx_echo_buffers = (nodeRet_t*) malloc(idx_echo_buffers_size);
+
+	recvd = fpga_recv(fpga, cmd_chnl, idx_echo_buffers, RIFFABUFSZ(idx_echo_buffers_size), 5000);
+	printf("Received adj_idx back: %d bytes\n", recvd*4);
+
+	for(int n=0; n<NUM_NODES; n++){
+		printf("%d -> %d (%d %d %d)\n", n, idx_echo_buffers[n].parent, idx_echo_buffers[n].pad0, idx_echo_buffers[n].pad1, idx_echo_buffers[n].pad2);
+	}
+
+	
+
 	recvd = fpga_recv(fpga, chnl, node_out_buffers, RIFFABUFSZ(node_out_buffers_size), 25000);
 	printf("Received node data: %d bytes\n", recvd*4);
 
-	int pe, n;
+	// uint64_t ret[2];
+	// recvd = fpga_recv(fpga, cmd_chnl, ret, 4, 5000);
+	// printf("Received cmd: %lu %lu\n", ret[1], ret[0]);
+
 	printf("Minimal spanning tree:\n");
-	for(pe=0; pe<NUM_PE; pe++){
-		for(n=0; n<NUM_NODES; n++){
-			printf("%d <- %d (%d %d %d)\n", pe*NUM_NODES+n, node_out_buffers[pe][n].parent, node_out_buffers[pe][n].pad0, node_out_buffers[pe][n].pad1, node_out_buffers[pe][n].pad2);
+	for(int pe=0; pe<NUM_PE; pe++){
+		for(int n=0; n<NUM_NODES; n++){
+			printf("%d -> %d (%d %d %d)\n", pe*NUM_NODES+n, node_out_buffers[pe][n].parent, node_out_buffers[pe][n].pad0, node_out_buffers[pe][n].pad1, node_out_buffers[pe][n].pad2);
 		}
 		printf("\n");
 	}
