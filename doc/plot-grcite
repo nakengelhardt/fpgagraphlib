@@ -1,0 +1,4 @@
+set term png size 650,300
+set output 'grcite-numpe.png'
+set key off
+plot 'grcite-numpe.res' using 0:2:xtic(1) with linespoints
