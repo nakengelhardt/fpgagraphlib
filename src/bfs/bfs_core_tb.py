@@ -1,3 +1,5 @@
+"""Simulate BFS grid"""
+
 from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
 from migen.genlib.misc import optree
@@ -5,6 +7,7 @@ from migen.genlib.misc import optree
 from migen.sim.generic import run_simulation
 
 from bfs_graph_input import read_graph
+from bfs_graph_generate import generate_graph
 from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
 from bfs_address import BFSAddressLayout
 from bfs_arbiter import BFSArbiter
@@ -15,16 +18,24 @@ from bfs_scatter import BFSScatter
 import riffa
 
 import sys
+import argparse
 
 class TB(Module):
-	def __init__(self, graphfile=None):
+	def __init__(self, adj_dict):
 
 		nodeidsize = 16
-		num_nodes_per_pe = 2**8
+		num_nodes_per_pe = 2**10
 		edgeidsize = 16
-		max_edges_per_pe = 2**12
-		peidsize = 8
-		num_pe = 8
+		max_edges_per_pe = 2**14
+		peidsize = 5
+		num_pe = 32
+
+		# nodeidsize = 16
+		# num_nodes_per_pe = 2**8
+		# edgeidsize = 16
+		# max_edges_per_pe = 2**12
+		# peidsize = 8
+		# num_pe = 8
 
 		# nodeidsize = 8
 		# num_nodes_per_pe = 2**2
@@ -33,12 +44,14 @@ class TB(Module):
 		# peidsize = 1
 		# num_pe = 2
 
+		print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
+		print("num_pe = " + str(num_pe))
+		print("num_nodes_per_pe = " + str(num_nodes_per_pe))
+		print("max_edges_per_pe = " + str(max_edges_per_pe))
+
 		pcie_width = 128
 
-		if graphfile:
-			self.adj_dict = read_graph(graphfile)
-		else:
-			self.adj_dict = {1:[2,3,4], 2:[1,5,6], 3:[1,4,7], 4:[1,3,5], 5:[2,4,6], 6:[2,5,7], 7:[3,6]}
+		self.adj_dict = adj_dict
 
 		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
 
@@ -142,9 +155,41 @@ class TB(Module):
 		print(str(selfp.simulator.cycle_counter) + " cycles taken.")
 
 if __name__ == "__main__":
-	if len(sys.argv) > 1:
-		graphfile = open(sys.argv[1])
+	parser = argparse.ArgumentParser(description=__doc__)
+	parser.add_argument('-f', '--from-file', dest='graphfile',
+                        help='filename containing graph')
+	parser.add_argument('-n', '--nodes', type=int,
+						help='number of nodes to generate')
+	parser.add_argument('-e', '--edges', type=int,
+						help='number of edges to generate')
+	parser.add_argument('--random-walk', action='store_const',
+						const='random_walk', dest='approach',
+						help='use a random-walk generation algorithm (default)')
+	parser.add_argument('--naive', action='store_const',
+						const='naive', dest='approach',
+						help='use a naive generation algorithm (slower)')
+	parser.add_argument('--partition', action='store_const',
+						const='partition', dest='approach',
+						help='use a partition-based generation algorithm (biased)')
+	args = parser.parse_args()
+
+	if args.graphfile:
+		graphfile = open(args.graphfile)
+		adj_dict = read_graph(graphfile)
+	elif args.nodes:
+		num_nodes = args.nodes
+		if args.edges:
+			num_edges = args.edges
+		else:
+			num_edges = num_nodes-1
+		if args.approach:
+			approach = args.approach
+		else:
+			approach = "random_walk"
+		adj_dict = generate_graph(num_nodes, num_edges, approach=approach)
 	else:
-		graphfile = None
-	tb = TB(graphfile=graphfile)
+		parser.print_help()
+		exit(-1)
+
+	tb = TB(adj_dict)
 	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=100000)

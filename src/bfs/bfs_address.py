@@ -36,7 +36,7 @@ class BFSAddressLayout:
 			adj_idx[pe][localnode] = (idx, n)
 			adj_val[pe].extend(neighbors)
 
-		print("Graph has {} nodes and {} edges.".format(len(adj_dict), sum(len(a) for a in adj_val)))
+		print("Graph has {} nodes and {} edges.".format(len(adj_dict), sum(len(a) for a in adj_val)//2))
 
 		for i in range(len(adj_val)):
 			if len(adj_val[i]) > self.max_edges_per_pe:
