@@ -20,12 +20,12 @@ class BFSApply(Module):
 		num_nodes_per_pe = addresslayout.num_nodes_per_pe
 
 		# input Q interface
-		self.apply_interface = BFSApplyInterface(nodeidsize)
+		self.apply_interface = BFSApplyInterface(nodeidsize=nodeidsize)
 
 		# scatter interface
 		# send self.update message to all neighbors
 		# message format (sending_node_id) (normally would be (sending_node_id, payload), but for BFS payload = sending_node_id)
-		self.scatter_interface = BFSScatterInterface(nodeidsize)
+		self.scatter_interface = BFSScatterInterface(nodeidsize=nodeidsize)
 
 		####
 
@@ -56,7 +56,17 @@ class BFSApply(Module):
 		# input handling
 		self.comb += self.apply_interface.ack.eq(clock_enable)
 
+		collision = Signal()
+
 		# computation stage 1
+
+		# rename some signals for easier reading, separate barrier and normal valid
+		dest_node_id = Signal(nodeidsize)
+		parent = Signal(nodeidsize)
+		valid = Signal()
+		barrier = Signal()
+
+
 
 		# look up parent(dest_node_id) to see if already visited
 		self.comb += local_rd_port.adr.eq(addresslayout.local_adr(self.apply_interface.msg.dest_id)), local_rd_port.re.eq(clock_enable)
@@ -80,6 +90,8 @@ class BFSApply(Module):
 			parent2.eq(self.apply_interface.msg.parent), 
 			valid2.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier), # valid2 used to determine if write in next stage, so don't set for barrier
 			barrier2.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
+		).Elif(collision,
+			valid2.eq(0)
 		)
 
 		# computation stage 2
@@ -98,8 +110,9 @@ class BFSApply(Module):
 
 		# if yes write parent value
 		self.comb += wr_port.adr.eq(addresslayout.local_adr(dest_node_id2)), wr_port.dat_w.eq(parent2), wr_port.we.eq(self.update)
-		# TODO: if next msg or one after is for same node, will not see updated value b/c write not completed yet
-		# not correctness issue, just wasted effort (will send out messages twice)
+
+		# collision handling	
+		self.comb += collision.eq((self.apply_interface.msg.dest_id == dest_node_id2) & (self.apply_interface.valid & ~self.apply_interface.msg.barrier) & self.update)
 
 		# output handling
 		_layout = [
@@ -109,13 +122,15 @@ class BFSApply(Module):
 		self.submodules.outfifo = SyncFIFO(width_or_layout=_layout, depth=addresslayout.num_nodes_per_pe)
 
 		# stall if fifo full
-		self.comb += clock_enable.eq(self.outfifo.writable)
+		self.comb += clock_enable.eq(self.outfifo.writable & ~collision)
 		# if parent is 0, we're resetting the table and don't want to send out messages.
 		# if dest is 0, something went wrong before this point, but let's not make it worse.
 		self.comb += self.outfifo.we.eq((self.update & (dest_node_id2 != 0) & (parent2 != 0)) | barrier2)
 		self.comb += self.outfifo.din.msg.eq(dest_node_id2), self.outfifo.din.barrier.eq(barrier2)
 
-		self.comb += self.scatter_interface.msg.eq(self.outfifo.dout.msg), self.scatter_interface.barrier.eq(self.outfifo.dout.barrier), self.scatter_interface.valid.eq(self.outfifo.readable)
+		self.comb += self.scatter_interface.parent.eq(self.outfifo.dout.msg),\
+					 self.scatter_interface.barrier.eq(self.outfifo.dout.barrier),\
+					 self.scatter_interface.valid.eq(self.outfifo.readable)
 
 		# we can't send message (advance if receiver ready, or no data available) or if external request (has priority)
 		self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)

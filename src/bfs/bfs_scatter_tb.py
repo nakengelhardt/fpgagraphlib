@@ -2,7 +2,6 @@ from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
 from migen.sim.generic import run_simulation
 
-from bfs_interfaces import BFSMessage, BFSNetworkInterface
 from bfs_scatter import BFSScatter
 from bfs_address import BFSAddressLayout
 

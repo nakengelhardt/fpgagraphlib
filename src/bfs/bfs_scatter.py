@@ -14,10 +14,10 @@ class BFSScatter(Module):
 		peidsize = addresslayout.peidsize
 
 		# input
-		self.scatter_interface = BFSScatterInterface(nodeidsize)
+		self.scatter_interface = BFSScatterInterface(nodeidsize=nodeidsize)
 
 		#output
-		self.network_interface = BFSNetworkInterface(nodeidsize, peidsize)
+		self.network_interface = BFSNetworkInterface(nodeidsize=nodeidsize, peidsize=peidsize)
 
 		###
 		
@@ -51,7 +51,7 @@ class BFSScatter(Module):
 		## stage 1
 
 		# address idx with incoming message
-		self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.msg)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
+		self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.parent)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
 		self.comb += stage1_ack.eq(self.get_neighbors.ack)
 
 		# keep input for next stage
@@ -60,7 +60,7 @@ class BFSScatter(Module):
 		scatter_barrier1 = Signal()
 		# valid1 requests get_neighbors, so don't set for barrier
 		self.sync += If( stage1_ack,\
-						 scatter_msg1.eq(self.scatter_interface.msg),\
+						 scatter_msg1.eq(self.scatter_interface.parent),\
 						 scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier), \
 						 scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier) \
 					 )

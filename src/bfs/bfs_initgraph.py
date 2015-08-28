@@ -3,7 +3,6 @@ from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.misc import optree
 
 from bfs_address import BFSAddressLayout
-from bfs_interfaces import BFSApplyInterface
 
 class BFSInitGraph(Module):
 	def __init__(self, addresslayout, wr_ports_idx, wr_ports_val, rd_ports_node, rx, tx, cmd_tx, start_message, end, init_node=1):

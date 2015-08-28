@@ -14,10 +14,10 @@ class BFSArbiter(Module):
 		num_pe = addresslayout.num_pe
 
 		# output
-		self.apply_interface = BFSApplyInterface(nodeidsize)
+		self.apply_interface = BFSApplyInterface(nodeidsize=nodeidsize)
 
 		# input override for injecting the message starting the computation
-		self.start_message = BFSApplyInterface(nodeidsize)
+		self.start_message = BFSApplyInterface(nodeidsize=nodeidsize)
 
 		self.submodules.roundrobin = RoundRobin(num_pe, switch_policy=SP_CE)
 

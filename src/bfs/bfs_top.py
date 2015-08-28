@@ -4,7 +4,7 @@ from migen.genlib.misc import optree
 from migen.fhdl import verilog
 
 import riffa
-from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
+from bfs_interfaces import BFSMessage
 from bfs_arbiter import BFSArbiter
 from bfs_apply import BFSApply
 from bfs_scatter import BFSScatter
@@ -19,7 +19,7 @@ class BFS(Module):
 		num_pe = addresslayout.num_pe
 		max_edges_per_pe = addresslayout.max_edges_per_pe
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize=nodeidsize).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(addresslayout) for _ in range(num_pe)]

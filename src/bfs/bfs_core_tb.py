@@ -8,7 +8,7 @@ from migen.sim.generic import run_simulation
 
 from bfs_graph_input import read_graph
 from bfs_graph_generate import generate_graph
-from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage
+from bfs_interfaces import BFSMessage
 from bfs_address import BFSAddressLayout
 from bfs_arbiter import BFSArbiter
 from bfs_apply import BFSApply
@@ -23,12 +23,12 @@ import argparse
 class TB(Module):
 	def __init__(self, adj_dict):
 
-		nodeidsize = 16
-		num_nodes_per_pe = 2**10
-		edgeidsize = 16
-		max_edges_per_pe = 2**14
-		peidsize = 5
-		num_pe = 32
+		# nodeidsize = 16
+		# num_nodes_per_pe = 2**10
+		# edgeidsize = 16
+		# max_edges_per_pe = 2**14
+		# peidsize = 5
+		# num_pe = 32
 
 		# nodeidsize = 16
 		# num_nodes_per_pe = 2**8
@@ -37,12 +37,12 @@ class TB(Module):
 		# peidsize = 8
 		# num_pe = 8
 
-		# nodeidsize = 8
-		# num_nodes_per_pe = 2**2
-		# edgeidsize = 8
-		# max_edges_per_pe = 2**4
-		# peidsize = 1
-		# num_pe = 2
+		nodeidsize = 8
+		num_nodes_per_pe = 2**2
+		edgeidsize = 8
+		max_edges_per_pe = 2**4
+		peidsize = 1
+		num_pe = 2
 
 		print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
 		print("num_pe = " + str(num_pe))
@@ -58,7 +58,7 @@ class TB(Module):
 		adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
 
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize=nodeidsize).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(self.addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(self.addresslayout) for _ in range(num_pe)]
@@ -192,4 +192,4 @@ if __name__ == "__main__":
 		exit(-1)
 
 	tb = TB(adj_dict)
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=100000)
+	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=100)
