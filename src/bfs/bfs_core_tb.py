@@ -71,7 +71,7 @@ class TB(Module):
 		# connect fifos across PEs
 		for source in range(num_pe):
 			array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-			array_parent = Array(fifo.din.parent for fifo in [fifos[sink][source] for sink in range(num_pe)])
+			array_parent = Array(fifo.din.payload.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -97,7 +97,7 @@ class TB(Module):
 						).Else(
 							sink.eq(self.scatter[source].network_interface.dest_pe),\
 							array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),\
-							array_parent[sink].eq(self.scatter[source].network_interface.msg.parent),\
+							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload.raw_bits()),\
 							array_we[sink].eq(self.scatter[source].network_interface.valid),\
 							self.scatter[source].network_interface.ack.eq(array_writable[sink])
 						)
@@ -114,7 +114,7 @@ class TB(Module):
 
 		start_message = [selfp.arbiter[i].start_message for i in range(num_pe)]
 		start_message[init_node_pe].msg.dest_id = init_node
-		start_message[init_node_pe].msg.parent = init_node
+		start_message[init_node_pe].msg.payload.parent = init_node
 		start_message[init_node_pe].msg.barrier = 0
 		start_message[init_node_pe].valid = 1
 
@@ -124,7 +124,7 @@ class TB(Module):
 
 		for i in range(num_pe):
 			start_message[i].msg.dest_id = 0
-			start_message[i].msg.parent = 0
+			start_message[i].msg.payload.parent = 0
 			start_message[i].msg.barrier = 1
 			start_message[i].valid = 1
 

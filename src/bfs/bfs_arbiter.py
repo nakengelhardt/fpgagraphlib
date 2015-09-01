@@ -22,7 +22,7 @@ class BFSArbiter(Module):
 		self.submodules.roundrobin = RoundRobin(num_pe, switch_policy=SP_CE)
 
 		# arrays for choosing incoming fifo to use
-		array_data = Array(fifo.dout for fifo in fifos)
+		array_data = Array(fifo.dout.raw_bits() for fifo in fifos)
 		array_re = Array(fifo.re for fifo in fifos)
 		array_readable = Array(fifo.readable for fifo in fifos)
 		array_barrier = Array(fifo.dout.barrier for fifo in fifos)
@@ -31,7 +31,7 @@ class BFSArbiter(Module):
 		self.comb += barrier_reached.eq(optree("&", array_barrier))
 
 		self.comb += If( self.start_message.valid, # override
-						self.apply_interface.msg.eq(self.start_message.msg),
+						self.apply_interface.msg.raw_bits().eq(self.start_message.msg.raw_bits()),
 						self.apply_interface.valid.eq(self.start_message.valid),
 						self.start_message.ack.eq(self.apply_interface.ack),
 						self.roundrobin.ce.eq(0)
@@ -40,7 +40,7 @@ class BFSArbiter(Module):
 					 	self.apply_interface.valid.eq(1),
 					 	[array_re[i].eq(self.apply_interface.ack) for i in range(len(fifos))]
 					 ).Else( # normal roundrobin
-						self.apply_interface.msg.eq(array_data[self.roundrobin.grant]),
+						self.apply_interface.msg.raw_bits().eq(array_data[self.roundrobin.grant]),
 						self.apply_interface.valid.eq(array_readable[self.roundrobin.grant] & ~ array_barrier[self.roundrobin.grant]),
 						array_re[self.roundrobin.grant].eq(self.apply_interface.ack & ~ array_barrier[self.roundrobin.grant]), 
 						[self.roundrobin.request[i].eq(array_readable[i] & ~ array_barrier[i]) for i in range(len(fifos))], 

@@ -101,7 +101,7 @@ class BFSInitGraph(Module):
 		)
 		fsm.act("INIT_CALC",
 			start_message[init_node_pe].msg.dest_id.eq(init_node),
-			start_message[init_node_pe].msg.parent.eq(init_node),
+			start_message[init_node_pe].msg.payload.parent.eq(init_node),
 			start_message[init_node_pe].msg.barrier.eq(0),
 			start_message[init_node_pe].valid.eq(1),
 			If(start_message[init_node_pe].ack,
@@ -116,7 +116,7 @@ class BFSInitGraph(Module):
 
 		fsm.act("ADD_BARRIER",
 			[start_message[i].msg.dest_id.eq(0) for i in range(num_pe)],
-			[start_message[i].msg.parent.eq(0) for i in range(num_pe)],
+			[start_message[i].msg.payload.parent.eq(0) for i in range(num_pe)],
 			[start_message[i].msg.barrier.eq(1) for i in range(num_pe)],
 			[start_message[i].valid.eq(~barrier_ack[i]) for i in range(num_pe)],
 			[NextValue(barrier_ack[i], barrier_ack[i] | start_message[init_node_pe].ack) for i in range(num_pe)],
@@ -182,7 +182,7 @@ class BFSInitGraph(Module):
 		)
 		fsm.act("CLEAR_MEM",
 			start_message[addresslayout.pe_adr(curr_address)].msg.dest_id.eq(addresslayout.local_adr(curr_address)),
-			start_message[addresslayout.pe_adr(curr_address)].msg.parent.eq(0),
+			start_message[addresslayout.pe_adr(curr_address)].msg.payload.parent.eq(0),
 			start_message[addresslayout.pe_adr(curr_address)].msg.barrier.eq(0),
 			start_message[addresslayout.pe_adr(curr_address)].valid.eq(1),
 			If(start_message[addresslayout.pe_adr(curr_address)].ack,

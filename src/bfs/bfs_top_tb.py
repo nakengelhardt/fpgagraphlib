@@ -13,19 +13,19 @@ import sys
 class TB(Module):
 	def __init__(self, graphfile=None):
 
-		nodeidsize = 16
-		num_nodes_per_pe = 2**8
-		edgeidsize = 16
-		max_edges_per_pe = 2**12
-		peidsize = 8
-		num_pe = 8
+		# nodeidsize = 16
+		# num_nodes_per_pe = 2**8
+		# edgeidsize = 16
+		# max_edges_per_pe = 2**12
+		# peidsize = 8
+		# num_pe = 8
 
-		# nodeidsize = 8
-		# num_nodes_per_pe = 2**2
-		# edgeidsize = 8
-		# max_edges_per_pe = 2**4
-		# peidsize = 1
-		# num_pe = 2
+		nodeidsize = 8
+		num_nodes_per_pe = 2**2
+		edgeidsize = 8
+		max_edges_per_pe = 2**4
+		peidsize = 1
+		num_pe = 2
 
 		self.pcie_width = 128
 
@@ -72,7 +72,7 @@ class TB(Module):
 				if selfp.dut.scatter[i].scatter_interface.valid & selfp.dut.scatter[i].scatter_interface.ack:
 					if not selfp.dut.scatter[i].scatter_interface.barrier:
 						num_visited += 1
-						print("Visiting " + str(selfp.dut.scatter[i].scatter_interface.msg) + " (level " + str(selfp.dut.apply[i].level) + ")")
+						print("Visiting " + str(selfp.dut.scatter[i].scatter_interface.msg.parent) + " (level " + str(selfp.dut.apply[i].level) + ")")
 			yield
 
 		if num_visited < num_nodes:

@@ -15,7 +15,7 @@ class TB(Module):
 		num_pe = 2
 		pcie_width = 128
 
-		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+		self.addresslayout = BFSAddressLayout(nodeidsize=nodeidsize, edgeidsize=edgeidsize, peidsize=peidsize, num_pe=num_pe, num_nodes_per_pe=num_nodes_per_pe, max_edges_per_pe=max_edges_per_pe)
 
 
 		self.submodules.dut = BFSApply(self.addresslayout)
@@ -33,7 +33,7 @@ class TB(Module):
 			# input
 			a, b = msg[msgs_sent]
 			selfp.dut.apply_interface.msg.dest_id = a
-			selfp.dut.apply_interface.msg.parent = b
+			selfp.dut.apply_interface.msg.payload.parent = b
 			selfp.dut.apply_interface.valid = 1
 
 			# output
@@ -49,7 +49,7 @@ class TB(Module):
 
 			# check for output success
 			if selfp.dut.scatter_interface.valid & selfp.dut.scatter_interface.ack:
-				scatter.append(selfp.dut.scatter_interface.parent)
+				scatter.append(selfp.dut.scatter_interface.msg.parent)
 
 		# done sending
 		selfp.dut.apply_interface.valid = 0
@@ -58,7 +58,7 @@ class TB(Module):
 		selfp.dut.scatter_interface.ack = 1
 		for i in range(3):
 			if selfp.dut.scatter_interface.valid & selfp.dut.scatter_interface.ack:
-				scatter.append(selfp.dut.scatter_interface.parent)
+				scatter.append(selfp.dut.scatter_interface.msg.parent)
 			yield
 
 		print("Visit order: " + str(scatter))

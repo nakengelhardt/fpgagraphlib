@@ -1,6 +1,8 @@
 from migen.fhdl.std import *
 from migen.genlib.record import *
 
+### Communication Interfaces ###
+
 ## message payload format (user-defined)
 
 payload_layout = [
@@ -11,8 +13,9 @@ payload_layout = [
 
 _msg_layout = [
 	( "barrier", 1, DIR_M_TO_S),
-	( "dest_id", "nodeidsize", DIR_M_TO_S )
-] + payload_layout
+	( "dest_id", "nodeidsize", DIR_M_TO_S ),
+	( "payload", payload_layout)
+]
 
 class BFSMessage(Record):
 	def __init__(self, **kwargs):
@@ -36,8 +39,9 @@ class BFSApplyInterface(Record):
 _scatter_layout = [
 	( "barrier", 1, DIR_M_TO_S),
 	( "valid", 1, DIR_M_TO_S ),
-	( "ack", 1, DIR_S_TO_M)
-] + payload_layout
+	( "ack", 1, DIR_S_TO_M),
+	( "msg", payload_layout)
+]
 
 class BFSScatterInterface(Record):
 	def __init__(self, **kwargs):
@@ -58,4 +62,8 @@ class BFSNetworkInterface(Record):
 		Record.__init__(self, set_layout_parameters(_network_layout, **kwargs))
 
 
+### Memory Interfaces ###
 
+node_mem_layout = [
+	("parent", "nodeidsize")
+]

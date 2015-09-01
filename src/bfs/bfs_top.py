@@ -32,7 +32,7 @@ class BFS(Module):
 		# connect fifos across PEs
 		for source in range(num_pe):
 			array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-			array_parent = Array(fifo.din.parent for fifo in [fifos[sink][source] for sink in range(num_pe)])
+			array_parent = Array(fifo.din.payload.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -58,7 +58,7 @@ class BFS(Module):
 						).Else(
 							sink.eq(self.scatter[source].network_interface.dest_pe),\
 							array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),\
-							array_parent[sink].eq(self.scatter[source].network_interface.msg.parent),\
+							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload.raw_bits()),\
 							array_we[sink].eq(self.scatter[source].network_interface.valid),\
 							self.scatter[source].network_interface.ack.eq(array_writable[sink])
 						)
