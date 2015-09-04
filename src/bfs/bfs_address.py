@@ -4,7 +4,7 @@ import riffa
 
 class BFSAddressLayout:
 	"""Partition NodeID into PE number and local address"""
-	def __init__(self, nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe):
+	def __init__(self, nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, payloadsize, **kwargs):
 		assert nodeidsize >= peidsize + log2_int(num_nodes_per_pe)
 		assert peidsize >= bits_for(num_pe-1)
 		assert edgeidsize >= bits_for(max_edges_per_pe-1)
@@ -14,6 +14,12 @@ class BFSAddressLayout:
 		self.num_pe = num_pe
 		self.num_nodes_per_pe = num_nodes_per_pe
 		self.max_edges_per_pe = max_edges_per_pe
+		self.payloadsize = payloadsize
+		for k, v in kwargs:
+			setattr(self, k, v)
+
+	def get_params(self):
+		return dict((key, getattr(self, key)) for key in dir(self) if key not in dir(self.__class__))
 
 	def pe_adr(self, nodeid):
 		return nodeid[log2_int(self.num_nodes_per_pe):log2_int(self.num_nodes_per_pe)+self.peidsize]

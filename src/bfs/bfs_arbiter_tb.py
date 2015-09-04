@@ -5,6 +5,7 @@ from migen.sim.generic import run_simulation
 from bfs_interfaces import BFSMessage
 from bfs_arbiter import BFSArbiter
 from bfs_address import BFSAddressLayout
+from bfs_config import config
 
 class FifoWriter(Module):
 	def __init__(self, fifos, messages):
@@ -23,7 +24,7 @@ class FifoWriter(Module):
 			if selfp.fifos[pe].writable:
 				# print("Sending message " + str((dest_id, parent)) + " on fifo " + str(pe))
 				selfp.fifos[pe].din.dest_id = dest_id
-				selfp.fifos[pe].din.payload.parent = parent
+				selfp.fifos[pe].din.payload = parent
 				selfp.fifos[pe].we = 1
 				msgs_sent += 1
 			yield
@@ -42,18 +43,12 @@ class FifoWriter(Module):
 
 class TB(Module):
 	def __init__(self):
-		nodeidsize = 8
-		num_nodes_per_pe = 2**4
-		edgeidsize = 8
-		max_edges_per_pe = 2**4
-		peidsize = 2
-		num_pe = 2
-		pcie_width = 128
 
-		self.addresslayout = BFSAddressLayout(nodeidsize=nodeidsize, edgeidsize=edgeidsize, peidsize=peidsize, num_pe=num_pe, num_nodes_per_pe=num_nodes_per_pe, max_edges_per_pe=max_edges_per_pe)
+		self.addresslayout = config()
 
+		num_pe = self.addresslayout.num_pe
 
-		fifos = [SyncFIFO(width_or_layout=BFSMessage(nodeidsize=nodeidsize).layout, depth=32) for _ in range(num_pe)]
+		fifos = [SyncFIFO(width_or_layout=BFSMessage(**self.addresslayout.get_params()).layout, depth=32) for _ in range(num_pe)]
 		self.submodules += fifos
 
 		self.submodules.dut = BFSArbiter(self.addresslayout, fifos)
@@ -72,7 +67,7 @@ class TB(Module):
 		print("Total messages: " + str(total_msgs))
 		while msgs_received < total_msgs:
 			if selfp.dut.apply_interface.valid:
-				msg = (selfp.dut.apply_interface.msg.dest_id, selfp.dut.apply_interface.msg.payload.parent)
+				msg = (selfp.dut.apply_interface.msg.dest_id, selfp.dut.apply_interface.msg.payload)
 				txt = "{0:{1}d}: ".format(msgs_received, len(str(total_msgs-1))) + str(msg)
 				try:
 					self.messages.remove(msg)

@@ -3,18 +3,14 @@ from migen.genlib.record import *
 
 ### Communication Interfaces ###
 
-## message payload format (user-defined)
 
-payload_layout = [
-	( "parent", "nodeidsize", DIR_M_TO_S )
-]
 
 ## noc message format
 
 _msg_layout = [
 	( "barrier", 1, DIR_M_TO_S),
 	( "dest_id", "nodeidsize", DIR_M_TO_S ),
-	( "payload", payload_layout)
+	( "payload", "payloadsize", DIR_M_TO_S )
 ]
 
 class BFSMessage(Record):
@@ -39,8 +35,9 @@ class BFSApplyInterface(Record):
 _scatter_layout = [
 	( "barrier", 1, DIR_M_TO_S),
 	( "valid", 1, DIR_M_TO_S ),
-	( "ack", 1, DIR_S_TO_M),
-	( "msg", payload_layout)
+	( "ack", 1, DIR_S_TO_M ),
+	( "sender", "nodeidsize", DIR_M_TO_S ),
+	( "msg", "payloadsize", DIR_M_TO_S )
 ]
 
 class BFSScatterInterface(Record):
@@ -61,9 +58,14 @@ class BFSNetworkInterface(Record):
 	def __init__(self, **kwargs):
 		Record.__init__(self, set_layout_parameters(_network_layout, **kwargs))
 
+## message payload format (user-defined)
+
+payload_layout = [
+	( "parent", "nodeidsize", DIR_M_TO_S )
+]
 
 ### Memory Interfaces ###
 
-node_mem_layout = [
+node_storage_layout = [
 	("parent", "nodeidsize")
 ]

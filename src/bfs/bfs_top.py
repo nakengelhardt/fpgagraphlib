@@ -10,6 +10,7 @@ from bfs_apply import BFSApply
 from bfs_scatter import BFSScatter
 from bfs_address import BFSAddressLayout
 from bfs_initgraph import BFSInitGraph
+from bfs_config import config
 
 class BFS(Module):
 	def __init__(self, addresslayout, rx, tx, cmd_tx, adj_mat=None, init_node=6):
@@ -19,7 +20,7 @@ class BFS(Module):
 		num_pe = addresslayout.num_pe
 		max_edges_per_pe = addresslayout.max_edges_per_pe
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize=nodeidsize).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(**addresslayout.get_params()).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(addresslayout) for _ in range(num_pe)]
@@ -32,7 +33,7 @@ class BFS(Module):
 		# connect fifos across PEs
 		for source in range(num_pe):
 			array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-			array_parent = Array(fifo.din.payload.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
+			array_parent = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -58,7 +59,7 @@ class BFS(Module):
 						).Else(
 							sink.eq(self.scatter[source].network_interface.dest_pe),\
 							array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),\
-							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload.raw_bits()),\
+							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload),\
 							array_we[sink].eq(self.scatter[source].network_interface.valid),\
 							self.scatter[source].network_interface.ack.eq(array_writable[sink])
 						)
@@ -99,23 +100,8 @@ def main():
 	combined_interface_tx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 	combined_interface_rx = riffa.Interface(data_width=c_pci_data_width, num_chnls=num_chnls)
 
-	nodeidsize = 16
-	num_nodes_per_pe = 2**8
-	edgeidsize = 16
-	max_edges_per_pe = 2**12
-	peidsize = 8
-	num_pe = 8
 
-	# nodeidsize = 8
-	# num_nodes_per_pe = 2**2
-	# edgeidsize = 8
-	# max_edges_per_pe = 2**4
-	# peidsize = 1
-	# num_pe = 2
-
-	pcie_width = 128
-
-	addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
+	addresslayout = config()
 
 	m = WrappedBFS(addresslayout, combined_interface_rx, combined_interface_tx, c_pci_data_width=pcie_width)
 

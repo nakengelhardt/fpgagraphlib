@@ -13,6 +13,7 @@ from bfs_address import BFSAddressLayout
 from bfs_arbiter import BFSArbiter
 from bfs_apply import BFSApply
 from bfs_scatter import BFSScatter
+from bfs_config import config
 
 
 import riffa
@@ -23,42 +24,16 @@ import argparse
 class TB(Module):
 	def __init__(self, adj_dict):
 
-		# nodeidsize = 16
-		# num_nodes_per_pe = 2**10
-		# edgeidsize = 16
-		# max_edges_per_pe = 2**14
-		# peidsize = 5
-		# num_pe = 32
+		self.addresslayout = config()
 
-		# nodeidsize = 16
-		# num_nodes_per_pe = 2**8
-		# edgeidsize = 16
-		# max_edges_per_pe = 2**12
-		# peidsize = 8
-		# num_pe = 8
-
-		nodeidsize = 8
-		num_nodes_per_pe = 2**2
-		edgeidsize = 8
-		max_edges_per_pe = 2**4
-		peidsize = 1
-		num_pe = 2
-
-		print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
-		print("num_pe = " + str(num_pe))
-		print("num_nodes_per_pe = " + str(num_nodes_per_pe))
-		print("max_edges_per_pe = " + str(max_edges_per_pe))
-
-		pcie_width = 128
+		num_pe = self.addresslayout.num_pe
 
 		self.adj_dict = adj_dict
-
-		self.addresslayout = BFSAddressLayout(nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe)
 
 		adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
 
 
-		fifos = [[SyncFIFO(width_or_layout=BFSMessage(nodeidsize=nodeidsize).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
+		fifos = [[SyncFIFO(width_or_layout=BFSMessage(**self.addresslayout.get_params()).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
 		self.submodules.fifos = fifos
 		self.submodules.arbiter = [BFSArbiter(self.addresslayout, fifos[sink]) for sink in range(num_pe)]
 		self.submodules.apply = [BFSApply(self.addresslayout) for _ in range(num_pe)]
@@ -71,7 +46,7 @@ class TB(Module):
 		# connect fifos across PEs
 		for source in range(num_pe):
 			array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-			array_parent = Array(fifo.din.payload.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
+			array_parent = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
 			array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -97,7 +72,7 @@ class TB(Module):
 						).Else(
 							sink.eq(self.scatter[source].network_interface.dest_pe),\
 							array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),\
-							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload.raw_bits()),\
+							array_parent[sink].eq(self.scatter[source].network_interface.msg.payload),\
 							array_we[sink].eq(self.scatter[source].network_interface.valid),\
 							self.scatter[source].network_interface.ack.eq(array_writable[sink])
 						)
@@ -114,7 +89,7 @@ class TB(Module):
 
 		start_message = [selfp.arbiter[i].start_message for i in range(num_pe)]
 		start_message[init_node_pe].msg.dest_id = init_node
-		start_message[init_node_pe].msg.payload.parent = init_node
+		start_message[init_node_pe].msg.payload = init_node
 		start_message[init_node_pe].msg.barrier = 0
 		start_message[init_node_pe].valid = 1
 
@@ -124,7 +99,7 @@ class TB(Module):
 
 		for i in range(num_pe):
 			start_message[i].msg.dest_id = 0
-			start_message[i].msg.payload.parent = 0
+			start_message[i].msg.payload = 0
 			start_message[i].msg.barrier = 1
 			start_message[i].valid = 1
 
@@ -192,4 +167,4 @@ if __name__ == "__main__":
 		exit(-1)
 
 	tb = TB(adj_dict)
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=100)
+	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=150)

@@ -1,7 +1,7 @@
 from migen.fhdl.std import *
 from migen.genlib.record import *
 
-from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface, payload_layout
+from bfs_interfaces import BFSScatterInterface, BFSMessage, BFSNetworkInterface
 from bfs_neighbors import BFSNeighbors
 from bfs_address import BFSAddressLayout
 
@@ -15,10 +15,10 @@ class BFSScatter(Module):
 		peidsize = addresslayout.peidsize
 
 		# input
-		self.scatter_interface = BFSScatterInterface(nodeidsize=nodeidsize)
+		self.scatter_interface = BFSScatterInterface(**addresslayout.get_params())
 
 		#output
-		self.network_interface = BFSNetworkInterface(nodeidsize=nodeidsize, peidsize=peidsize)
+		self.network_interface = BFSNetworkInterface(**addresslayout.get_params())
 
 		###
 		
@@ -52,11 +52,11 @@ class BFSScatter(Module):
 		## stage 1
 
 		# address idx with incoming message
-		self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.msg.parent)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
+		self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.sender)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
 		self.comb += stage1_ack.eq(self.get_neighbors.ack)
 
 		# keep input for next stage
-		scatter_msg1 = Record(set_layout_parameters(payload_layout, nodeidsize=nodeidsize))
+		scatter_msg1 = Signal(addresslayout.payloadsize)
 		scatter_msg_valid1 = Signal()
 		scatter_barrier1 = Signal()
 		# valid1 requests get_neighbors, so don't set for barrier
@@ -76,7 +76,7 @@ class BFSScatter(Module):
 					 stage2_ack.eq(self.get_neighbors.ack)
 
 		# keep input for next stage
-		scatter_msg2 = Record(set_layout_parameters(payload_layout, nodeidsize=nodeidsize))
+		scatter_msg2 = Signal(addresslayout.payloadsize)
 		scatter_msg_valid2 = Signal()
 		scatter_barrier2 = Signal()
 		self.sync += If( stage2_ack, 
