@@ -6,9 +6,6 @@ from bfs_interfaces import BFSApplyInterface, BFSScatterInterface, BFSMessage, n
 from bfs_address import BFSAddressLayout
 from bfs_config import config
 
-## for wrapping signals when multiplexing memory port
-
-
 
 class BFSApplyKernel(Module):
 	def __init__(self, addresslayout):
@@ -23,8 +20,8 @@ class BFSApplyKernel(Module):
 		self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
 		self.state_update = Signal()
 		self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-		self.message_sender = Signal(nodeidsize)
-		self.message_valid = Signal()
+		self.message_sender_out = Signal(nodeidsize)
+		self.valid_out = Signal()
 		self.barrier_out = Signal()
 
 		###
@@ -36,10 +33,12 @@ class BFSApplyKernel(Module):
 		self.comb+= self.state_out.parent.eq(self.message_in.parent),\
 					self.state_update.eq(self.valid_in & (self.state_in.parent == 0) & (self.nodeid_in != 0) & (self.message_in.parent != 0)),\
 					self.message_out.parent.eq(self.nodeid_in),\
-					self.message_sender.eq(self.nodeid_in),\
-					self.message_valid.eq(self.state_update & (self.nodeid_in != 0)),\
+					self.message_sender_out.eq(self.nodeid_in),\
+					self.valid_out.eq(self.state_update & (self.nodeid_in != 0)),\
 					self.barrier_out.eq(self.barrier_in)
 
+
+## for wrapping signals when multiplexing memory port
 _memory_port_layout = [
 	( "enable", 1 ),
 	( "adr", "adrsize" ),
@@ -49,7 +48,7 @@ _memory_port_layout = [
 
 
 class BFSApply(Module):
-	def __init__(self, addresslayout):
+	def __init__(self, addresslayout, init_nodedata=None):
 		nodeidsize = addresslayout.nodeidsize
 		num_nodes_per_pe = addresslayout.num_nodes_per_pe
 
@@ -68,7 +67,9 @@ class BFSApply(Module):
 		clock_enable = Signal()
 
 		# local node data storage
-		self.specials.mem = Memory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=[0 for i in range(num_nodes_per_pe)])
+		if init_nodedata == None:
+			init_nodedata = [0 for i in range(num_nodes_per_pe)]
+		self.specials.mem = Memory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=init_nodedata)
 		self.specials.rd_port = rd_port = self.mem.get_port(has_re=True)
 		self.specials.wr_port = wr_port = self.mem.get_port(write_capable=True)
 
@@ -174,9 +175,9 @@ class BFSApply(Module):
 		# stall if fifo full or if collision
 		self.comb += clock_enable.eq(self.outfifo.writable & ~collision)
 
-		self.comb += self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),\
+		self.comb += self.outfifo.we.eq(self.applykernel.valid_out | self.applykernel.barrier_out),\
 					 self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),\
-					 self.outfifo.din.sender.eq(self.applykernel.message_sender),\
+					 self.outfifo.din.sender.eq(self.applykernel.message_sender_out),\
 					 self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
 
 		self.comb += self.scatter_interface.msg.eq(self.outfifo.dout.msg),\

@@ -3,8 +3,6 @@ from migen.genlib.record import *
 
 ### Communication Interfaces ###
 
-
-
 ## noc message format
 
 _msg_layout = [
@@ -57,6 +55,9 @@ _network_layout = [
 class BFSNetworkInterface(Record):
 	def __init__(self, **kwargs):
 		Record.__init__(self, set_layout_parameters(_network_layout, **kwargs))
+
+
+### user-defined ###
 
 ## message payload format (user-defined)
 
