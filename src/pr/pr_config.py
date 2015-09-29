@@ -21,7 +21,7 @@ def config():
 	# num_pe = 8
 
 	nodeidsize = 8
-	num_nodes_per_pe = 2**2
+	num_nodes_per_pe = 2**3
 	edgeidsize = 8
 	max_edges_per_pe = 2**5
 	peidsize = 1

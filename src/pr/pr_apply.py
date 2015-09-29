@@ -2,69 +2,12 @@ from migen.fhdl.std import *
 from migen.genlib.record import *
 from migen.genlib.fifo import SyncFIFO
 
-from pr_interfaces import PRApplyInterface, PRScatterInterface, PRMessage, node_storage_layout, payload_layout
+from pr_interfaces import PRApplyInterface, PRScatterInterface, PRMessage, node_storage_layout
 from pr_address import PRAddressLayout
 from pr_config import config
-
-
-class PRApplyKernel(Module):
-	def __init__(self, addresslayout):
-		nodeidsize = addresslayout.nodeidsize
-		fixedptfloatsize = addresslayout.fixedptfloatsize
-		fixedptdecimals = addresslayout.fixedptdecimals
-
-		self.nodeid_in = Signal(nodeidsize)
-		self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-		self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
-		self.valid_in = Signal()
-		self.barrier_in = Signal()
-
-		self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
-		self.state_update = Signal()
-		self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-		self.message_sender = Signal(nodeidsize)
-		self.message_valid = Signal()
-		self.barrier_out = Signal()
-		self.message_ack = Signal()
-
-		self.level = Signal(32)
-
-		###
-
-		const_base = addresslayout.const_base # init to int(0.15 / num_nodes * (2**fixedptdecimals))
-		n_sum = Signal(fixedptfloatsize)
-		n_nrecvd = Signal(nodeidsize)
-		n_nneighbors = Signal(nodeidsize)
-
-		dyn_rank = Signal(fixedptfloatsize + fixedptdecimals)
-
-
-		self.comb += n_sum.eq(self.state_in.sum + self.message_in.weight),\
-					 n_nrecvd.eq(self.state_in.nrecvd + 1),\
-					 n_nneighbors.eq(self.state_in.nneighbors),\
-					 dyn_rank.eq(int(0.85*(2**fixedptdecimals))*n_sum)
-
-		self.comb += self.state_out.nneighbors.eq(n_nneighbors),\
-					 If(self.level < 1, # init round
-					 	self.state_out.nrecvd.eq(0),
-					 	self.state_out.sum.eq(0),
-					 	self.message_out.weight.eq(const_base),
-					 	self.message_valid.eq(self.valid_in)
-				 	 ).Elif(n_nrecvd < n_nneighbors, # not received all weights yet
-						self.state_out.nrecvd.eq(n_nrecvd),
-					 	self.state_out.sum.eq(n_sum),
-						self.message_out.weight.eq(const_base + dyn_rank[fixedptdecimals:]),
-						self.message_valid.eq(0)
-					 ).Else( # received all data
-						self.state_out.nrecvd.eq(0),
-						self.state_out.sum.eq(0),
-						self.message_out.weight.eq(const_base + dyn_rank[fixedptdecimals:]),
-						self.message_valid.eq(self.valid_in & (self.level < 30)) # stop sending after 30 rounds
-					 ),\
-					 self.state_update.eq(self.valid_in),\
-					 self.message_sender.eq(self.nodeid_in),\
-					 self.barrier_out.eq(self.barrier_in)
-
+from pr_collision import PRCollisionDetector
+from pr_applykernel import PRApplyKernel
+from forwardmemory import ForwardMemory
 
 
 ## for wrapping signals when multiplexing memory port
@@ -91,21 +34,19 @@ class PRApply(Module):
 		####
 
 		# should pipeline advance?
-		clock_enable = Signal()
+		upstream_ack = Signal()
 
 		# local node data storage
 		if init_nodedata == None:
 			init_nodedata = [0 for i in range(num_nodes_per_pe)]
-		self.specials.mem = Memory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=init_nodedata)
-		self.specials.rd_port = rd_port = self.mem.get_port(has_re=True)
-		self.specials.wr_port = wr_port = self.mem.get_port(write_capable=True)
+		self.submodules.mem = ForwardMemory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=init_nodedata)
+		rd_port = self.mem.rw_port
+		wr_port = self.mem.wr_port
 
 		# multiplex read port
 		# during computation, update locally; after computation, controller sends contents back to host
 		self.extern_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=flen(rd_port.adr), datasize=flen(rd_port.dat_r)))
-
 		local_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=flen(rd_port.adr), datasize=flen(rd_port.dat_r)))
-
 		self.comb += If(self.extern_rd_port.enable, 
 						rd_port.adr.eq(self.extern_rd_port.adr),
 						rd_port.re.eq(self.extern_rd_port.re)
@@ -117,20 +58,17 @@ class PRApply(Module):
 					 local_rd_port.dat_r.eq(rd_port.dat_r)
 
 		# input handling
-		self.comb += self.apply_interface.ack.eq(clock_enable)
-
-		collision = Signal()
+		self.comb += self.apply_interface.ack.eq(upstream_ack)
 
 		# detect termination (if all PEs receive 2 barriers in a row)
 		self.inactive = Signal()
 		prev_was_barrier = Signal()
 		prev_prev_was_barrier = Signal()
-		self.sync += If(self.apply_interface.valid & clock_enable, prev_was_barrier.eq(self.apply_interface.msg.barrier))
-		self.sync += If(self.apply_interface.valid & clock_enable, prev_prev_was_barrier.eq(prev_was_barrier))
+		self.sync += If(self.apply_interface.valid & self.apply_interface.ack, prev_was_barrier.eq(self.apply_interface.msg.barrier))
+		self.sync += If(self.apply_interface.valid & self.apply_interface.ack, prev_prev_was_barrier.eq(prev_was_barrier))
 		self.comb += self.inactive.eq(prev_was_barrier & prev_prev_was_barrier)
 
-		# computation stage 1
-
+		## Stage 1
 		# rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
 		dest_node_id = Signal(nodeidsize)
 		payload = Signal(addresslayout.payloadsize)
@@ -142,59 +80,65 @@ class PRApply(Module):
 					 valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),\
 					 barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
 
+		# collision handling
+		collision_re = Signal()
+		self.submodules.collisiondetector = PRCollisionDetector(addresslayout)
+
+		self.comb += self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),\
+					 self.collisiondetector.read_adr_valid.eq(valid),\
+					 self.collisiondetector.write_adr.eq(wr_port.adr),\
+					 self.collisiondetector.write_adr_valid.eq(wr_port.we),\
+					 collision_re.eq(self.collisiondetector.re)
+
 
 		# get node data
 		self.comb += local_rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),\
-					 local_rd_port.re.eq(clock_enable)
-		
+					 local_rd_port.re.eq(upstream_ack)
 
-		# registers to next stage
+
+		## Stage 3
 		dest_node_id2 = Signal(nodeidsize)
 		payload2 = Signal(addresslayout.payloadsize)
 		valid2 = Signal()
 		barrier2 = Signal()
+		data_invalid2 = Signal()
+		ready = Signal()
 
-		self.sync += If(clock_enable, 
+		self.sync += If(upstream_ack, 
 			dest_node_id2.eq(dest_node_id), 
 			payload2.eq(payload), 
 			valid2.eq(valid),
 			barrier2.eq(barrier)
-		).Elif(collision,
-			valid2.eq(0)
 		)
-
-		# computation stage 2
 
 		# count levels
 		self.level = Signal(32)
-		self.sync += If(barrier2 & clock_enable, self.level.eq(self.level + 1))
+		self.sync += If(barrier2 & ready, self.level.eq(self.level + 1))
 
-		self.update = Signal()
+		downstream_ack = Signal()
 
-		####### User code ########
-
+		# User code
 		self.submodules.applykernel = PRApplyKernel(addresslayout)
 
 		self.comb += self.applykernel.nodeid_in.eq(dest_node_id2),\
 					 self.applykernel.message_in.raw_bits().eq(payload2),\
-					 self.applykernel.state_in.raw_bits().eq(rd_port.dat_r),\
-					 self.applykernel.valid_in.eq(valid2),\
+					 self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),\
+					 self.applykernel.valid_in.eq(valid2 & collision_re),\
 					 self.applykernel.barrier_in.eq(barrier2),\
-					 self.applykernel.level.eq(self.level)
+					 self.applykernel.level_in.eq(self.level),\
+					 self.applykernel.message_ack.eq(downstream_ack),\
+					 ready.eq(self.applykernel.ready),\
+					 upstream_ack.eq(self.applykernel.ready & collision_re)
 
-		self.comb += self.update.eq(self.applykernel.state_update)
 
 		# if yes write parent value
-		self.comb += wr_port.adr.eq(addresslayout.local_adr(dest_node_id2)),\
+		self.comb += wr_port.adr.eq(addresslayout.local_adr(self.applykernel.nodeid_out)),\
 					 wr_port.dat_w.eq(self.applykernel.state_out.raw_bits()),\
-					 wr_port.we.eq(self.update)
+					 wr_port.we.eq(self.applykernel.state_valid)
 
 		# TODO: reset/init
 
-		# collision handling	
-		self.comb += collision.eq((dest_node_id == dest_node_id2) & valid & valid2 & self.update)
-
-
+		
 		# output handling
 		_layout = [
 		( "barrier", 1, DIR_M_TO_S ),
@@ -204,7 +148,7 @@ class PRApply(Module):
 		self.submodules.outfifo = SyncFIFO(width_or_layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=addresslayout.num_nodes_per_pe)
 
 		# stall if fifo full or if collision
-		self.comb += clock_enable.eq(self.outfifo.writable & ~collision)
+		self.comb += downstream_ack.eq(self.outfifo.writable)
 
 		self.comb += self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),\
 					 self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),\

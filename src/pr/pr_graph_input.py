@@ -7,8 +7,10 @@ def read_graph(f):
 	for line in f:
 		match = re.match("(\d+)\s(\d+)", line)
 		if match:
-			source = int(match.group(1))
-			sink = int(match.group(2))
+			# +1: dirty hack for GRCite graph
+			# TODO: add proper conversion from string to internally generated numbers
+			source = int(match.group(1)) + 1
+			sink = int(match.group(2)) + 1
 			if source not in d:
 				d[source] = set()
 			if sink not in d:

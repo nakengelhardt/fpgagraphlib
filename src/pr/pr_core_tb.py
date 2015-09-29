@@ -188,4 +188,4 @@ if __name__ == "__main__":
 		exit(-1)
 
 	tb = TB(adj_dict)
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=1500)
+	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=200000)
