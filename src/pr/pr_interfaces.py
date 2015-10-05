@@ -62,7 +62,7 @@ class PRNetworkInterface(Record):
 ## message payload format
 
 payload_layout = [
-	( "weight", "fixedptfloatsize", DIR_M_TO_S )
+	( "weight", "floatsize", DIR_M_TO_S )
 ]
 
 ## node storage
@@ -70,5 +70,5 @@ payload_layout = [
 node_storage_layout = [
 	("nneighbors", "nodeidsize"),
 	("nrecvd", "nodeidsize"),
-	("sum", "fixedptfloatsize")
+	("sum", "floatsize")
 ]

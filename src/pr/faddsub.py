@@ -1,8 +1,16 @@
 from migen.fhdl.std import *
 from migen.genlib.coding import PriorityEncoder
 
+@CEInserter()
 class FAddSub(Module):
-	def __init__(self, a, b, valid_i, r, valid_o, sub=False, ce=True):
+	def __init__(self):
+
+		self.a = Signal(32)
+		self.b = Signal(32)
+		self.valid_i = Signal()
+		self.r = Signal(32)
+		self.valid_o = Signal()
+		self.sub = Signal()
 
 		# Stage 1 #
 		s1_valid = Signal()
@@ -14,16 +22,16 @@ class FAddSub(Module):
 		b_expn = Signal(8)
 		b_mant = Signal(23)
 
-		self.sync += If(ce, [
-			s1_valid.eq(valid_i),
-			a_sign.eq(a[31]),
-			a_expn.eq(a[23:31]),
-			a_mant.eq(a[0:23]),
+		self.sync += [
+			s1_valid.eq(self.valid_i),
+			a_sign.eq(self.a[31]),
+			a_expn.eq(self.a[23:31]),
+			a_mant.eq(self.a[0:23]),
 
-			b_sign.eq(b[31] ^ sub),
-			b_expn.eq(b[23:31]),
-			b_mant.eq(b[0:23]),
-		])
+			b_sign.eq(self.b[31] ^ self.sub),
+			b_expn.eq(self.b[23:31]),
+			b_mant.eq(self.b[0:23]),
+		]
 
 		# Stage 2 #
 		s2_iszero = Signal()		# one or both of the operands is zero 
@@ -46,7 +54,7 @@ class FAddSub(Module):
 			mant_compare.eq(a_mant > b_mant),
 		]
 
-		self.sync += If(ce, [
+		self.sync += [
 			s2_valid.eq(s1_valid),
 			s2_issub.eq(a_sign ^ b_sign),	
 			If(expn_compare,
@@ -91,7 +99,7 @@ class FAddSub(Module):
 				)
 			),
 			s2_iszero.eq((a_expn == 0)|(b_expn == 0))
-		])
+		]
 
 		# Stage 3
 
@@ -110,7 +118,7 @@ class FAddSub(Module):
 			min_expanded.eq(Cat(0, s2_mant_min, 1) >> s2_expn_diff)
 		]
 
-		self.sync += If(ce, [
+		self.sync += [
 			s3_valid.eq(s2_valid),
 			s3_sign.eq(s2_sign),
 			s3_expn.eq(s2_expn_max),
@@ -121,7 +129,7 @@ class FAddSub(Module):
 			).Else(
 				s3_mant.eq(max_expanded + min_expanded)
 			)
-		])
+		]
 
 		# Stage 4
 
@@ -136,26 +144,18 @@ class FAddSub(Module):
 
 		self.comb += pe.i.eq(s3_mant[::-1]), clz.eq(pe.o)
 
-		self.sync += If(ce, [
-			valid_o.eq(s3_valid),
+		self.sync += [
+			self.valid_o.eq(s3_valid),
 			s4_sign.eq(s3_sign),
 			s4_mant.eq(s3_mant << clz),
 			s4_expn.eq(s3_expn - clz + 1)
-		])
+		]
 
-		self.comb += r.eq(Cat(s4_mant[2:25], s4_expn, s4_sign))
+		self.comb += self.r.eq(Cat(s4_mant[2:25], s4_expn, s4_sign))
 
 if __name__ == "__main__":
 	from migen.fhdl import verilog
 
-	a = Signal(32)
-	b = Signal(32)
-	r = Signal(32)
-	valid_i = Signal()
-	valid_o = Signal()
-	sub = Signal()
-	ce = Signal()
+	m = FAddSub()
 
-	m = FAddSub(a, b, valid_i, r, valid_o, sub=sub, ce=ce)
-
-	print(verilog.convert(m, ios={a, b, r, valid_i, valid_o, sub, ce}))
+	print(verilog.convert(m, ios={m.a, m.b, m.r, m.valid_i, m.valid_o, m.sub, m.ce}))

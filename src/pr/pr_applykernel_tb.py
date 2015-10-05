@@ -5,7 +5,7 @@ from pr_applykernel import PRApplyKernel
 from pr_address import PRAddressLayout
 from pr_config import config
 from pr_graph_generate import generate_graph
-from random import random, shuffle, choice
+import random
 import struct 
 
 def _float_to_32b_int(f):
@@ -24,14 +24,15 @@ class MessageReader(Module):
 		self.num_nodes = num_nodes
 
 	def gen_simulation(self, selfp):
-		selfp.message_ack = 1
 		nrecvd = 0
 		while nrecvd < self.num_nodes:
-			if selfp.barrier_out:
-				print("Barrier")
-			elif selfp.message_valid:
-				nrecvd = nrecvd + 1
-				print("({}, {})".format(selfp.message_sender, _32b_int_to_float(selfp.message_out.weight)))
+			selfp.message_ack = random.choice([0, 1])
+			if selfp.message_ack:
+				if selfp.barrier_out:
+					print("Barrier")
+				elif selfp.message_valid:
+					nrecvd = nrecvd + 1
+					print("({}, {})".format(selfp.message_sender, _32b_int_to_float(selfp.message_out.weight)))
 			yield
 		print("Done")
 
@@ -41,7 +42,6 @@ class MessageReader(Module):
 class TB(Module):
 	def __init__(self):
 		self.addresslayout = config()
-		fixedptdecimals = self.addresslayout.fixedptdecimals
 
 		num_nodes = self.addresslayout.num_nodes_per_pe - 1
 
@@ -61,19 +61,27 @@ class TB(Module):
 
 
 	def gen_simulation(self, selfp):
-		fixedptdecimals = self.addresslayout.fixedptdecimals
 		num_nodes = len(self.graph)
 
-		msg = [(i, _float_to_32b_int(random())) for i in range(1, num_nodes+1) for _ in range(len(self.graph[i]))] #(dest_id, weight)
-		shuffle(msg)
+		msg = [(i, _float_to_32b_int(random.random())) for i in range(1, num_nodes+1) for _ in range(len(self.graph[i]))] #(dest_id, weight)
+		random.shuffle(msg)
 		msg.append(('end', 'end'))
 		print("Input messages: " + str(msg))
+
+		expected = [0.0 for i in range(num_nodes + 1)]
+		for node, weight in msg[:-1]:
+			expected[node] += _32b_int_to_float(weight)
+
+		print("Expected output:")
+		for node in range(1, num_nodes + 1):
+			expected[node] = 0.15/num_nodes + 0.85*expected[node]
+			print("{}: {}".format(node, expected[node]))
+
+		print("Received output:")
 
 		nneighbors = [0] + [len(self.graph[node]) for node in range(1, num_nodes+1)]
 		nrecvd = [0 for node in range(num_nodes+1)]
 		summ = [0.0 for node in range(num_nodes+1)]
-		
-		selfp.dut.message_ack = 1
 
 		currently_active = set()
 
@@ -95,16 +103,24 @@ class TB(Module):
 				node, weight = msg.pop(0)
 			yield
 			if selfp.dut.state_valid:
-				assert(nneighbors[selfp.dut.nodeid_out] == selfp.dut.state_out.nneighbors)
-				nrecvd[selfp.dut.nodeid_out] = selfp.dut.state_out.nrecvd
-				summ[selfp.dut.nodeid_out] = selfp.dut.state_out.sum
-				currently_active.remove(selfp.dut.nodeid_out)
+					assert(nneighbors[selfp.dut.nodeid_out] == selfp.dut.state_out.nneighbors)
+					nrecvd[selfp.dut.nodeid_out] = selfp.dut.state_out.nrecvd
+					summ[selfp.dut.nodeid_out] = selfp.dut.state_out.sum
+					currently_active.remove(selfp.dut.nodeid_out)
+			while not selfp.dut.ready:
+				yield
+				if selfp.dut.state_valid:
+					assert(nneighbors[selfp.dut.nodeid_out] == selfp.dut.state_out.nneighbors)
+					nrecvd[selfp.dut.nodeid_out] = selfp.dut.state_out.nrecvd
+					summ[selfp.dut.nodeid_out] = selfp.dut.state_out.sum
+					currently_active.remove(selfp.dut.nodeid_out)
 
 		selfp.dut.valid_in = 0
 
 	gen_simulation.passive = True
 				
 if __name__ == "__main__":
+	random.seed(42)
 	tb = TB()
 	#run_simulation(tb, vcd_name="tb.vcd", ncycles=200, keep_files=True)
 	with Simulator(tb, TopLevel("tb.vcd"), icarus.Runner(keep_files=True), display_run=False) as s:

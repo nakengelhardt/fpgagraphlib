@@ -8,8 +8,7 @@ from fmul import FMul
 class PRApplyKernel(Module):
 	def __init__(self, addresslayout):
 		nodeidsize = addresslayout.nodeidsize
-		fixedptfloatsize = addresslayout.fixedptfloatsize
-		fixedptdecimals = addresslayout.fixedptdecimals
+		floatsize = addresslayout.floatsize
 
 		self.level_in = Signal(32)
 		self.nodeid_in = Signal(nodeidsize)
@@ -34,9 +33,9 @@ class PRApplyKernel(Module):
 		###
 
 		# float constants
-		const_base = Signal(fixedptfloatsize)
+		const_base = Signal(floatsize)
 		self.comb += const_base.eq(addresslayout.const_base) # init to 0.15/num_nodes
-		const_0_85 = Signal(fixedptfloatsize)
+		const_0_85 = Signal(floatsize)
 		self.comb += const_0_85.eq(0x3f59999a)
 		
 		p1_ce = Signal()
@@ -46,7 +45,7 @@ class PRApplyKernel(Module):
 		# First part: add weight to sum
 		# 4 cycles latency
 		n_nodeid = Signal(nodeidsize)
-		n_sum = Signal(fixedptfloatsize)
+		n_sum = Signal(floatsize)
 		n_nrecvd = Signal(nodeidsize)
 		n_nneighbors = Signal(nodeidsize)
 		n_barrier = Signal()
@@ -54,10 +53,18 @@ class PRApplyKernel(Module):
 		n_allrecvd = Signal()
 		n_init = Signal()
 		n_notend = Signal()
-		nodeweight = Signal(fixedptfloatsize)
+		nodeweight = Signal(floatsize)
 
-		self.submodules += FAddSub(a=self.state_in.sum, b=self.message_in.weight, valid_i=self.valid_in, r=n_sum, valid_o=n_valid, ce=p1_ce)
-		
+		self.submodules.add1 = FAddSub()
+		self.comb += [
+			self.add1.a.eq(self.state_in.sum),
+			self.add1.b.eq(self.message_in.weight),
+			self.add1.valid_i.eq(self.valid_in),
+			n_sum.eq(self.add1.r),
+			n_valid.eq(self.add1.valid_o),
+			self.add1.ce.eq(p1_ce)
+		]
+
 		i_nrecvd = [Signal(nodeidsize) for _ in range(3)]
 		i_nneighbors = [Signal(nodeidsize) for _ in range(3)]
 		i_barrier = [Signal() for _ in range(3)]
@@ -106,7 +113,7 @@ class PRApplyKernel(Module):
 				self.state_out.nrecvd.eq(n_nrecvd),
 				self.state_out.sum.eq(n_sum)
 			),
-			self.state_valid.eq(n_valid),
+			self.state_valid.eq(n_valid & p1_ce),
 			send_message.eq((n_allrecvd | n_init) & n_valid & n_notend),
 			If(n_init,
 				nodeweight.eq(0)
@@ -122,13 +129,31 @@ class PRApplyKernel(Module):
 
 		# Second part: If at end, then multiply by 0.85 and add to const_base and send as message
 		# 6 + 4 cycles latency
-		dyn_rank = Signal(fixedptfloatsize)
+		dyn_rank = Signal(floatsize)
 		dyn_rank_valid = Signal()
 
-		self.submodules += FMul(a=nodeweight, b=const_0_85, valid_i=send_message, r=dyn_rank, valid_o=dyn_rank_valid)
+		self.submodules.mul = FMul()
 
-		self.submodules += FAddSub(a=const_base, b=dyn_rank, valid_i=dyn_rank_valid, r=self.message_out.weight, valid_o=self.message_valid)
+		self.comb += [
+			self.mul.a.eq(nodeweight), 
+			self.mul.b.eq(const_0_85), 
+			self.mul.valid_i.eq(send_message), 
+			dyn_rank.eq(self.mul.r), 
+			dyn_rank_valid.eq(self.mul.valid_o), 
+			self.mul.ce.eq(p2_ce)
+		]
+
+		self.submodules.add2 = FAddSub()
 		
+		self.comb += [
+			self.add2.a.eq(const_base),
+			self.add2.b.eq(dyn_rank),
+			self.add2.valid_i.eq(dyn_rank_valid),
+			self.message_out.weight.eq(self.add2.r),
+			self.message_valid.eq(self.add2.valid_o),
+			self.add2.ce.eq(p2_ce)
+		]
+
 		m_sender = [Signal(nodeidsize) for _ in range(10)]
 		m_barrier = [Signal() for _ in range(10)]
 

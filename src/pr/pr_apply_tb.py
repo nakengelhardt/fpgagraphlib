@@ -7,7 +7,6 @@ from pr_config import config
 from pr_graph_generate import generate_graph
 from random import random, shuffle, choice, seed
 import struct
-import os
 
 def _float_to_32b_int(f):
 	return struct.unpack("i", struct.pack("f", f))[0]
@@ -59,7 +58,6 @@ class ScatterInterfaceReader(Module):
 class TB(Module):
 	def __init__(self):
 		self.addresslayout = config()
-		fixedptdecimals = self.addresslayout.fixedptdecimals
 
 		num_nodes = self.addresslayout.num_nodes_per_pe - 1
 
@@ -77,7 +75,6 @@ class TB(Module):
 		]
 
 	def gen_simulation(self, selfp):
-		fixedptdecimals = self.addresslayout.fixedptdecimals
 		num_nodes = len(self.graph)
 
 		msg = [(i, _float_to_32b_int(random())) for i in range(1, num_nodes+1) for _ in range(len(self.graph[i]))] #(dest_id, weight)

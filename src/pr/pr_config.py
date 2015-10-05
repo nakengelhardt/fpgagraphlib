@@ -5,7 +5,7 @@ from pr_address import PRAddressLayout
 from pr_interfaces import payload_layout
 
 
-def config():
+def config(quiet=False):
 	# nodeidsize = 16
 	# num_nodes_per_pe = 2**10
 	# edgeidsize = 16
@@ -27,17 +27,17 @@ def config():
 	peidsize = 1
 	num_pe = 2
 
-	fixedptfloatsize = 32
-	payloadsize = layout_len(set_layout_parameters(payload_layout, fixedptfloatsize=fixedptfloatsize))
+	floatsize = 32
+	payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))
 
 	addresslayout = PRAddressLayout(nodeidsize=nodeidsize, edgeidsize=edgeidsize, peidsize=peidsize, num_pe=num_pe, num_nodes_per_pe=num_nodes_per_pe, max_edges_per_pe=max_edges_per_pe, payloadsize=payloadsize)
 	
-	addresslayout.fixedptfloatsize = fixedptfloatsize
-	addresslayout.fixedptdecimals = fixedptfloatsize//2
+	addresslayout.floatsize = floatsize
 	
-	print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
-	print("num_pe = " + str(num_pe))
-	print("num_nodes_per_pe = " + str(num_nodes_per_pe))
-	print("max_edges_per_pe = " + str(max_edges_per_pe))
+	if not quiet:
+		print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
+		print("num_pe = " + str(num_pe))
+		print("num_nodes_per_pe = " + str(num_nodes_per_pe))
+		print("max_edges_per_pe = " + str(max_edges_per_pe))
 
 	return addresslayout

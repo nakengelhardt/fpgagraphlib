@@ -96,8 +96,29 @@ class TB(Module):
 
 		yield 3
 
+		selfp.tb_rw_port_adr = 1
+		selfp.tb_rw_port_re = 1
+		selfp.tb_rw_port_dat_w = 0
+		selfp.tb_rw_port_we = 1
 
+		selfp.tb_wr_port_adr = 1
+		selfp.tb_wr_port_dat_w = 101
+		selfp.tb_wr_port_we = 1
 
+		yield
+
+		selfp.tb_rw_port_re = 0
+		selfp.tb_rw_port_we = 0
+		selfp.tb_wr_port_we = 0
+
+		yield 3
+
+		selfp.tb_rw_port_adr = 4
+		selfp.tb_rw_port_re = 1
+		selfp.tb_rw_port_dat_w = 0
+		selfp.tb_rw_port_we = 0
+
+		yield 3
 
 if __name__ == "__main__":
 	tb = TB()
