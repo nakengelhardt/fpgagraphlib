@@ -39,9 +39,9 @@ class PRApply(Module):
 		# local node data storage
 		if init_nodedata == None:
 			init_nodedata = [0 for i in range(num_nodes_per_pe)]
-		self.submodules.mem = ForwardMemory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=init_nodedata)
-		rd_port = self.mem.rw_port
-		wr_port = self.mem.wr_port
+		self.specials.mem = Memory(layout_len(set_layout_parameters(node_storage_layout, **addresslayout.get_params())), num_nodes_per_pe, init=init_nodedata)
+		rd_port = self.specials.rw_port = self.mem.get_port(write_capable=True, has_re=True)
+		wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
 		# multiplex read port
 		# during computation, update locally; after computation, controller sends contents back to host
@@ -104,10 +104,9 @@ class PRApply(Module):
 		data_invalid2 = Signal()
 		ready = Signal()
 
-		self.sync += If(upstream_ack, 
+		self.sync += valid2.eq(valid & collision_re), If(upstream_ack, 
 			dest_node_id2.eq(dest_node_id), 
 			payload2.eq(payload), 
-			valid2.eq(valid),
 			barrier2.eq(barrier)
 		)
 
@@ -123,7 +122,7 @@ class PRApply(Module):
 		self.comb += self.applykernel.nodeid_in.eq(dest_node_id2),\
 					 self.applykernel.message_in.raw_bits().eq(payload2),\
 					 self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),\
-					 self.applykernel.valid_in.eq(valid2 & collision_re),\
+					 self.applykernel.valid_in.eq(valid2),\
 					 self.applykernel.barrier_in.eq(barrier2),\
 					 self.applykernel.level_in.eq(self.level),\
 					 self.applykernel.message_ack.eq(downstream_ack),\

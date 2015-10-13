@@ -44,14 +44,14 @@ class ScatterInterfaceReader(Module):
 		while True:
 			# output
 			# test pipeline stall: only sometimes ack
-			ack = 1 #choice([0,1])
+			ack = choice([0,1])
 			selfp.scatter_interface.ack = ack
 			yield
 			if selfp.scatter_interface.valid & selfp.scatter_interface.ack:
 				if selfp.scatter_interface.barrier:
 					print("ScatterInterface: barrier")
 				else:
-					print("ScatterInterface: message = sender: {}, weight: {}".format(selfp.scatter_interface.sender, _32b_int_to_float(selfp.scatter_interface.msg)))
+					print("ScatterInterface: message = sender: {}, weight: {} (raw: {})".format(selfp.scatter_interface.sender, _32b_int_to_float(selfp.scatter_interface.msg), selfp.scatter_interface.msg))
 
 	gen_simulation.passive = True
 
@@ -70,7 +70,7 @@ class TB(Module):
 		self.submodules.dut = PRApply(self.addresslayout, init_nodedata=init_nodedata)
 
 		self.submodules += [
-			ApplyKernelLog(self.dut.applykernel),
+			# ApplyKernelLog(self.dut.applykernel),
 			ScatterInterfaceReader(self.dut.scatter_interface)
 		]
 
@@ -90,15 +90,13 @@ class TB(Module):
 			expected[node] = 0.15/num_nodes + 0.85*expected[node]
 			print("{}: {}".format(node, expected[node]))
 
-		
-		selfp.dut.scatter_interface.ack = 0
-		yield
 
 		# increase level to 1
 		selfp.dut.apply_interface.msg.barrier = 1
 		selfp.dut.apply_interface.valid = 1
-		selfp.dut.scatter_interface.ack = 1
 		yield
+		while not selfp.dut.apply_interface.ack:
+			yield
 
 		for test in range(4): 
 			# missing : test init
@@ -149,7 +147,11 @@ class TB(Module):
 
 
 if __name__ == "__main__":
-	s = 42
+	try:
+		import sys
+		s = int(sys.argv[1])
+	except Exception as e:
+		s = 42
 	seed(s)
 	print("Random seed: " + str(s))
 	tb = TB()

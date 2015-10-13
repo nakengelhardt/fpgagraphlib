@@ -1,6 +1,6 @@
 from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
-from migen.sim.generic import run_simulation
+from migen.sim.generic import *
 
 from pr_interfaces import PRMessage
 from pr_arbiter import PRArbiter
@@ -22,7 +22,7 @@ class FifoWriter(Module):
 			dest_id, parent = self.messages[msgs_sent]
 			pe = dest_id % len(self.fifos)
 			if selfp.fifos[pe].writable:
-				# print("Sending message " + str((dest_id, parent)) + " on fifo " + str(pe))
+				print("Sending message " + str((dest_id, parent)) + " on fifo " + str(pe))
 				selfp.fifos[pe].din.dest_id = dest_id
 				selfp.fifos[pe].din.payload = parent
 				selfp.fifos[pe].we = 1
@@ -62,6 +62,8 @@ class TB(Module):
 		# check output
 		# TODO: add testing of pipeline stall by sometimes turning ack off?
 		selfp.dut.apply_interface.ack = 1
+		selfp.dut.start_message.select = 0
+		
 		msgs_received = 0
 		total_msgs = len(self.messages)
 		print("Total messages: " + str(total_msgs))
@@ -85,4 +87,6 @@ class TB(Module):
 
 if __name__ == "__main__":
 	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", ncycles=250)
+	# run_simulation(tb, vcd_name="tb.vcd", ncycles=250)
+	with Simulator(tb, TopLevel("tb.vcd"), icarus.Runner(keep_files=True), display_run=True) as s:
+		s.run(250)

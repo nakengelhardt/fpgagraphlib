@@ -1,9 +1,7 @@
 from migen.fhdl.std import *
-from migen.genlib.fifo import SyncFIFO
 from migen.sim.generic import run_simulation
 
-from pr_scatter import PRScatter
-from pr_address import PRAddressLayout
+from pr_scatterkernel import PRScatterKernel
 from pr_config import config
 from pr_graph_generate import generate_graph
 
@@ -15,36 +13,36 @@ def _float_to_32b_int(f):
 def _32b_int_to_float(i):
 	return struct.unpack("f", struct.pack("i", i))[0]
 
-class NetReader(Module):
-	def __init__(self, net):
-		self.net = net
+class MessageReader(Module):
+	def __init__(self, sk):
+		self.sk = sk
+		self.msgs = []
 
 	def gen_simulation(self, selfp):
-		selfp.net.ack = 1
 		while True:
-			if selfp.net.valid:
-				print("Message sent to PE " + str(selfp.net.dest_pe) + ": (" + str(selfp.net.msg.dest_id) + ", " + str(selfp.net.msg.payload) + ")")
+			selfp.sk.message_ack = random.choice([0,1])
+			if selfp.sk.message_ack:
+				if selfp.sk.barrier_out:
+					print("Barrier")
+				elif selfp.sk.valid_out:
+					print("Message: ({}, {})".format(selfp.sk.neighbor_out, _32b_int_to_float(selfp.sk.message_out.weight)))
+					self.msgs.append((selfp.sk.neighbor_out, selfp.sk.message_out.weight))
 			yield
 
 	gen_simulation.passive = True
 
-
 class TB(Module):
 	def __init__(self):
-
 		self.addresslayout = config()
 
 		num_nodes = self.addresslayout.num_nodes_per_pe - 1
 
 		self.graph = generate_graph(num_nodes=num_nodes, num_edges=2*num_nodes)
+
 		print(self.graph)
 
-		adj_idx, adj_val = self.addresslayout.generate_partition(self.graph)
-
-		self.submodules.dut = PRScatter(self.addresslayout, adj_mat=(adj_idx[0], adj_val[0]))
-
-		self.submodules += NetReader(self.dut.network_interface)
-		
+		self.submodules.dut = PRScatterKernel(self.addresslayout)
+		self.submodules.msgreader = MessageReader(self.dut)
 
 	def gen_simulation(self, selfp):
 		num_nodes = len(self.graph)
@@ -54,21 +52,21 @@ class TB(Module):
 
 		print("Input messages: " + str(msg))
 
-		msgs_sent = 0
-		while msgs_sent < len(msg):
-			sender, message = msg[msgs_sent]
-			selfp.dut.scatter_interface.msg = message
-			selfp.dut.scatter_interface.sender = sender
-			selfp.dut.scatter_interface.valid = 1
+		print("Received output:")
+
+		while msg:
+			node, weight = msg.pop(0)
+			selfp.dut.message_in.weight = weight
+			selfp.dut.num_neighbors_in = len(self.graph[node])
+			selfp.dut.neighbor_in = node
+			selfp.dut.barrier_in = 0
+			selfp.dut.valid_in = 1
 			yield
-			if selfp.dut.scatter_interface.ack == 1:	
-				msgs_sent += 1
-		selfp.dut.scatter_interface.valid = 0
+			while not selfp.dut.valid_in & selfp.dut.ready:
+				yield
+		selfp.dut.valid_in = 0
 
-		yield 20
-
-		# for i in range(1, self.addresslayout.num_nodes_per_pe):
-		# 	print(str(i) + ": " + str(selfp.simulator.rd(self.dut.mem_idx, i)))
+		yield 110
 
 if __name__ == "__main__":
 	try:
@@ -80,5 +78,3 @@ if __name__ == "__main__":
 	print("Random seed: " + str(s))
 	tb = TB()
 	run_simulation(tb, vcd_name="tb.vcd", ncycles=200, keep_files=True)
-
-		

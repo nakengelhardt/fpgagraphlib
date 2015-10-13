@@ -4,7 +4,7 @@ from migen.fhdl.std import *
 from migen.genlib.fifo import SyncFIFO
 from migen.genlib.misc import optree
 
-from migen.sim.generic import run_simulation
+from migen.sim.generic import *
 
 from pr_graph_input import read_graph
 from pr_graph_generate import generate_graph
@@ -20,6 +20,28 @@ import riffa
 
 import sys
 import argparse
+import random, struct
+
+def _float_to_32b_int(f):
+	return struct.unpack("i", struct.pack("f", f))[0]
+
+def _32b_int_to_float(i):
+	return struct.unpack("f", struct.pack("i", i))[0]
+
+
+class UpdateMonitor(Module):
+	def __init__(self, applys):
+		self.apply = applys
+
+	def gen_simulation(self, selfp):
+		num_pe = len(self.apply)
+		while True:
+			for i in range(num_pe):
+				if selfp.apply[i].applykernel.message_valid & selfp.apply[i].outfifo.we:
+					print("Node " + str(selfp.apply[i].applykernel.message_sender) + " updated in round " + str(selfp.apply[i].level) +". New weight: " + str(selfp.apply[i].applykernel.message_out.weight))
+			yield
+
+	gen_simulation.passive = True
 
 class TB(Module):
 	def __init__(self, adj_dict):
@@ -31,7 +53,7 @@ class TB(Module):
 
 		self.adj_dict = adj_dict
 		num_nodes = len(adj_dict)
-		self.addresslayout.const_base = int(0.15 / num_nodes * (2**self.addresslayout.fixedptdecimals))
+		self.addresslayout.const_base = _float_to_32b_int(0.15/num_nodes)
 
 		adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
 		init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, num_pe*num_nodes_per_pe)]
@@ -85,6 +107,8 @@ class TB(Module):
 		self.global_inactive = Signal()
 		self.comb += self.global_inactive.eq(optree("&", [pe.inactive for pe in self.apply]))
 
+		self.submodules += UpdateMonitor(self.apply)
+
 	def gen_simulation(self, selfp):
 		num_pe = self.addresslayout.num_pe
 		num_nodes_per_pe = self.addresslayout.num_nodes_per_pe
@@ -117,8 +141,6 @@ class TB(Module):
 							del init_messages[i]
 					else:
 						start_message[i].valid = 0
-				if selfp.apply[i].applykernel.message_valid & selfp.apply[i].outfifo.we:
-					print("Node " + str(selfp.apply[i].applykernel.message_sender) + " updated in round " + str(selfp.apply[i].level) +". New weight: " + str(selfp.apply[i].applykernel.message_out.weight))
 			yield
 
 		for i in range(num_pe):
@@ -135,17 +157,11 @@ class TB(Module):
 				if start_message[i].ack:
 					start_message[i].valid = 0
 					barrier_done[i] = 1
-				if selfp.apply[i].applykernel.message_valid & selfp.apply[i].outfifo.we:
-					print("Node " + str(selfp.apply[i].applykernel.message_sender) + " updated in round " + str(selfp.apply[i].level) +". New weight: " + str(selfp.apply[i].applykernel.message_out.weight))
-			
 
 		for i in range(num_pe):
 			start_message[i].select = 0
 
 		while selfp.global_inactive==0:
-			for i in range(num_pe):
-				if selfp.apply[i].applykernel.message_valid & selfp.apply[i].outfifo.we:
-					print("Node " + str(selfp.apply[i].applykernel.message_sender) + " updated in round " + str(selfp.apply[i].level) +". New weight: " + str(selfp.apply[i].applykernel.message_out.weight))
 			yield
 
 		print(str(selfp.simulator.cycle_counter) + " cycles taken.")
@@ -158,6 +174,8 @@ if __name__ == "__main__":
 						help='number of nodes to generate')
 	parser.add_argument('-e', '--edges', type=int,
 						help='number of edges to generate')
+	parser.add_argument('-s', '--seed', type=int,
+						help='seed to initialise random number generator')
 	parser.add_argument('--random-walk', action='store_const',
 						const='random_walk', dest='approach',
 						help='use a random-walk generation algorithm (default)')
@@ -173,6 +191,11 @@ if __name__ == "__main__":
 		graphfile = open(args.graphfile)
 		adj_dict = read_graph(graphfile)
 	elif args.nodes:
+		if args.seed:
+			s = args.seed
+		else:
+			s = 42
+		random.seed(s)
 		num_nodes = args.nodes
 		if args.edges:
 			num_edges = args.edges
@@ -188,4 +211,6 @@ if __name__ == "__main__":
 		exit(-1)
 
 	tb = TB(adj_dict)
-	run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=200000)
+	# run_simulation(tb, vcd_name="tb.vcd", keep_files=True, ncycles=200000)
+	with Simulator(tb, TopLevel("tb.vcd"), icarus.Runner(keep_files=True), display_run=True) as s:
+		s.run(20000)

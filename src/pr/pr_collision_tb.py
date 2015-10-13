@@ -16,9 +16,7 @@ class TB(Module):
 		self.stall = stall
 		self.expected = expected
 
-		init = [0 for _ in range(self.dut.mem.mem.depth)]
-		init[prev_adr] = int(stall)
-		self.dut.mem.mem.init = init
+		self.dut.state[prev_adr] = int(stall)
 
 		self.passed = 1
 
