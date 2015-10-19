@@ -1,4 +1,4 @@
-from migen.fhdl.std import *
+from migen import *
 from migen.genlib.coding import PriorityEncoder
 
 from pdiv import Divider
@@ -68,8 +68,13 @@ class FloatIntDivider(Module):
 
 		self.sync += [
 			quotient_o_sign.eq(sign[-1]),
-			quotient_o_expn.eq(expn[-1] - pe.o),
-			quotient_o_mant.eq(self.div.quotient_o << pe.o),
+			If(expn[-1] != 0,
+				quotient_o_expn.eq(expn[-1] - pe.o),
+				quotient_o_mant.eq(self.div.quotient_o << pe.o)
+			).Else(
+				quotient_o_expn.eq(0),
+				quotient_o_mant.eq(self.div.quotient_o)
+			),
 			self.valid_o.eq(self.div.valid_o)
 		]
 

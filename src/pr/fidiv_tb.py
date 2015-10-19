@@ -1,37 +1,53 @@
-from migen.fhdl.std import *
-from migen.sim.generic import run_simulation
+import unittest
+import random
+
+from migen import *
+from tbsupport import *
 
 from fidiv import FloatIntDivider
 
-import struct
+class FIDivCase(SimCase, unittest.TestCase):
+    class TestBench(Module):
+        def __init__(self):
+            self.submodules.dut = FloatIntDivider()
 
-def _float_to_32b_int(f):
-	return struct.unpack("i", struct.pack("f", f))[0]
+    def test_division(self):
 
-def _32b_int_to_float(i):
-	return struct.unpack("f", struct.pack("i", i))[0]
+        testcases = [(dividend, divisor) for dividend in [36.0, 0, -0.7625, 7.504355E-39] for divisor in range(1, 16)]
+        answers = []
+        self.done = False
 
+        testce = [0, 1]
 
-class TB(Module):
-	def __init__(self):
-		self.submodules.dut = FloatIntDivider()
+        def gen_input():
+            yield self.tb.dut.ce.eq(1)
+            for dividend, divisor in testcases:
+                yield self.tb.dut.dividend_i.eq(convert_float_to_32b_int(float(dividend)))
+                yield self.tb.dut.divisor_i.eq(divisor)
+                yield self.tb.dut.valid_i.eq(1)
+                yield
+                while not random.choice(testce):
+                    yield self.tb.dut.ce.eq(0)
+                    yield
+                yield self.tb.dut.ce.eq(1)
+            yield self.tb.dut.valid_i.eq(0)
+            yield
+            while not self.done:
+                yield self.tb.dut.ce.eq(random.choice(testce))
+                yield
+            yield self.tb.dut.ce.eq(1)
 
-	def gen_simulation(self, selfp):
-		selfp.dut.ce = 1
-		selfp.dut.dividend_i = _float_to_32b_int(36)
-		selfp.dut.divisor_i = 3
-		selfp.dut.valid_i = 1
-		yield
-		print("In: cycle " + str(selfp.simulator.cycle_counter))
-		selfp.dut.dividend_i = 0
-		selfp.dut.divisor_i = 0
-		selfp.dut.valid_i = 0
-		while not selfp.dut.valid_o:
-			yield
-		print("Out: cycle " + str(selfp.simulator.cycle_counter))
-		yield 5
+        def gen_output():
+            while len(answers) < len(testcases):
+                if (yield self.tb.dut.valid_o) & (yield self.tb.dut.ce):
+                    answers.append(convert_32b_int_to_float((yield self.tb.dut.quotient_o)))
+                yield
+            self.done = True
+                        
+        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
 
-
-if __name__ == "__main__":
-	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", ncycles=200)
+        for i in range(len(testcases)):
+            dividend, divisor = testcases[i]
+            quotient = answers[i]
+            with self.subTest(dividend=dividend, divisor=divisor):
+                self.assertAlmostEqual(quotient, dividend/divisor, delta=1E-6)
