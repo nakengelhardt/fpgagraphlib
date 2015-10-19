@@ -12,4 +12,5 @@ __pycache__
 *.out
 *.snm
 *.toc
+*.init
 src/bfs/pcie_integration/
