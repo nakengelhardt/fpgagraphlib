@@ -1,4 +1,4 @@
-from migen.fhdl.std import *
+from migen import *
 
 @CEInserter()
 class FMul(Module):

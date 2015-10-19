@@ -1,37 +1,17 @@
-from migen.fhdl.std import *
-from migen.sim.generic import *
+import unittest
+import random
+
+from migen import *
+from tbsupport import *
 
 from fmul import FMul
 
-import random
-import struct
+class FMulCase(SimCase, unittest.TestCase):
+	class TestBench(Module):
+		def __init__(self):
+			self.submodules.dut = FMul()
 
-def _float_to_32b_int(f):
-	return struct.unpack("I", struct.pack("f", f))[0]
-
-def _32b_int_to_float(i):
-	return struct.unpack("f", struct.pack("I", i))[0]
-
-class AnswerGetter(Module):
-	def __init__(self, dut):
-		self.dut = dut
-		self.answers = []
-		self.expected_num_answers = float('inf')
-		self.done = 0
-	
-	def gen_simulation(self, selfp):
-		while len(self.answers) < self.expected_num_answers:
-			if selfp.dut.valid_o & selfp.dut.ce:
-				self.answers.append(_32b_int_to_float(selfp.dut.r))
-			yield
-		self.done = 1
-
-class TB(Module):
-	def __init__(self):
-		self.submodules.dut = FMul()
-		self.submodules.ans = AnswerGetter(self.dut)
-
-	def gen_simulation(self, selfp):
+	def test_mul(self):
 		# helpful: http://www.h-schmidt.net/FloatConverter/IEEE754.html
 		testcases = [ 
 		# nonzero exponents
@@ -42,46 +22,48 @@ class TB(Module):
 		(0.825, 0.7625), # a_expn == b_expn, a_mant > b_mant
 		(-0.7625, -0.825), # a_expn == b_expn, a_mant < b_mant
 		# zero exponents
-		(1.525, 0.75859374), # a_expn > b_expn, a_expn == 0
-		(0.0074023437, 1.77), # a_expn < b_expn, b_expn == 0
-		(1.895, 1.395), # a_expn == b_expn == 0, a_mant > b_mant
-		(1.895, 1.9575), # a_expn == b_expn == 0, a_mant > b_mant
+		(7.504355E-39, 0.75859374), # a_expn < b_expn, a_expn == 0
+		(0.0074023437, 7.504355E-39), # a_expn > b_expn, b_expn == 0
+		(7.504355E-39, 6.034988E-39), # a_expn == b_expn == 0, a_mant > b_mant
+		(7.504355E-39, 1.0443091E-38), # a_expn == b_expn == 0, a_mant > b_mant
 		]
 
-		self.ans.expected_num_answers = len(testcases)
-		selfp.dut.ce = 1
-		
-		for a, b in testcases:
-			selfp.dut.a = _float_to_32b_int(a)
-			selfp.dut.b = _float_to_32b_int(b)
-			selfp.dut.valid_i = 1
-			yield
-			while not random.choice([0,1]):
-				selfp.dut.ce = 0
-				yield
-			selfp.dut.ce = 1
-		selfp.dut.valid_i = 0
-		yield
-		while not self.ans.done:
-			selfp.dut.ce = random.choice([0,1])
-			yield
-		selfp.dut.ce = 1
-		yield
+		expected_num_answers = len(testcases)
+		self.answers = []
+		self.done = False
 
-		err = False
+		testce = [1] # [0, 1]
+
+		def gen_input():
+			yield self.tb.dut.ce.eq(1)
+			for a, b in testcases:
+				yield self.tb.dut.a.eq(convert_float_to_32b_int(a))
+				yield self.tb.dut.b.eq(convert_float_to_32b_int(b))
+				yield self.tb.dut.valid_i.eq(1)
+				while not random.choice(testce):
+					yield self.tb.dut.ce.eq(0)
+					yield
+				yield self.tb.dut.ce.eq(1)
+				yield
+			yield self.tb.dut.valid_i.eq(0)
+			yield
+			while not self.done:
+				yield self.tb.dut.ce.eq(random.choice(testce))
+				yield
+			yield self.tb.dut.ce.eq(1)
+
+		def gen_output():
+			while len(self.answers) < expected_num_answers:
+				if (yield self.tb.dut.valid_o) & (yield self.tb.dut.ce):
+					self.answers.append(convert_32b_int_to_float((yield self.tb.dut.r)))
+				yield
+			self.done = True
+
+		self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
+
 		for i in range(len(testcases)):
 			a, b = testcases[i]
-			r = self.ans.answers[i]
-			epsilon = 1E-6
-			if abs(r - (a*b)) > epsilon:
-				err = True
-				print("Error: a*b = {}, r = {}".format(a*b, r))
-
-		if not err:
-			print("Test passed successfully.")
-
-
-
-if __name__ == "__main__":
-	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", ncycles=200)
+			r = self.answers[i]
+			delta = 1E-6
+			with self.subTest(a=a, b=b):
+				self.assertAlmostEqual(r, a*b, delta=delta)
