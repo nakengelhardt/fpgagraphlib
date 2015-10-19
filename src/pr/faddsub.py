@@ -1,5 +1,5 @@
-from migen.fhdl.std import *
-from migen.genlib.coding import PriorityEncoder
+from migen import *
+from migen.genlib.coding import *
 
 @CEInserter()
 class FAddSub(Module):
