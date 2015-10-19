@@ -104,6 +104,8 @@ class FMul(Module):
 		]
 
 		# Stage 6
+		r4_expn_plus_one = Signal(8)
+		self.comb += r4_expn_plus_one.eq(r4_expn+1)
 		self.sync += [
 			self.valid_o.eq(r4_valid),
 			If(r4_zero,
@@ -112,7 +114,7 @@ class FMul(Module):
 				If(~r4_mant[47],
 					self.r.eq(Cat(r4_mant[23:46], r4_expn, r4_sign))
 				).Else(
-					self.r.eq(Cat(r4_mant[24:47], r4_expn+1, r4_sign))
+					self.r.eq(Cat(r4_mant[24:47], r4_expn_plus_one, r4_sign))
 				)
 			)
 		]
