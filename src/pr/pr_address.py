@@ -1,6 +1,11 @@
-from migen.fhdl.std import *
+from migen import *
 
-import riffa
+# import riffa
+def unpack(data, n):
+	words = []
+	for i in range(n):
+		words.append((data >> i*32) & 0xFFFFFFFF)
+	return words
 
 class PRAddressLayout:
 	"""Partition NodeID into PE number and local address"""
@@ -71,6 +76,6 @@ class PRAddressLayout:
 
 		word_sized_list = []
 		for x in pcie_sized_list:
-			word_sized_list.extend(riffa.unpack(x, pcie_width//32))
+			word_sized_list.extend(unpack(x, pcie_width//32))
 
 		return word_sized_list

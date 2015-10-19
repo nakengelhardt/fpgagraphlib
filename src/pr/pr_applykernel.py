@@ -1,4 +1,4 @@
-from migen.fhdl.std import *
+from migen import *
 from migen.genlib.record import *
 
 from pr_interfaces import node_storage_layout, payload_layout

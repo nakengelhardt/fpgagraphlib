@@ -1,11 +1,11 @@
-from migen.fhdl.std import *
+from migen import *
 from migen.genlib.record import *
 
 from pr_address import PRAddressLayout
 from pr_interfaces import payload_layout
 
 
-def config(quiet=False):
+def config(quiet=True):
 	# nodeidsize = 16
 	# num_nodes_per_pe = 2**10
 	# edgeidsize = 16
