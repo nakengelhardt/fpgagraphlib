@@ -1,7 +1,6 @@
-from migen.fhdl.std import *
+from migen import *
 from migen.fhdl.specials import READ_FIRST
 from migen.genlib.record import *
-from forwardmemory import ForwardMemory
 
 
 class PRCollisionDetector(Module):
