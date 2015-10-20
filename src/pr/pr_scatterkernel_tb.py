@@ -1,80 +1,69 @@
-from migen.fhdl.std import *
-from migen.sim.generic import run_simulation
+import unittest
+import random
+
+from migen import *
+from tbsupport import *
 
 from pr_scatterkernel import PRScatterKernel
 from pr_config import config
 from pr_graph_generate import generate_graph
 
-import random, struct
+class ScatterKernelCase(SimCase, unittest.TestCase):
+    class TestBench(Module):
+        def __init__(self):
+            self.addresslayout = config()
 
-def _float_to_32b_int(f):
-	return struct.unpack("i", struct.pack("f", f))[0]
+            num_nodes = self.addresslayout.num_nodes_per_pe - 1
 
-def _32b_int_to_float(i):
-	return struct.unpack("f", struct.pack("i", i))[0]
+            self.graph = generate_graph(num_nodes=num_nodes, num_edges=2*num_nodes)
 
-class MessageReader(Module):
-	def __init__(self, sk):
-		self.sk = sk
-		self.msgs = []
+            # print(self.tb.graph)
 
-	def gen_simulation(self, selfp):
-		while True:
-			selfp.sk.message_ack = random.choice([0,1])
-			if selfp.sk.message_ack:
-				if selfp.sk.barrier_out:
-					print("Barrier")
-				elif selfp.sk.valid_out:
-					print("Message: ({}, {})".format(selfp.sk.neighbor_out, _32b_int_to_float(selfp.sk.message_out.weight)))
-					self.msgs.append((selfp.sk.neighbor_out, selfp.sk.message_out.weight))
-			yield
+            self.submodules.dut = PRScatterKernel(self.addresslayout)
 
-	gen_simulation.passive = True
+    def test_scatterkernel(self):
+        num_nodes = len(self.tb.graph)
 
-class TB(Module):
-	def __init__(self):
-		self.addresslayout = config()
+        msg = [(i, convert_float_to_32b_int(random.random())) for j in range(1, num_nodes+1) for i in self.tb.graph[j]]
+        random.shuffle(msg)
 
-		num_nodes = self.addresslayout.num_nodes_per_pe - 1
+        def gen_input():
+            for node, weight in msg:
+                yield self.tb.dut.message_in.weight.eq(weight)
+                yield self.tb.dut.num_neighbors_in.eq(len(self.tb.graph[node]))
+                yield self.tb.dut.neighbor_in.eq(node)
+                yield self.tb.dut.barrier_in.eq(0)
+                yield self.tb.dut.valid_in.eq(1)
+                yield
+                while not (yield self.tb.dut.valid_in) & (yield self.tb.dut.ready):
+                    yield
+            yield self.tb.dut.valid_in.eq(0)
 
-		self.graph = generate_graph(num_nodes=num_nodes, num_edges=2*num_nodes)
+            for _ in range(110):
+                yield
 
-		print(self.graph)
+        def gen_output():
+            nrecvd = 0
+            while nrecvd < len(msg):
+                yield self.tb.dut.message_ack.eq(random.choice([0,1]))
+                if (yield self.tb.dut.message_ack):
+                    if (yield self.tb.dut.barrier_out):
+                        # print("Barrier")
+                        pass
+                    elif (yield self.tb.dut.valid_out):
+                        neighbor_out = (yield self.tb.dut.neighbor_out)
+                        weight = convert_32b_int_to_float((yield self.tb.dut.message_out.weight))
+                        # print("Message: ({}, {})".format(selfp.sk.neighbor_out, _32b_int_to_float(selfp.sk.message_out.weight)))
+                        exp_node, exp_weight = msg[nrecvd]
+                        self.assertEqual(neighbor_out, exp_node)
+                        self.assertAlmostEqual(weight, convert_32b_int_to_float(exp_weight)/len(self.tb.graph[neighbor_out]))
+                        nrecvd += 1
+                yield
 
-		self.submodules.dut = PRScatterKernel(self.addresslayout)
-		self.submodules.msgreader = MessageReader(self.dut)
-
-	def gen_simulation(self, selfp):
-		num_nodes = len(self.graph)
-
-		msg = [(i, _float_to_32b_int(random.random())) for j in range(1, num_nodes+1) for i in self.graph[j]]
-		random.shuffle(msg)
-
-		print("Input messages: " + str(msg))
-
-		print("Received output:")
-
-		while msg:
-			node, weight = msg.pop(0)
-			selfp.dut.message_in.weight = weight
-			selfp.dut.num_neighbors_in = len(self.graph[node])
-			selfp.dut.neighbor_in = node
-			selfp.dut.barrier_in = 0
-			selfp.dut.valid_in = 1
-			yield
-			while not selfp.dut.valid_in & selfp.dut.ready:
-				yield
-		selfp.dut.valid_in = 0
-
-		yield 110
+        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
 
 if __name__ == "__main__":
-	try:
-		import sys
-		s = int(sys.argv[1])
-	except Exception as e:
-		s = 42
-	random.seed(s)
-	print("Random seed: " + str(s))
-	tb = TB()
-	run_simulation(tb, vcd_name="tb.vcd", ncycles=200, keep_files=True)
+    s = 42
+    random.seed(s)
+    print("Random seed: " + str(s))
+    unittest.main()
