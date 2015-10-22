@@ -51,3 +51,9 @@ class FIDivCase(SimCase, unittest.TestCase):
             quotient = answers[i]
             with self.subTest(dividend=dividend, divisor=divisor):
                 self.assertAlmostEqual(quotient, dividend/divisor, delta=1E-6)
+
+if __name__ == "__main__":
+    s = 42
+    random.seed(s)
+    print("Random seed: " + str(s))
+    unittest.main()

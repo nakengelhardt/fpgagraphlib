@@ -67,4 +67,12 @@ class PRNeighbors(Module):
         # read port is valid if previous cycle's address was valid
         self.sync += self.neighbor_valid.eq(idx_valid)
 
-        
+if __name__ == "__main__":
+    from migen.fhdl import verilog
+    from pr_config import config
+    
+    addresslayout = config()
+
+    m = PRNeighbors(addresslayout, None)
+
+    print(verilog.convert(m))
