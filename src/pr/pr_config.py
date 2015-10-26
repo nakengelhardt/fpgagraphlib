@@ -13,19 +13,19 @@ def config(quiet=True):
     # peidsize = 5
     # num_pe = 32
 
-    # nodeidsize = 16
-    # num_nodes_per_pe = 2**8
-    # edgeidsize = 16
-    # max_edges_per_pe = 2**12
-    # peidsize = 8
-    # num_pe = 8
-
-    nodeidsize = 8
-    num_nodes_per_pe = 2**4
-    edgeidsize = 8
-    max_edges_per_pe = 2**7
-    peidsize = 3
+    nodeidsize = 16
+    num_nodes_per_pe = 2**8
+    edgeidsize = 16
+    max_edges_per_pe = 2**12
+    peidsize = 5
     num_pe = 8
+
+    # nodeidsize = 8
+    # num_nodes_per_pe = 2**4
+    # edgeidsize = 8
+    # max_edges_per_pe = 2**7
+    # peidsize = 3
+    # num_pe = 8
 
     floatsize = 32
     payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))

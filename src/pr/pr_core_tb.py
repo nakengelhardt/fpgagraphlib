@@ -99,7 +99,7 @@ class TB(Module):
                 init_messages[pe] = []
             init_messages[pe].append((node, self.addresslayout.const_base))
 
-        print(init_messages)
+        # print(init_messages)
 
         start_message = [self.arbiter[i].start_message for i in range(num_pe)]
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
         parser.print_help()
         exit(-1)
 
-    print(adj_dict)
+    # print(adj_dict)
     tb = TB(adj_dict)
     run_simulation(tb, [tb.gen_input(), tb.gen_monitor()], vcd_name="tb.vcd")
     # with Simulator(tb, TopLevel("tb.vcd"), icarus.Runner(keep_files=True), display_run=True) as s:
