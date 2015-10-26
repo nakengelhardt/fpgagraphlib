@@ -64,7 +64,7 @@ class NeighborCase(SimCase, unittest.TestCase):
                 yield
 
 
-        self.run_with([gen_input(), gen_output()])#, vcd_name="tb.vcd")
+        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
 
 if __name__ == "__main__":
     s = 42

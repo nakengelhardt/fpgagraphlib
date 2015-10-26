@@ -19,7 +19,7 @@ class ScatterCase(SimCase, unittest.TestCase):
             num_nodes = self.addresslayout.num_nodes_per_pe - 1
 
             self.graph = generate_graph(num_nodes=num_nodes, num_edges=2*num_nodes)
-            print(self.graph)
+            # print(self.graph)
 
             adj_idx, adj_val = self.addresslayout.generate_partition(self.graph)
 
@@ -35,7 +35,7 @@ class ScatterCase(SimCase, unittest.TestCase):
 
         def gen_input():
             for sender, message in msg:
-                print("Sending: {}, {}".format(sender, convert_32b_int_to_float(message)))
+                # print("Sending: {}, {}".format(sender, convert_32b_int_to_float(message)))
                 yield self.tb.dut.scatter_interface.msg.eq(message)
                 yield self.tb.dut.scatter_interface.sender.eq(sender)
                 yield self.tb.dut.scatter_interface.valid.eq(1)
@@ -51,22 +51,22 @@ class ScatterCase(SimCase, unittest.TestCase):
                 yield self.tb.dut.network_interface.ack.eq(random.choice([1]))
                 yield
                 if (yield self.tb.dut.network_interface.valid) & (yield self.tb.dut.network_interface.ack):
-                    if (yield self.tb.dut.network_interface.barrier):
+                    if (yield self.tb.dut.network_interface.msg.barrier):
                         # print("Barrier")
                         pass
                     else:
                         dest = (yield self.tb.dut.network_interface.msg.dest_id)
-                        pe = (yield self.tb.dut.network_interface.msg.dest_pe)
+                        pe = (yield self.tb.dut.network_interface.dest_pe)
                         weight = convert_32b_int_to_float((yield self.tb.dut.network_interface.msg.payload))
                         exp_dest, exp_weight = expected[nrecvd]
                         self.assertEqual(dest, exp_dest)
                         self.assertAlmostEqual(weight, exp_weight, delta=1E-5)
-                        print("Receiving: {}, {}".format(dest, weight))
+                        # print("Receiving: {} (pe {}), {}".format(dest, pe, weight))
                         nrecvd += 1
             yield self.tb.dut.network_interface.ack.eq(1)
             yield
 
-        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd", signal_problematique=self.tb.dut.scatterkernel.ready)
+        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
 
 
                 

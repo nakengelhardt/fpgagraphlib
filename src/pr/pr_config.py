@@ -21,11 +21,11 @@ def config(quiet=True):
     # num_pe = 8
 
     nodeidsize = 8
-    num_nodes_per_pe = 2**3
+    num_nodes_per_pe = 2**4
     edgeidsize = 8
-    max_edges_per_pe = 2**5
-    peidsize = 1
-    num_pe = 2
+    max_edges_per_pe = 2**7
+    peidsize = 3
+    num_pe = 8
 
     floatsize = 32
     payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))
