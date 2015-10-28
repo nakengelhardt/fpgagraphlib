@@ -39,7 +39,7 @@ class TB(Module):
         init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, num_pe*num_nodes_per_pe)]
 
 
-        fifos = [[RecordFIFO(layout=PRMessage(**self.addresslayout.get_params()).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
+        fifos = [[RecordFIFO(layout=PRMessage(**self.addresslayout.get_params()).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [PRArbiter(self.addresslayout, fifos[sink]) for sink in range(num_pe)]
         self.submodules.apply = [PRApply(self.addresslayout, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)]) for i in range(num_pe)]
@@ -153,8 +153,9 @@ class TB(Module):
             for i in range(num_pe):
                 if (yield self.apply[i].applykernel.barrier_out) and (yield self.apply[i].applykernel.message_ack):
                     level[i] += 1
+                    print("{}\tPE {} raised to level {}".format(num_cycles, i, level[i]))
                 if (yield self.apply[i].applykernel.message_valid) and (yield self.apply[i].applykernel.message_ack):
-                    print("Node " + str((yield self.apply[i].applykernel.message_sender)) + " updated in round " + str(level[i]) +". New weight: " + str(convert_32b_int_to_float((yield self.apply[i].applykernel.message_out.weight))))
+                    print(str(num_cycles) + "\tNode " + str((yield self.apply[i].applykernel.message_sender)) + " updated in round " + str(level[i]) +". New weight: " + str(convert_32b_int_to_float((yield self.apply[i].applykernel.message_out.weight))))
             yield
         print(str(num_cycles) + " cycles taken.")
 

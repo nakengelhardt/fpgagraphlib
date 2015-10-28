@@ -103,11 +103,14 @@ class PRApply(Module):
         data_invalid2 = Signal()
         ready = Signal()
 
-        self.sync += valid2.eq(valid & collision_re), If(upstream_ack, 
-            dest_node_id2.eq(dest_node_id), 
-            payload2.eq(payload), 
-            barrier2.eq(barrier)
-        )
+        self.sync += [
+            valid2.eq(valid & collision_re), 
+            barrier2.eq(barrier & collision_re),
+            If(upstream_ack, 
+                dest_node_id2.eq(dest_node_id), 
+                payload2.eq(payload)
+            )
+        ]
 
         # count levels
         self.level = Signal(32)
