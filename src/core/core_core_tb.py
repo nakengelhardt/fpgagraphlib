@@ -144,22 +144,28 @@ class TB(Module):
         while not (yield tb.global_inactive):
             num_cycles += 1
             for i in range(num_pe):
-                if((yield self.apply[i].apply_interface.msg.barrier) 
-                   and (yield self.apply[i].apply_interface.valid) 
+                if((yield self.apply[i].apply_interface.valid) 
                    and (yield self.apply[i].apply_interface.ack)):
-                    print(str(num_cycles) + "\tBarrier enters Apply on PE " + str(i))
+                    if (yield self.apply[i].apply_interface.msg.barrier):
+                        print(str(num_cycles) + "\tBarrier enters Apply on PE " + str(i))
+                    # else:
+                    #     print(str(num_cycles) + "\tMessage for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
                 if((yield self.apply[i].scatter_interface.barrier)
                    and (yield self.apply[i].scatter_interface.valid)
                    and (yield self.apply[i].scatter_interface.ack)):
                     print(str(num_cycles) + "\tBarrier exits Apply on PE " + str(i))
-                if((yield self.scatter[i].scatter_interface.barrier)
-                   and (yield self.scatter[i].scatter_interface.valid)
+                if((yield self.scatter[i].scatter_interface.valid)
                    and (yield self.scatter[i].scatter_interface.ack)):
-                    print(str(num_cycles) + "\tBarrier enters Scatter on PE " + str(i))
-                if((yield self.scatter[i].network_interface.msg.barrier)
-                   and (yield self.scatter[i].network_interface.valid)
+                    if (yield self.scatter[i].scatter_interface.barrier):
+                        print(str(num_cycles) + "\tBarrier enters Scatter on PE " + str(i))
+                    # else:
+                    #     print(str(num_cycles) + "\tScatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
+                if((yield self.scatter[i].network_interface.valid)
                    and (yield self.scatter[i].network_interface.ack)):
-                    print(str(num_cycles) + "\tBarrier exits Scatter on PE " + str(i))
+                    if (yield self.scatter[i].network_interface.msg.barrier):
+                        print(str(num_cycles) + "\tBarrier exits Scatter on PE " + str(i))
+                    # else:
+                    #     print(str(num_cycles) + "\tMessage for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
             yield
 
 

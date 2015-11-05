@@ -73,20 +73,10 @@ class Scatter(Module):
             self.get_neighbors.start_idx.eq(rd_port_idx.dat_r[:edgeidsize]),
             self.get_neighbors.num_neighbors.eq(rd_port_idx.dat_r[edgeidsize:]),
             self.get_neighbors.valid.eq(scatter_msg_valid1),
+            self.get_neighbors.barrier_in.eq(scatter_barrier1),
+            self.get_neighbors.message_in.eq(scatter_msg1),
             stage2_ack.eq(self.get_neighbors.ack)
         ]
-
-        # keep input for next stage
-        scatter_msg2 = Signal(addresslayout.payloadsize)
-        scatter_msg_valid2 = Signal()
-        scatter_barrier2 = Signal()
-        num_neighbors2 = Signal(edgeidsize)
-        self.sync += If( (~scatter_barrier2 & stage2_ack) | (scatter_barrier2 & self.get_neighbors.neighbor_ack), 
-                            scatter_msg2.eq(scatter_msg1), 
-                            scatter_msg_valid2.eq(scatter_msg_valid1), 
-                            scatter_barrier2.eq(scatter_barrier1),
-                            num_neighbors2.eq(rd_port_idx.dat_r[edgeidsize:])
-                        )
 
 
         ## stage 3
@@ -96,10 +86,10 @@ class Scatter(Module):
         self.submodules.scatterkernel = config.scatterkernel(config.addresslayout)
 
         self.comb += [
-            self.scatterkernel.message_in.raw_bits().eq(scatter_msg2),
-            self.scatterkernel.num_neighbors_in.eq(num_neighbors2),
+            self.scatterkernel.message_in.raw_bits().eq(self.get_neighbors.message_out),
+            self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.num_neighbors_out),
             self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor),
-            self.scatterkernel.barrier_in.eq(scatter_barrier2),
+            self.scatterkernel.barrier_in.eq(self.get_neighbors.barrier_out),
             self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_valid),
             self.get_neighbors.neighbor_ack.eq(self.scatterkernel.ready)
         ]

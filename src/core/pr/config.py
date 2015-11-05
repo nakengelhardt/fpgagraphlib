@@ -4,7 +4,7 @@ from migen.genlib.record import *
 from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float
 
 from core_address import AddressLayout
-from pr.interfaces import payload_layout, node_storage_layout
+from pr.interfaces import payload_layout, node_storage_layout, convert_int_to_record
 from pr.pr_applykernel import ApplyKernel
 from pr.pr_scatterkernel import ScatterKernel
 
@@ -33,9 +33,9 @@ class Config:
         # num_pe = 8
 
         nodeidsize = 8
-        num_nodes_per_pe = 2**4
-        edgeidsize = 8
-        max_edges_per_pe = 2**6
+        num_nodes_per_pe = 2**6
+        edgeidsize = 16
+        max_edges_per_pe = 2**9
         peidsize = 1
         num_pe = 1
 
@@ -74,6 +74,7 @@ class Config:
 
     def gen_monitor(self, tb):
         num_pe = len(tb.apply)
+        num_nodes_per_pe = tb.addresslayout.num_nodes_per_pe
         level = [0 for _ in range(num_pe)]
         num_cycles = 0
         while not (yield tb.global_inactive):
@@ -82,9 +83,14 @@ class Config:
                 if (yield tb.apply[i].applykernel.barrier_out) and (yield tb.apply[i].applykernel.message_ack):
                     level[i] += 1
                     print("{}\tPE {} raised to level {}".format(num_cycles, i, level[i]))
+                    for node in range(num_nodes_per_pe):
+                        s = convert_int_to_record((yield tb.apply[i].mem[node]), set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+                        if s['nrecvd'] != 0:
+                            print(node, tb.apply[i].mem)
+                            print("Warning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(i*num_nodes_per_pe+node, level[i], s['nrecvd'], s['nneighbors'], hex((yield tb.apply[i].mem[node]))))
                 if (yield tb.apply[i].applykernel.message_valid) and (yield tb.apply[i].applykernel.message_ack):
                     print(str(num_cycles)+"\tNode " + str((yield tb.apply[i].applykernel.message_sender)) + " updated in round " + str(level[i]) +". New weight: " + str(convert_32b_int_to_float((yield tb.apply[i].applykernel.message_out.weight))))
-                if (yield tb.apply[i].applykernel.valid_in) and (yield tb.apply[i].applykernel.ready) and not (yield tb.apply[i].applykernel.barrier_in):
-                    print("{}\tMessage {} of {} for node {}".format(num_cycles, (yield tb.apply[i].applykernel.state_in.nrecvd)+1, (yield tb.apply[i].applykernel.state_in.nneighbors), (yield tb.apply[i].applykernel.nodeid_in)))
+                # if (yield tb.apply[i].applykernel.valid_in) and (yield tb.apply[i].applykernel.ready) and not (yield tb.apply[i].applykernel.barrier_in):
+                #     print("{}\tMessage {} of {} for node {}".format(num_cycles, (yield tb.apply[i].applykernel.state_in.nrecvd)+1, (yield tb.apply[i].applykernel.state_in.nneighbors), (yield tb.apply[i].applykernel.nodeid_in)))
             yield
         print(str(num_cycles) + " cycles taken.")
