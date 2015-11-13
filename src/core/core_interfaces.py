@@ -8,6 +8,7 @@ from migen.genlib.record import *
 _msg_layout = [
     ( "barrier", 1, DIR_M_TO_S),
     ( "dest_id", "nodeidsize", DIR_M_TO_S ),
+    ( "sender", "nodeidsize", DIR_M_TO_S),
     ( "payload", "payloadsize", DIR_M_TO_S )
 ]
 
@@ -35,7 +36,7 @@ _scatter_layout = [
     ( "valid", 1, DIR_M_TO_S ),
     ( "ack", 1, DIR_S_TO_M ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),
-    ( "msg", "payloadsize", DIR_M_TO_S )
+    ( "payload", "payloadsize", DIR_M_TO_S )
 ]
 
 class ScatterInterface(Record):

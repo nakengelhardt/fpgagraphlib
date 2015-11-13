@@ -27,4 +27,5 @@ def convert_int_to_record(n, record):
     curr_idx = 0
     for attr, length in record[::-1]:
         res[attr] = int(s[curr_idx:curr_idx+length], 2)
+        curr_idx += length
     return res

@@ -72,14 +72,18 @@ class Apply(Module):
         ## Stage 1
         # rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
         dest_node_id = Signal(nodeidsize)
+        sender = Signal(nodeidsize)
         payload = Signal(addresslayout.payloadsize)
         valid = Signal()
         barrier = Signal()
 
-        self.comb += dest_node_id.eq(self.apply_interface.msg.dest_id),\
-                     payload.eq(self.apply_interface.msg.payload),\
-                     valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),\
-                     barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
+        self.comb += [
+            dest_node_id.eq(self.apply_interface.msg.dest_id),
+            sender.eq(self.apply_interface.msg.sender),
+            payload.eq(self.apply_interface.msg.payload),
+            valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),
+            barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
+        ]
 
         # collision handling
         collision_re = Signal()
@@ -99,6 +103,7 @@ class Apply(Module):
 
         ## Stage 3
         dest_node_id2 = Signal(nodeidsize)
+        sender2 = Signal(nodeidsize)
         payload2 = Signal(addresslayout.payloadsize)
         valid2 = Signal()
         barrier2 = Signal()
@@ -110,6 +115,7 @@ class Apply(Module):
             barrier2.eq(barrier & collision_re),
             If(upstream_ack, 
                 dest_node_id2.eq(dest_node_id), 
+                sender2.eq(sender),
                 payload2.eq(payload)
             )
         ]
@@ -123,22 +129,26 @@ class Apply(Module):
         # User code
         self.submodules.applykernel = config.applykernel(config.addresslayout)
 
-        self.comb += self.applykernel.nodeid_in.eq(dest_node_id2),\
-                     self.applykernel.message_in.raw_bits().eq(payload2),\
-                     self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),\
-                     self.applykernel.valid_in.eq(valid2),\
-                     self.applykernel.barrier_in.eq(barrier2),\
-                     self.applykernel.level_in.eq(self.level),\
-                     self.applykernel.message_ack.eq(downstream_ack),\
-                     ready.eq(self.applykernel.ready),\
-                     upstream_ack.eq(self.applykernel.ready & collision_re)
+        self.comb += [
+            self.applykernel.nodeid_in.eq(dest_node_id2),
+            self.applykernel.sender_in.eq(sender2),
+            self.applykernel.message_in.raw_bits().eq(payload2),
+            self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),
+            self.applykernel.valid_in.eq(valid2),
+            self.applykernel.barrier_in.eq(barrier2),
+            self.applykernel.level_in.eq(self.level),
+            self.applykernel.message_ack.eq(downstream_ack),
+            ready.eq(self.applykernel.ready),
+            upstream_ack.eq(self.applykernel.ready & collision_re)
+        ]
 
 
         # if yes write parent value
-        self.comb += wr_port.adr.eq(addresslayout.local_adr(self.applykernel.nodeid_out)),\
-                     wr_port.dat_w.eq(self.applykernel.state_out.raw_bits()),\
-                     wr_port.we.eq(self.applykernel.state_valid)
-
+        self.comb += [
+            wr_port.adr.eq(addresslayout.local_adr(self.applykernel.nodeid_out)),
+            wr_port.dat_w.eq(self.applykernel.state_out.raw_bits()),
+            wr_port.we.eq(self.applykernel.state_valid)
+        ]
         # TODO: reset/init
 
         
@@ -153,15 +163,19 @@ class Apply(Module):
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)
 
-        self.comb += self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),\
-                     self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),\
-                     self.outfifo.din.sender.eq(self.applykernel.message_sender),\
-                     self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
+        self.comb += [
+            self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),
+            self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),
+            self.outfifo.din.sender.eq(self.applykernel.message_sender),
+            self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
+        ]
 
-        self.comb += self.scatter_interface.msg.eq(self.outfifo.dout.msg),\
-                     self.scatter_interface.sender.eq(self.outfifo.dout.sender),\
-                     self.scatter_interface.barrier.eq(self.outfifo.dout.barrier),\
-                     self.scatter_interface.valid.eq(self.outfifo.readable)
+        self.comb += [
+            self.scatter_interface.payload.eq(self.outfifo.dout.msg),
+            self.scatter_interface.sender.eq(self.outfifo.dout.sender),
+            self.scatter_interface.barrier.eq(self.outfifo.dout.barrier),
+            self.scatter_interface.valid.eq(self.outfifo.readable)
+        ]
 
         # send from fifo when receiver ready and no external request (has priority)
         self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)

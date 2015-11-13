@@ -21,7 +21,7 @@ from core_scatter import Scatter
 import sys
 import argparse
 
-from pr.config import Config
+from bfs.config import Config
 
 class TB(Module):
     def __init__(self, config):
@@ -52,7 +52,8 @@ class TB(Module):
         # connect fifos across PEs
         for source in range(num_pe):
             array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_parent = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_sender = Array(fifo.din.sender for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_payload = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -76,10 +77,11 @@ class TB(Module):
                             [array_we[i].eq(~barrier_ack[i]) for i in range(num_pe)],
                             self.scatter[source].network_interface.ack.eq(barrier_done)
                         ).Else(
-                            sink.eq(self.scatter[source].network_interface.dest_pe),\
-                            array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),\
-                            array_parent[sink].eq(self.scatter[source].network_interface.msg.payload),\
-                            array_we[sink].eq(self.scatter[source].network_interface.valid),\
+                            sink.eq(self.scatter[source].network_interface.dest_pe),
+                            array_dest_id[sink].eq(self.scatter[source].network_interface.msg.dest_id),
+                            array_sender[sink].eq(self.scatter[source].network_interface.msg.sender),
+                            array_payload[sink].eq(self.scatter[source].network_interface.msg.payload),
+                            array_we[sink].eq(self.scatter[source].network_interface.valid),
                             self.scatter[source].network_interface.ack.eq(array_writable[sink])
                         )
 
@@ -135,8 +137,6 @@ class TB(Module):
         for i in range(num_pe):
             yield start_message[i].select.eq(0)
 
-        while not (yield self.global_inactive):
-            yield
 
     def gen_barrier_monitor(self):
         num_pe = self.addresslayout.num_pe
@@ -217,4 +217,9 @@ if __name__ == "__main__":
     # print(adj_dict)
     config = Config(adj_dict)
     tb = TB(config)
-    run_simulation(tb, [tb.gen_input(), tb.gen_barrier_monitor(), config.gen_monitor(tb)], vcd_name="tb.vcd")
+    generators = []
+    generators.extend([tb.gen_input(), tb.gen_barrier_monitor()])
+    generators.extend([a.applykernel.gen_selfcheck(tb, quiet=True) for a in tb.apply])
+    # generators.extend([s.get_neighbors.gen_selfcheck(tb, adj_dict, quiet=True) for s in tb.scatter])
+    # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.arbiter])
+    run_simulation(tb, generators)#, vcd_name="tb.vcd")

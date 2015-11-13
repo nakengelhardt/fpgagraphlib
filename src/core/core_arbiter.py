@@ -21,6 +21,8 @@ class Arbiter(Module):
         self.start_message = ApplyInterface(**addresslayout.get_params())
         self.start_message.select = Signal()
 
+        self.fifos = fifos
+
         self.submodules.roundrobin = RoundRobin(num_pe, switch_policy=SP_CE)
 
         # arrays for choosing incoming fifo to use
@@ -30,7 +32,7 @@ class Arbiter(Module):
         array_barrier = Array(fifo.dout.barrier for fifo in fifos)
 
         barrier_reached = Signal()
-        self.comb += barrier_reached.eq(reduce(and_, array_barrier))
+        self.comb += barrier_reached.eq(reduce(and_, array_barrier) & reduce(and_, array_readable))
 
         self.comb += If( self.start_message.select, # override
                         self.apply_interface.msg.raw_bits().eq(self.start_message.msg.raw_bits()),
@@ -48,3 +50,16 @@ class Arbiter(Module):
                         [self.roundrobin.request[i].eq(array_readable[i] & ~ array_barrier[i]) for i in range(len(fifos))], 
                         self.roundrobin.ce.eq(self.apply_interface.ack)
                      )
+
+    def gen_selfcheck(self, tb, quiet=True):
+        level = 0
+        num_cycles = 0
+        while not (yield tb.global_inactive):
+            num_cycles += 1
+            if (yield self.apply_interface.msg.barrier) and (yield self.apply_interface.ack):
+                level += 1
+                if not (yield self.start_message.select):
+                    for fifo in self.fifos:
+                        if not ((yield fifo.dout.barrier) and (yield fifo.readable) and (yield fifo.re)):
+                            print("{}\tWarning: barrier passed and not withdrawn correctly from fifo {}".format(num_cycles, self.fifos.index(fifo)))
+            yield

@@ -1,7 +1,8 @@
 from migen import *
 from migen.genlib.record import *
+from tbsupport import convert_32b_int_to_float
 
-from pr.interfaces import node_storage_layout, payload_layout
+from pr.interfaces import payload_layout, node_storage_layout, convert_int_to_record
 from faddsub import FAddSub
 from fmul import FMul
 
@@ -12,6 +13,7 @@ class ApplyKernel(Module):
 
         self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
+        self.sender_in = Signal(nodeidsize)
         self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
         self.valid_in = Signal()
@@ -21,6 +23,7 @@ class ApplyKernel(Module):
         self.nodeid_out = Signal(nodeidsize)
         self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
         self.state_valid = Signal()
+        self.state_barrier = Signal()
 
         self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.message_sender = Signal(nodeidsize)
@@ -104,6 +107,7 @@ class ApplyKernel(Module):
         send_message = Signal()
 
         self.comb += [
+            self.state_barrier.eq(n_barrier),
             self.nodeid_out.eq(n_nodeid),
             self.state_out.nneighbors.eq(n_nneighbors),
             If(send_message,
@@ -171,3 +175,38 @@ class ApplyKernel(Module):
             self.message_sender.eq(m_sender[-1])
         ]
 
+    def gen_selfcheck(self, tb, quiet=False):
+        num_pe = len(tb.apply)
+        num_nodes_per_pe = tb.addresslayout.num_nodes_per_pe
+        pe_id = [a.applykernel for a in tb.apply].index(self)
+        in_level = 0
+        out_level = 0
+        num_cycles = 0
+        grace_cycles_left = 12
+        while not (yield tb.global_inactive):
+            num_cycles += 1
+            if (yield self.state_barrier):
+                assert(not (yield self.state_valid))
+                in_level += 1
+                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, in_level))
+                if in_level < 30:
+                    for node in range(num_nodes_per_pe):
+                        data = (yield tb.apply[pe_id].mem[node])
+                        s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
+                        if s['nrecvd'] != 0:
+                            print("{}\tWarning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, in_level, s['nrecvd'], s['nneighbors'], hex(data)))
+            if (yield self.barrier_out) and (yield self.message_ack):
+                out_level += 1
+            if out_level >= 30:
+                if (yield self.message_valid) and (yield self.message_ack):
+                    print("{}\tWarning: message sent after inactivity in_level reached".format(num_cycles))
+            if not quiet:
+                if (yield self.valid_in) and (yield self.ready) and not (yield self.barrier_in):
+                    if in_level == 0:
+                        print("{}\tInit message for node {}".format(num_cycles, (yield self.nodeid_in)))
+                    else:
+                        print("{}\tMessage {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
+                if (yield self.message_valid) and (yield self.message_ack):
+                    print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.message_sender), out_level, convert_32b_int_to_float((yield self.message_out.weight))))
+            yield
+        print(str(num_cycles) + " cycles taken.")
