@@ -2,7 +2,7 @@ from migen import *
 from migen.genlib.record import *
 from tbsupport import convert_32b_int_to_float
 
-from pr.interfaces import payload_layout, node_storage_layout, convert_int_to_record
+from pr.interfaces import payload_layout, node_storage_layout
 from faddsub import FAddSub
 from fmul import FMul
 

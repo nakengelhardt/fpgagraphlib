@@ -23,7 +23,7 @@ import argparse
 
 from bfs.config import Config
 
-class TB(Module):
+class Core(Module):
     def __init__(self, config):
         self.config = config
         
@@ -32,14 +32,14 @@ class TB(Module):
         num_pe = self.addresslayout.num_pe
         num_nodes_per_pe = self.addresslayout.num_nodes_per_pe
 
-        self.adj_dict = adj_dict
-        num_nodes = len(adj_dict)
+        self.adj_dict = config.adj_dict
+        num_nodes = len(self.adj_dict)
         self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
 
         adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         init_nodedata = self.config.init_nodedata
 
-        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout, depth=1024) for _ in range(num_pe)] for _ in range(num_pe)]
+        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
         self.submodules.apply = [Apply(config, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)]) for i in range(num_pe)]
@@ -104,17 +104,15 @@ class TB(Module):
             yield start_message[i].select.eq(1)
             yield start_message[i].valid.eq(0)
 
-        while init_messages:
+        while [x for l in init_messages for x in l]:
             for i in range(num_pe):
                 if (yield start_message[i].ack):
-                    if i in init_messages:
+                    if init_messages[i]:
                         node, message = init_messages[i].pop()
                         yield start_message[i].msg.dest_id.eq(node)
                         yield start_message[i].msg.payload.eq(message)
                         yield start_message[i].msg.barrier.eq(0)
                         yield start_message[i].valid.eq(1)
-                        if len(init_messages[i]) == 0:
-                            del init_messages[i]
                     else:
                         yield start_message[i].valid.eq(0)
             yield
@@ -141,7 +139,7 @@ class TB(Module):
     def gen_barrier_monitor(self):
         num_pe = self.addresslayout.num_pe
         num_cycles = 0
-        while not (yield tb.global_inactive):
+        while not (yield self.global_inactive):
             num_cycles += 1
             for i in range(num_pe):
                 if((yield self.apply[i].apply_interface.valid) 
@@ -168,58 +166,3 @@ class TB(Module):
                     #     print(str(num_cycles) + "\tMessage for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
             yield
 
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('-f', '--from-file', dest='graphfile',
-                        help='filename containing graph')
-    parser.add_argument('-n', '--nodes', type=int,
-                        help='number of nodes to generate')
-    parser.add_argument('-e', '--edges', type=int,
-                        help='number of edges to generate')
-    parser.add_argument('-s', '--seed', type=int,
-                        help='seed to initialise random number generator')
-    parser.add_argument('--random-walk', action='store_const',
-                        const='random_walk', dest='approach',
-                        help='use a random-walk generation algorithm (default)')
-    parser.add_argument('--naive', action='store_const',
-                        const='naive', dest='approach',
-                        help='use a naive generation algorithm (slower)')
-    parser.add_argument('--partition', action='store_const',
-                        const='partition', dest='approach',
-                        help='use a partition-based generation algorithm (biased)')
-    args = parser.parse_args()
-    
-    if args.seed:
-        s = args.seed
-    else:
-        s = 42
-    random.seed(s)
-        
-    if args.graphfile:
-        graphfile = open(args.graphfile)
-        adj_dict = read_graph(graphfile)
-    elif args.nodes:
-        num_nodes = args.nodes
-        if args.edges:
-            num_edges = args.edges
-        else:
-            num_edges = num_nodes - 1
-        if args.approach:
-            approach = args.approach
-        else:
-            approach = "random_walk"
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach)
-    else:
-        parser.print_help()
-        exit(-1)
-
-    # print(adj_dict)
-    config = Config(adj_dict)
-    tb = TB(config)
-    generators = []
-    generators.extend([tb.gen_input(), tb.gen_barrier_monitor()])
-    generators.extend([a.applykernel.gen_selfcheck(tb, quiet=True) for a in tb.apply])
-    # generators.extend([s.get_neighbors.gen_selfcheck(tb, adj_dict, quiet=True) for s in tb.scatter])
-    # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.arbiter])
-    run_simulation(tb, generators)#, vcd_name="tb.vcd")

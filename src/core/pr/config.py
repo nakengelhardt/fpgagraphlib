@@ -59,11 +59,9 @@ class Config:
 
         self.init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, num_pe*num_nodes_per_pe)]
         
-        init_messages = {}
+        init_messages = [list() for _ in range(num_pe)]
         for node in self.adj_dict:
             pe = node >> log2_int(num_nodes_per_pe)
-            if pe not in init_messages:
-                init_messages[pe] = []
             init_messages[pe].append((node, self.addresslayout.const_base))
             
         self.init_messages = init_messages

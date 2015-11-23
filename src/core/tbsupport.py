@@ -18,3 +18,22 @@ def convert_float_to_32b_int(f):
 
 def convert_32b_int_to_float(i):
     return struct.unpack("f", struct.pack("I", i))[0]
+
+def convert_int_to_record(n, record):
+    s = bin(n)[2:]
+    total_length = sum([length for _, length in record])
+    if len(s) < total_length:
+        s = '0'*(total_length-len(s)) + s
+    res = {}
+    curr_idx = 0
+    for attr, length in record[::-1]:
+        res[attr] = int(s[curr_idx:curr_idx+length], 2)
+        curr_idx += length
+    return res
+
+def convert_record_tuple_to_int(t, record):
+    ret = 0
+    data = list(t)
+    for i in reversed(range(len(data))):
+        ret = (ret << record[i][1]) | data[i]
+    return ret

@@ -1,7 +1,7 @@
 from migen import *
 
-from migen.genlib.fifo import SyncFIFO
 from migen.genlib.roundrobin import *
+from recordfifo import RecordFIFO
 
 from core_interfaces import ApplyInterface, Message
 
@@ -34,22 +34,33 @@ class Arbiter(Module):
         barrier_reached = Signal()
         self.comb += barrier_reached.eq(reduce(and_, array_barrier) & reduce(and_, array_readable))
 
+        self.submodules.outfifo = RecordFIFO(layout=Message(**addresslayout.get_params()).layout, depth=8)
+
+
         self.comb += If( self.start_message.select, # override
-                        self.apply_interface.msg.raw_bits().eq(self.start_message.msg.raw_bits()),
-                        self.apply_interface.valid.eq(self.start_message.valid),
-                        self.start_message.ack.eq(self.apply_interface.ack),
+                        self.outfifo.din.raw_bits().eq(self.start_message.msg.raw_bits()),
+                        self.outfifo.we.eq(self.start_message.valid),
+                        self.start_message.ack.eq(self.outfifo.writable),
                         self.roundrobin.ce.eq(0)
                      ).Elif( barrier_reached,
-                        self.apply_interface.msg.barrier.eq(1),
-                        self.apply_interface.valid.eq(1),
-                        [array_re[i].eq(self.apply_interface.ack) for i in range(len(fifos))]
+                        self.outfifo.din.barrier.eq(1),
+                        self.outfifo.we.eq(1),
+                        [array_re[i].eq(self.outfifo.writable) for i in range(len(fifos))]
                      ).Else( # normal roundrobin
-                        self.apply_interface.msg.raw_bits().eq(array_data[self.roundrobin.grant]),
-                        self.apply_interface.valid.eq(array_readable[self.roundrobin.grant] & ~ array_barrier[self.roundrobin.grant]),
-                        array_re[self.roundrobin.grant].eq(self.apply_interface.ack & ~ array_barrier[self.roundrobin.grant]), 
+                        self.outfifo.din.raw_bits().eq(array_data[self.roundrobin.grant]),
+                        self.outfifo.we.eq(array_readable[self.roundrobin.grant] & ~ array_barrier[self.roundrobin.grant]),
+                        array_re[self.roundrobin.grant].eq(self.outfifo.writable & ~ array_barrier[self.roundrobin.grant]), 
                         [self.roundrobin.request[i].eq(array_readable[i] & ~ array_barrier[i]) for i in range(len(fifos))], 
-                        self.roundrobin.ce.eq(self.apply_interface.ack)
+                        self.roundrobin.ce.eq(self.outfifo.writable)
                      )
+
+        self.comb += [
+            self.apply_interface.msg.raw_bits().eq(self.outfifo.dout.raw_bits()),
+            self.apply_interface.valid.eq(self.outfifo.readable),
+            self.outfifo.re.eq(self.apply_interface.ack)
+        ]
+
+
 
     def gen_selfcheck(self, tb, quiet=True):
         level = 0
