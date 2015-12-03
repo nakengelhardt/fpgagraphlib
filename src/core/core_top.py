@@ -17,7 +17,7 @@ from graph_generate import generate_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from bfs.config import Config
+from pr.config import Config
 
 
 
@@ -96,8 +96,8 @@ class Top(Module):
         )
 
     def gen_output(self, tx):
-        ret = yield from riffa.gen_channel_read(tx)
-        print(ret)
+        for x in riffa.gen_channel_read(tx):
+            yield x
 
 class WrappedTop(riffa.GenericRiffa):
     def __init__(self, config, combined_interface_rx, combined_interface_tx, c_pci_data_width=128):
@@ -147,10 +147,12 @@ def sim(config):
     tx = riffa.Interface(data_width=128, num_chnls=1)
     tb = Top(config, tx)
     generators = []
-    generators.extend([tb.gen_output(tx), tb.core.gen_barrier_monitor()])
-    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=True) for a in tb.core.apply])
-    # generators.extend([s.get_neighbors.gen_selfcheck(tb, adj_dict, quiet=True) for s in tb.scatter])
-    # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.arbiter])
+    generators.extend([tb.gen_output(tx), tb.core.gen_barrier_monitor(), tb.core.gen_network_stats()])
+    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
+    generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
+    
+    generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
+    generators.extend([a.gen_selfcheck(tb.core , quiet=False) for a in tb.core.arbiter])
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
 

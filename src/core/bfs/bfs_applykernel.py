@@ -54,13 +54,20 @@ class ApplyKernel(Module):
 
     def gen_selfcheck(self, tb, quiet=False):
         num_pe = len(tb.apply)
+        pe_id = [a.applykernel for a in tb.apply].index(self)
         level = 0
         num_cycles = 0
+        num_messages_in = 0
+        num_messages_out = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.barrier_out) and (yield self.message_ack):
                 level += 1
+            if (yield self.valid_in) and (yield self.ready):
+                num_messages_in += 1
             if (yield self.message_valid) and (yield self.message_ack):
+                num_messages_out += 1
                 print("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
-        print(str(num_cycles) + " cycles taken.")
+        print("PE {}: {} cycles taken. {} messages received, {} messages sent.".format(pe_id, num_cycles, num_messages_in, num_messages_out))
+        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in, num_cycles/num_messages_out))

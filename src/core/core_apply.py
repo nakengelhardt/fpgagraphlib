@@ -39,7 +39,7 @@ class Apply(Module):
         if init_nodedata == None:
             init_nodedata = [0 for i in range(num_nodes_per_pe)]
         self.specials.mem = Memory(addresslayout.node_storage_layout_len, num_nodes_per_pe, init=init_nodedata)
-        rd_port = self.specials.rw_port = self.mem.get_port(write_capable=True, has_re=True)
+        rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
         # multiplex read port
@@ -179,3 +179,14 @@ class Apply(Module):
 
         # send from fifo when receiver ready and no external request (has priority)
         self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)
+
+    def gen_stats(self, tb):
+        pe_id = tb.apply.index(self)
+        num_cycles = 0
+        with open("{}.mem_dump.{}.log".format(tb.config.name, tb.config.addresslayout.num_pe), 'w') as memdumpfile:
+            memdumpfile.write("Time\tPE\tMemory address\n")
+            while not (yield tb.global_inactive):
+                num_cycles += 1
+                if (yield self.rd_port.re):
+                    memdumpfile.write("{}\t{}\t{}\n".format(num_cycles, pe_id, (yield self.rd_port.adr)))
+                yield

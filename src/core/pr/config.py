@@ -1,10 +1,10 @@
 from migen import *
 from migen.genlib.record import *
 
-from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float
+from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float, convert_int_to_record
 
 from core_address import AddressLayout
-from pr.interfaces import payload_layout, node_storage_layout, convert_int_to_record
+from pr.interfaces import payload_layout, node_storage_layout
 from pr.pr_applykernel import ApplyKernel
 from pr.pr_scatterkernel import ScatterKernel
 
@@ -12,13 +12,14 @@ from pr.pr_scatterkernel import ScatterKernel
 
 class Config:
     def __init__(self, adj_dict, quiet=False):
+        self.name = "pr"
         
         nodeidsize = 16
-        num_nodes_per_pe = 2**5
+        num_nodes_per_pe = 2**11
         edgeidsize = 16
-        max_edges_per_pe = 2**9
-        peidsize = 8
-        num_pe = 64
+        max_edges_per_pe = 2**14
+        peidsize = 3
+        num_pe = 1
         
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10

@@ -18,17 +18,19 @@ class CollisionDetector(Module):
 
         ###
 
-        self.state = Array([Signal(name="hazard_flag") for _ in range(num_nodes_per_pe)])
+        arraysize = min(32, num_nodes_per_pe)
+        
+        self.state = Array([Signal(name="hazard_flag") for _ in range(arraysize)])
 
         self.comb += [
-            self.re.eq(~self.state[self.read_adr] | ~self.read_adr_valid)
+            self.re.eq(~self.state[self.read_adr[:log2_int(arraysize)]] | ~self.read_adr_valid)
         ]
 
         self.sync += [
             If(self.re & self.read_adr_valid,
-                self.state[self.read_adr].eq(1)
+                self.state[self.read_adr[:log2_int(arraysize)]].eq(1)
             ),
             If(self.write_adr_valid,
-                self.state[self.write_adr].eq(0)
+                self.state[self.write_adr[:log2_int(arraysize)]].eq(0)
             )
         ]

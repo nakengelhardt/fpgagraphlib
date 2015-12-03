@@ -39,10 +39,10 @@ class Core(Module):
         adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         init_nodedata = self.config.init_nodedata
 
-        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout, depth=128) for _ in range(num_pe)] for _ in range(num_pe)]
+        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
-        self.submodules.apply = [Apply(config, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)]) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if init_nodedata else None)  for i in range(num_pe)]
         self.submodules.scatter = [Scatter(config, adj_mat=(adj_idx[i], adj_val[i])) for i in range(num_pe)]
 
         # connect within PEs
@@ -166,3 +166,15 @@ class Core(Module):
                     #     print(str(num_cycles) + "\tMessage for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
             yield
 
+    def gen_network_stats(self):
+        num_cycles = 0
+        with open("{}.net_stats.{}.log".format(self.config.name, self.config.addresslayout.num_pe), 'w') as netstatsfile:
+            netstatsfile.write("Cycle\tNumber of messages sent\n")
+            while not (yield self.global_inactive):
+                num_cycles += 1
+                num_msgs = 0
+                for scatter in self.scatter:
+                    if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
+                        num_msgs += 1
+                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
+                yield

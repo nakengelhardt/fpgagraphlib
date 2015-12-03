@@ -67,7 +67,7 @@ class Arbiter(Module):
         num_cycles = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.apply_interface.msg.barrier) and (yield self.apply_interface.ack):
+            if (yield self.outfifo.din.barrier) and (yield self.outfifo.we):
                 level += 1
                 if not (yield self.start_message.select):
                     for fifo in self.fifos:

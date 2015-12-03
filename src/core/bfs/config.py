@@ -7,12 +7,21 @@ from bfs.bfs_scatterkernel import ScatterKernel
 
 class Config:
     def __init__(self, adj_dict, quiet=True):
+        self.name = "bfs"
+        
         nodeidsize = 16
-        num_nodes_per_pe = 2**5
+        num_nodes_per_pe = 2**10
         edgeidsize = 16
-        max_edges_per_pe = 2**9
-        peidsize = 8
-        num_pe = 64
+        max_edges_per_pe = 2**13
+        peidsize = 3
+        num_pe = 2
+        
+        # nodeidsize = 16
+        # num_nodes_per_pe = 2**10
+        # edgeidsize = 16
+        # max_edges_per_pe = 2**12
+        # peidsize = 5
+        # num_pe = 32
 
         # nodeidsize = 16
         # num_nodes_per_pe = 2**8
@@ -38,7 +47,7 @@ class Config:
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        self.init_nodedata = [0 for node in range(num_pe*num_nodes_per_pe)]
+        self.init_nodedata = None
 
         self.init_messages = [list() for _ in range(num_pe)]
         self.init_messages[0].append((1,1))

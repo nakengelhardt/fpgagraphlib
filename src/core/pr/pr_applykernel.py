@@ -1,6 +1,6 @@
 from migen import *
 from migen.genlib.record import *
-from tbsupport import convert_32b_int_to_float
+from tbsupport import convert_32b_int_to_float, convert_int_to_record
 
 from pr.interfaces import payload_layout, node_storage_layout
 from faddsub import FAddSub
@@ -179,34 +179,46 @@ class ApplyKernel(Module):
         num_pe = len(tb.apply)
         num_nodes_per_pe = tb.addresslayout.num_nodes_per_pe
         pe_id = [a.applykernel for a in tb.apply].index(self)
-        in_level = 0
+        state_level = 0
         out_level = 0
+        in_level = 0
         num_cycles = 0
-        grace_cycles_left = 12
+        num_messages_in = 0
+        num_messages_out = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.state_barrier):
                 assert(not (yield self.state_valid))
-                in_level += 1
-                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, in_level))
-                if in_level < 30:
+                state_level += 1
+                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
+                if state_level < 30:
                     for node in range(num_nodes_per_pe):
                         data = (yield tb.apply[pe_id].mem[node])
                         s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
                         if s['nrecvd'] != 0:
-                            print("{}\tWarning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, in_level, s['nrecvd'], s['nneighbors'], hex(data)))
+                            print("{}\tWarning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
             if (yield self.barrier_out) and (yield self.message_ack):
                 out_level += 1
-            if out_level >= 30:
-                if (yield self.message_valid) and (yield self.message_ack):
-                    print("{}\tWarning: message sent after inactivity in_level reached".format(num_cycles))
-            if not quiet:
-                if (yield self.valid_in) and (yield self.ready) and not (yield self.barrier_in):
+                if (yield self.message_valid):
+                    print("{}\tWarning: valid and barrier raised simultaneously on applykernel output on PE {}".format(num_cycles, pe_id))
+            if (yield self.message_valid) and (yield self.message_ack):
+                num_messages_out += 1
+                if not quiet:
+                        print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.message_sender), out_level, convert_32b_int_to_float((yield self.message_out.weight))))
+                if out_level >= 30:
+                    print("{}\tWarning: message sent after inactivity level reached".format(num_cycles))
+            if (yield self.barrier_in) and (yield self.ready):
+                in_level += 1
+            if (yield self.valid_in) and (yield self.ready):
+                num_messages_in += 1
+                if (yield self.barrier_in):
+                    print("{}\tWarning: valid and barrier raised simultaneously on applykernel input on PE {}".format(num_cycles, pe_id))
+                if not quiet:
                     if in_level == 0:
                         print("{}\tInit message for node {}".format(num_cycles, (yield self.nodeid_in)))
                     else:
                         print("{}\tMessage {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
-                if (yield self.message_valid) and (yield self.message_ack):
-                    print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.message_sender), out_level, convert_32b_int_to_float((yield self.message_out.weight))))
             yield
-        print(str(num_cycles) + " cycles taken.")
+        print("PE {}: {} cycles taken. {} messages received, {} messages sent.".format(pe_id, num_cycles, num_messages_in, num_messages_out))
+        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in, num_cycles/num_messages_out))
+
