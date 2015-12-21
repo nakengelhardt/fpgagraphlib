@@ -13,13 +13,11 @@ import argparse
 
 from recordfifo import RecordFIFO
 from graph_input import read_graph
-from graph_generate import generate_graph
+from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
 from pr.config import Config
-
-
 
 
 class Top(Module):
@@ -95,9 +93,7 @@ class Top(Module):
             )
         )
 
-    def gen_output(self, tx):
-        for x in riffa.gen_channel_read(tx):
-            yield x
+
 
 class WrappedTop(riffa.GenericRiffa):
     def __init__(self, config, combined_interface_rx, combined_interface_tx, c_pci_data_width=128):
@@ -143,17 +139,21 @@ def export(config, filename='top.v'):
                         | {m.rx_clk, m.tx_clk, m.ext_clk, m.ext_rst}) 
                     ).write(filename)
 
+
 def sim(config):
     tx = riffa.Interface(data_width=128, num_chnls=1)
     tb = Top(config, tx)
     generators = []
-    generators.extend([tb.gen_output(tx), tb.core.gen_barrier_monitor(), tb.core.gen_network_stats()])
-    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
-    generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
+    generators.extend([riffa.gen_channel_read(tx)])
     
+    # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
-    generators.extend([a.gen_selfcheck(tb.core , quiet=False) for a in tb.core.arbiter])
-    run_simulation(tb, generators, vcd_name="tb.vcd")
+    # generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.arbiter])
+    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=True) for a in tb.core.apply])
+    
+    # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
+    # generators.extend([tb.core.gen_network_stats()])
+    run_simulation(tb, generators)#, vcd_name="tb.vcd")
 
 
 def main():
@@ -164,6 +164,7 @@ def main():
                         help='number of nodes to generate')
     parser.add_argument('-e', '--edges', type=int,
                         help='number of edges to generate')
+    parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-s', '--seed', type=int,
                         help='seed to initialise random number generator')
     parser.add_argument('--random-walk', action='store_const',
@@ -175,6 +176,7 @@ def main():
     parser.add_argument('--partition', action='store_const',
                         const='partition', dest='approach',
                         help='use a partition-based generation algorithm (biased)')
+    parser.add_argument('--save-graph', dest='graphsave', help='save graph to a file')
     parser.add_argument('command', help="one of 'sim' or 'export'")
     parser.add_argument('-o', '--output', help="output file name to save verilog exprt (for command 'export')")
     args = parser.parse_args()
@@ -198,10 +200,13 @@ def main():
             approach = args.approach
         else:
             approach = "random_walk"
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach)
+        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
     else:
         parser.print_help()
         exit(-1)
+
+    if args.graphsave:
+            export_graph(adj_dict, args.graphsave)
 
     # print(adj_dict)
     config = Config(adj_dict)

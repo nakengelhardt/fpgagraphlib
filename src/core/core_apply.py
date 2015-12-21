@@ -158,7 +158,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFO(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=addresslayout.num_nodes_per_pe)
+        self.submodules.outfifo = RecordFIFO(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*addresslayout.num_nodes_per_pe)
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)
@@ -183,7 +183,7 @@ class Apply(Module):
     def gen_stats(self, tb):
         pe_id = tb.apply.index(self)
         num_cycles = 0
-        with open("{}.mem_dump.{}.log".format(tb.config.name, tb.config.addresslayout.num_pe), 'w') as memdumpfile:
+        with open("{}.mem_dump.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as memdumpfile:
             memdumpfile.write("Time\tPE\tMemory address\n")
             while not (yield tb.global_inactive):
                 num_cycles += 1

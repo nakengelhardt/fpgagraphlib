@@ -163,8 +163,8 @@ def partition(nodes, num_edges, loops=False, multigraph=False, digraph=False):
     # Create two partitions, S and T. Initially store all nodes in S.
     S, T = set(nodes), set()
 
-    # Randomly select a first node, and place it in T.
-    node_s = random.sample(S, 1).pop()
+    # Select the first node, and place it in T.
+    node_s = nodes[0]
     S.remove(node_s)
     T.add(node_s)
 

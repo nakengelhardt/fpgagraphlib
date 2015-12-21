@@ -10,11 +10,13 @@ class Config:
         self.name = "bfs"
         
         nodeidsize = 16
-        num_nodes_per_pe = 2**10
+        num_nodes_per_pe = 2**5
         edgeidsize = 16
-        max_edges_per_pe = 2**13
-        peidsize = 3
-        num_pe = 2
+        max_edges_per_pe = 2**8
+        peidsize = 6
+        num_pe = 64
+        pe_groups = 4
+        inter_pe_delay = 256
         
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
@@ -41,6 +43,8 @@ class Config:
 
         self.addresslayout = AddressLayout(nodeidsize=nodeidsize, edgeidsize=edgeidsize, peidsize=peidsize, num_pe=num_pe, num_nodes_per_pe=num_nodes_per_pe, max_edges_per_pe=max_edges_per_pe, payloadsize=payloadsize)
         self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.pe_groups = pe_groups
+        self.addresslayout.inter_pe_delay = inter_pe_delay
 
         self.adj_dict = adj_dict
 

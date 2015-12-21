@@ -21,8 +21,6 @@ from core_scatter import Scatter
 import sys
 import argparse
 
-from bfs.config import Config
-
 class Core(Module):
     def __init__(self, config):
         self.config = config
@@ -39,7 +37,10 @@ class Core(Module):
         adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         init_nodedata = self.config.init_nodedata
 
-        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout, depth=256) for _ in range(num_pe)] for _ in range(num_pe)]
+        fifos = [[RecordFIFO(layout=Message(**self.addresslayout.get_params()).layout,
+                             depth=256,
+                             delay=config.addresslayout.inter_pe_delay #(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
+                             ) for i in range(num_pe)] for j in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
         self.submodules.apply = [Apply(config, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if init_nodedata else None)  for i in range(num_pe)]
@@ -168,7 +169,7 @@ class Core(Module):
 
     def gen_network_stats(self):
         num_cycles = 0
-        with open("{}.net_stats.{}.log".format(self.config.name, self.config.addresslayout.num_pe), 'w') as netstatsfile:
+        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
             netstatsfile.write("Cycle\tNumber of messages sent\n")
             while not (yield self.global_inactive):
                 num_cycles += 1

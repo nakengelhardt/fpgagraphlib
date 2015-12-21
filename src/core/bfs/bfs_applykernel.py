@@ -67,7 +67,8 @@ class ApplyKernel(Module):
                 num_messages_in += 1
             if (yield self.message_valid) and (yield self.message_ack):
                 num_messages_out += 1
-                print("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
+                if not quiet:
+                    print("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
-        print("PE {}: {} cycles taken. {} messages received, {} messages sent.".format(pe_id, num_cycles, num_messages_in, num_messages_out))
-        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in, num_cycles/num_messages_out))
+        print("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
+        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

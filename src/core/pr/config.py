@@ -15,11 +15,13 @@ class Config:
         self.name = "pr"
         
         nodeidsize = 16
-        num_nodes_per_pe = 2**11
+        num_nodes_per_pe = 2**5
         edgeidsize = 16
-        max_edges_per_pe = 2**14
+        max_edges_per_pe = 2**8
         peidsize = 3
         num_pe = 1
+        pe_groups = 4
+        inter_pe_delay = 256
         
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
@@ -36,9 +38,9 @@ class Config:
         # num_pe = 8
 
         # nodeidsize = 8
-        # num_nodes_per_pe = 2**6
+        # num_nodes_per_pe = 2**4
         # edgeidsize = 16
-        # max_edges_per_pe = 2**9
+        # max_edges_per_pe = 2**6
         # peidsize = 1
         # num_pe = 1
 
@@ -47,9 +49,11 @@ class Config:
 
         self.addresslayout = AddressLayout(nodeidsize=nodeidsize, edgeidsize=edgeidsize, peidsize=peidsize, num_pe=num_pe, num_nodes_per_pe=num_nodes_per_pe, max_edges_per_pe=max_edges_per_pe, payloadsize=payloadsize)
         self.addresslayout.floatsize = floatsize
+        self.addresslayout.pe_groups = pe_groups
+        self.addresslayout.inter_pe_delay = inter_pe_delay
 
         self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
-        
+
         num_nodes = len(adj_dict)
         self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
 
@@ -59,16 +63,17 @@ class Config:
         self.adj_dict = adj_dict
 
         self.init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, num_pe*num_nodes_per_pe)]
-        
+
         init_messages = [list() for _ in range(num_pe)]
         for node in self.adj_dict:
             pe = node >> log2_int(num_nodes_per_pe)
             init_messages[pe].append((node, self.addresslayout.const_base))
-            
+
         self.init_messages = init_messages
-        
+
         if not quiet:
             print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
             print("num_pe = " + str(num_pe))
             print("num_nodes_per_pe = " + str(num_nodes_per_pe))
             print("max_edges_per_pe = " + str(max_edges_per_pe))
+            print("inter_pe_delay =", inter_pe_delay)

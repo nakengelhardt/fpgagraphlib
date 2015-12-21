@@ -88,11 +88,13 @@ class Neighbors(Module):
         to_be_sent = []
         level = 0
         num_cycles = 0
+        num_mem_reads = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.barrier_out):
                 level += 1
             if (yield self.neighbor_valid) and (yield self.neighbor_ack):
+                num_mem_reads += 1
                 neighbor = (yield self.neighbor)
                 if not quiet:
                     print("{}\tMessage from node {} for node {}".format(num_cycles, curr_sender, neighbor))
@@ -109,6 +111,7 @@ class Neighbors(Module):
                 curr_sender = (yield self.sender_in)
                 to_be_sent = list(graph[curr_sender])
             yield
+        print("{} memory reads.".format(num_mem_reads))
 
 if __name__ == "__main__":
     from migen.fhdl import verilog

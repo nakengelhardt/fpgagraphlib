@@ -190,7 +190,8 @@ class ApplyKernel(Module):
             if (yield self.state_barrier):
                 assert(not (yield self.state_valid))
                 state_level += 1
-                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
+                if not quiet:
+                    print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
                 if state_level < 30:
                     for node in range(num_nodes_per_pe):
                         data = (yield tb.apply[pe_id].mem[node])
@@ -219,6 +220,5 @@ class ApplyKernel(Module):
                     else:
                         print("{}\tMessage {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
             yield
-        print("PE {}: {} cycles taken. {} messages received, {} messages sent.".format(pe_id, num_cycles, num_messages_in, num_messages_out))
-        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in, num_cycles/num_messages_out))
-
+        print("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, state_level, num_messages_in, num_messages_out))
+        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
