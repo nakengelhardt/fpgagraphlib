@@ -1,6 +1,6 @@
 from migen import *
 from migen.genlib.record import *
-from migen.genlib.fifo import SyncFIFO
+from migen.genlib.fifo import _FIFOInterface, _inc
 
 @CEInserter()
 class Delay(Module):
@@ -16,6 +16,78 @@ class Delay(Module):
         else:
             self.comb += self.s_out.eq(s_in)
 
+class InitFIFO(Module, _FIFOInterface):
+    """Synchronous FIFO (first in, first out)
+
+    Read and write interfaces are accessed from the same clock domain.
+    If different clock domains are needed, use :class:`AsyncFIFO`.
+
+    {interface}
+    level : out
+        Number of unread entries.
+    replace : in
+        Replaces the last entry written into the FIFO with `din`. Does nothing
+        if that entry has already been read (i.e. the FIFO is empty).
+        Assert in conjunction with `we`.
+    """
+    __doc__ = __doc__.format(interface=_FIFOInterface.__doc__)
+
+    def __init__(self, width, depth, fwft=True, init=None):
+        _FIFOInterface.__init__(self, width, depth)
+
+        if init:
+            startlevel = len(init)
+        else:
+            startlevel = 0
+
+        self.level = Signal(max=depth+1, reset=startlevel)
+        self.replace = Signal()
+
+        ###
+
+        produce = Signal(max=depth, reset=startlevel)
+        consume = Signal(max=depth)
+        storage = Memory(self.width, depth, init=init)
+        self.specials += storage
+
+        wrport = storage.get_port(write_capable=True)
+        self.specials += wrport
+        self.comb += [
+            If(self.replace,
+                wrport.adr.eq(produce-1)
+            ).Else(
+                wrport.adr.eq(produce)
+            ),
+            wrport.dat_w.eq(self.din),
+            wrport.we.eq(self.we & (self.writable | self.replace))
+        ]
+        self.sync += If(self.we & self.writable & ~self.replace,
+            _inc(produce, depth))
+
+        do_read = Signal()
+        self.comb += do_read.eq(self.readable & self.re)
+
+        rdport = storage.get_port(async_read=fwft, has_re=not fwft)
+        self.specials += rdport
+        self.comb += [
+            rdport.adr.eq(consume),
+            self.dout.eq(rdport.dat_r)
+        ]
+        if not fwft:
+            self.comb += rdport.re.eq(do_read)
+        self.sync += If(do_read, _inc(consume, depth))
+
+        self.sync += \
+            If(self.we & self.writable & ~self.replace,
+                If(~do_read, self.level.eq(self.level + 1))
+            ).Elif(do_read,
+                self.level.eq(self.level - 1)
+            )
+        self.comb += [
+            self.writable.eq(self.level != depth),
+            self.readable.eq(self.level != 0)
+        ]
+
 class RecordFIFO(Module):
     def __init__(self, layout, depth, init=None, delay=0):
         self.we = Signal()
@@ -27,7 +99,7 @@ class RecordFIFO(Module):
         self.dout = Record(layout)
         self.width = len(self.din.raw_bits())
 
-        self.submodules.fifo = SyncFIFO(self.width, depth, init=init)
+        self.submodules.fifo = InitFIFO(self.width, depth, init=init)
 
         if delay > 0:
             fifolayout = [
