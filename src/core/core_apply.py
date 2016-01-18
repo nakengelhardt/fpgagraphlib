@@ -1,6 +1,6 @@
 from migen import *
 from migen.genlib.record import *
-from recordfifo import RecordFIFO
+from recordfifo import RecordFIFOBuffered
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
 from core_address import AddressLayout
@@ -158,7 +158,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFO(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*addresslayout.num_nodes_per_pe)
+        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*addresslayout.num_nodes_per_pe)
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)
@@ -170,11 +170,23 @@ class Apply(Module):
             self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
         ]
 
+        payload = Signal(addresslayout.payloadsize)
+        sender = Signal(addresslayout.nodeidsize)
+        barrier = Signal()
+        valid = Signal()
+
+        self.sync += If(self.scatter_interface.ack,
+            payload.eq(self.outfifo.dout.msg),
+            sender.eq(self.outfifo.dout.sender),
+            barrier.eq(self.outfifo.dout.barrier),
+            valid.eq(self.outfifo.readable)
+        )
+
         self.comb += [
-            self.scatter_interface.payload.eq(self.outfifo.dout.msg),
-            self.scatter_interface.sender.eq(self.outfifo.dout.sender),
-            self.scatter_interface.barrier.eq(self.outfifo.dout.barrier),
-            self.scatter_interface.valid.eq(self.outfifo.readable)
+            self.scatter_interface.payload.eq(payload),
+            self.scatter_interface.sender.eq(sender),
+            self.scatter_interface.barrier.eq(barrier),
+            self.scatter_interface.valid.eq(valid)
         ]
 
         # send from fifo when receiver ready and no external request (has priority)

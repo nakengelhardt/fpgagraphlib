@@ -6,7 +6,7 @@ from operator import or_
 
 import riffa
 
-import unittest
+# import unittest
 import random
 import sys
 import argparse
@@ -88,8 +88,8 @@ class Top(Module):
             tx.off.eq(0),
             tx.data.eq(self.cycle_count),
             tx.data_valid.eq(1),
-            If(tx.ack,
-               NextState("SEND_RES")
+            If(tx.data_ren,
+               NextState("WAIT")
             )
         )
 

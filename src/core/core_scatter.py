@@ -44,15 +44,17 @@ class Scatter(Module):
 
 
         # flow control variables
-        stage1_ack = Signal()
-        stage2_ack = Signal()
+        upstream_ack = Signal()
 
 
         ## stage 1
 
         # address idx with incoming message
-        self.comb += rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.sender)),rd_port_idx.re.eq(stage2_ack), self.scatter_interface.ack.eq(stage1_ack)
-        self.comb += stage1_ack.eq(self.get_neighbors.ack)
+        self.comb += [
+            rd_port_idx.adr.eq(addresslayout.local_adr(self.scatter_interface.sender)),
+            rd_port_idx.re.eq(upstream_ack),
+            self.scatter_interface.ack.eq(upstream_ack)
+        ]
 
         # keep input for next stage
         scatter_msg1 = Signal(addresslayout.payloadsize)
@@ -60,7 +62,7 @@ class Scatter(Module):
         scatter_msg_valid1 = Signal()
         scatter_barrier1 = Signal()
         # valid1 requests get_neighbors, so don't set for barrier
-        self.sync += If( stage1_ack,
+        self.sync += If( upstream_ack,
                          scatter_msg1.eq(self.scatter_interface.payload),
                          scatter_sender1.eq(self.scatter_interface.sender),
                          scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier), 
@@ -70,7 +72,7 @@ class Scatter(Module):
         ## stage 2
 
         # ask get_neighbors submodule for all neighbors of input node
-        # stage2_ack will only go up again when all neighbors done
+        # upstream_ack will only go up again when all neighbors done
         self.comb +=[
             self.get_neighbors.start_idx.eq(rd_port_idx.dat_r[:edgeidsize]),
             self.get_neighbors.num_neighbors.eq(rd_port_idx.dat_r[edgeidsize:]),
@@ -78,7 +80,7 @@ class Scatter(Module):
             self.get_neighbors.barrier_in.eq(scatter_barrier1),
             self.get_neighbors.message_in.eq(scatter_msg1),
             self.get_neighbors.sender_in.eq(scatter_sender1),
-            stage2_ack.eq(self.get_neighbors.ack)
+            upstream_ack.eq(self.get_neighbors.ack)
         ]
 
 

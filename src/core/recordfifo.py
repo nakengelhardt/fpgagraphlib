@@ -1,6 +1,6 @@
 from migen import *
 from migen.genlib.record import *
-from migen.genlib.fifo import _FIFOInterface, _inc
+from migen.genlib.fifo import _FIFOInterface, _inc, SyncFIFOBuffered
 
 @CEInserter()
 class Delay(Module):
@@ -131,3 +131,25 @@ class RecordFIFO(Module):
                 self.readable.eq(self.fifo.readable),
                 self.fifo.re.eq(self.re)
             ]
+
+class RecordFIFOBuffered(Module):
+    def __init__(self, layout, depth):
+        self.we = Signal()
+        self.writable = Signal()  # not full
+        self.re = Signal()
+        self.readable = Signal()  # not empty
+
+        self.din = Record(layout)
+        self.dout = Record(layout)
+        self.width = len(self.din.raw_bits())
+
+        self.submodules.fifo = SyncFIFOBuffered(self.width, depth)
+
+        self.comb += [
+            self.fifo.din.eq(self.din.raw_bits()),
+            self.writable.eq(self.fifo.writable),
+            self.fifo.we.eq(self.we),
+            self.dout.raw_bits().eq(self.fifo.dout),
+            self.readable.eq(self.fifo.readable),
+            self.fifo.re.eq(self.re)
+        ]
