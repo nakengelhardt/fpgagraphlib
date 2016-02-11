@@ -27,7 +27,7 @@ class Top(Module):
         
         self.submodules.core = Core(config)
         
-        start_message = [self.core.arbiter[i].start_message for i in range(num_pe)]
+        start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
         layout = Message(**config.addresslayout.get_params()).layout
         initdata = [[convert_record_tuple_to_int((0, dest_id, 0, payload), layout) for dest_id, payload in init_message] for init_message in config.init_messages]
         for i in initdata:
@@ -148,7 +148,7 @@ def sim(config):
     
     # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
-    # generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.arbiter])
+    # generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=True) for a in tb.core.apply])
     
     # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
