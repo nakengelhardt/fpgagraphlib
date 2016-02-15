@@ -17,7 +17,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from pr.config import Config
+from bfs.config import Config
 
 
 class Top(Module):
@@ -29,9 +29,9 @@ class Top(Module):
         
         start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
         layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_tuple_to_int((0, dest_id, 0, payload), layout) for dest_id, payload in init_message] for init_message in config.init_messages]
+        initdata = [[convert_record_tuple_to_int((0, 1, dest_id, 0, payload), layout) for dest_id, payload in init_message] for init_message in config.init_messages]
         for i in initdata:
-            i.append(convert_record_tuple_to_int((1, 0, 0, 0), layout))
+            i.append(convert_record_tuple_to_int((1, 1, 0, 0, 0), layout))
         initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
         
         for i in range(num_pe):
@@ -146,14 +146,14 @@ def sim(config):
     generators = []
     generators.extend([riffa.gen_channel_read(tx)])
     
-    # generators.extend([tb.core.gen_barrier_monitor()])
+    generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
-    # generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.network.arbiter])
+    generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=True) for a in tb.core.apply])
     
-    # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
-    # generators.extend([tb.core.gen_network_stats()])
-    run_simulation(tb, generators)#, vcd_name="tb.vcd")
+    generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
+    generators.extend([tb.core.gen_network_stats()])
+    run_simulation(tb, generators, vcd_name="tb.vcd")
 
 
 def main():

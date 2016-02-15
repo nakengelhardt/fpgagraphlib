@@ -18,6 +18,7 @@ _memory_port_layout = [
 
 class Apply(Module):
     def __init__(self, config, init_nodedata=None):
+        self.config = config
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
@@ -74,6 +75,7 @@ class Apply(Module):
         dest_node_id = Signal(nodeidsize)
         sender = Signal(nodeidsize)
         payload = Signal(addresslayout.payloadsize)
+        roundpar = Signal()
         valid = Signal()
         barrier = Signal()
 
@@ -81,6 +83,7 @@ class Apply(Module):
             dest_node_id.eq(self.apply_interface.msg.dest_id),
             sender.eq(self.apply_interface.msg.sender),
             payload.eq(self.apply_interface.msg.payload),
+            roundpar.eq(self.apply_interface.msg.roundpar),
             valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),
             barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
         ]
@@ -105,6 +108,7 @@ class Apply(Module):
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
         payload2 = Signal(addresslayout.payloadsize)
+        roundpar2 = Signal()
         valid2 = Signal()
         barrier2 = Signal()
         data_invalid2 = Signal()
@@ -116,13 +120,16 @@ class Apply(Module):
             If(upstream_ack, 
                 dest_node_id2.eq(dest_node_id), 
                 sender2.eq(sender),
-                payload2.eq(payload)
+                payload2.eq(payload),
+                roundpar2.eq(roundpar)
             )
         ]
 
         # count levels
         self.level = Signal(32)
         self.sync += If(barrier2 & ready, self.level.eq(self.level + 1))
+
+        self.roundpar = roundpar2
 
         downstream_ack = Signal()
 
@@ -155,6 +162,7 @@ class Apply(Module):
         # output handling
         _layout = [
         ( "barrier", 1, DIR_M_TO_S ),
+        ( "roundpar", 1, DIR_M_TO_S ),
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
@@ -167,26 +175,30 @@ class Apply(Module):
             self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),
             self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),
             self.outfifo.din.sender.eq(self.applykernel.message_sender),
+            self.outfifo.din.roundpar.eq(self.applykernel.message_round),
             self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
         ]
 
-        payload = Signal(addresslayout.payloadsize)
-        sender = Signal(addresslayout.nodeidsize)
-        barrier = Signal()
-        valid = Signal()
+        payload3 = Signal(addresslayout.payloadsize)
+        sender3 = Signal(addresslayout.nodeidsize)
+        roundpar3 = Signal()
+        barrier3 = Signal()
+        valid3 = Signal()
 
         self.sync += If(self.scatter_interface.ack,
-            payload.eq(self.outfifo.dout.msg),
-            sender.eq(self.outfifo.dout.sender),
-            barrier.eq(self.outfifo.dout.barrier),
-            valid.eq(self.outfifo.readable)
+            payload3.eq(self.outfifo.dout.msg),
+            sender3.eq(self.outfifo.dout.sender),
+            roundpar3.eq(self.outfifo.dout.roundpar),
+            barrier3.eq(self.outfifo.dout.barrier),
+            valid3.eq(self.outfifo.readable)
         )
 
         self.comb += [
-            self.scatter_interface.payload.eq(payload),
-            self.scatter_interface.sender.eq(sender),
-            self.scatter_interface.barrier.eq(barrier),
-            self.scatter_interface.valid.eq(valid)
+            self.scatter_interface.payload.eq(payload3),
+            self.scatter_interface.sender.eq(sender3),
+            self.scatter_interface.roundpar.eq(roundpar3),
+            self.scatter_interface.barrier.eq(barrier3),
+            self.scatter_interface.valid.eq(valid3)
         ]
 
         # send from fifo when receiver ready and no external request (has priority)

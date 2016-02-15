@@ -59,12 +59,14 @@ class Scatter(Module):
         # keep input for next stage
         scatter_msg1 = Signal(addresslayout.payloadsize)
         scatter_sender1 = Signal(addresslayout.nodeidsize)
+        scatter_round1 = Signal()
         scatter_msg_valid1 = Signal()
         scatter_barrier1 = Signal()
         # valid1 requests get_neighbors, so don't set for barrier
         self.sync += If( upstream_ack,
                          scatter_msg1.eq(self.scatter_interface.payload),
                          scatter_sender1.eq(self.scatter_interface.sender),
+                         scatter_round1.eq(self.scatter_interface.roundpar),
                          scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier), 
                          scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier) 
                      )
@@ -80,6 +82,7 @@ class Scatter(Module):
             self.get_neighbors.barrier_in.eq(scatter_barrier1),
             self.get_neighbors.message_in.eq(scatter_msg1),
             self.get_neighbors.sender_in.eq(scatter_sender1),
+            self.get_neighbors.round_in.eq(scatter_round1),
             upstream_ack.eq(self.get_neighbors.ack)
         ]
 
@@ -95,6 +98,7 @@ class Scatter(Module):
             self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.num_neighbors_out),
             self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor),
             self.scatterkernel.sender_in.eq(self.get_neighbors.sender_out),
+            self.scatterkernel.round_in.eq(self.get_neighbors.round_out),
             self.scatterkernel.barrier_in.eq(self.get_neighbors.barrier_out),
             self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_valid),
             self.get_neighbors.neighbor_ack.eq(self.scatterkernel.ready)
@@ -112,6 +116,7 @@ class Scatter(Module):
             self.network_interface.msg.dest_id.eq(self.scatterkernel.neighbor_out),
             self.network_interface.msg.payload.eq(self.scatterkernel.message_out.raw_bits()),
             self.network_interface.msg.sender.eq(self.scatterkernel.sender_out),
+            self.network_interface.msg.roundpar.eq(self.scatterkernel.round_out),
             self.network_interface.msg.barrier.eq(self.scatterkernel.barrier_out),
             self.network_interface.broadcast.eq(self.scatterkernel.barrier_out),
             self.network_interface.valid.eq(self.scatterkernel.valid_out | self.scatterkernel.barrier_out),

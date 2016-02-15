@@ -17,6 +17,7 @@ class Neighbors(Module):
         self.barrier_in = Signal()
         self.message_in = Signal(addresslayout.payloadsize)
         self.sender_in = Signal(addresslayout.nodeidsize)
+        self.round_in = Signal()
 
         # output
         self.neighbor = Signal(nodeidsize)
@@ -25,6 +26,7 @@ class Neighbors(Module):
         self.barrier_out = Signal()
         self.message_out = Signal(addresslayout.payloadsize)
         self.sender_out = Signal(addresslayout.nodeidsize)
+        self.round_out = Signal()
         self.num_neighbors_out = Signal(edgeidsize)
         ###
 
@@ -48,6 +50,7 @@ class Neighbors(Module):
             rd_port_val.re.eq(1),
             NextValue(self.message_out, self.message_in),
             NextValue(self.sender_out, self.sender_in),
+            NextValue(self.round_out, self.round_in),
             NextValue(self.num_neighbors_out, self.num_neighbors),
             If(self.barrier_in,
                 NextState("BARRIER")
@@ -109,7 +112,11 @@ class Neighbors(Module):
                 if to_be_sent:
                     print("{}\tWarning: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent, curr_sender))
                 curr_sender = (yield self.sender_in)
-                to_be_sent = list(graph[curr_sender])
+                if not curr_sender in graph:
+                    print("{}\tWarning: invalid sender ({})".format(num_cycles, curr_sender))
+                    to_be_sent = []
+                else:
+                    to_be_sent = list(graph[curr_sender])
             yield
         print("{} memory reads.".format(num_mem_reads))
 

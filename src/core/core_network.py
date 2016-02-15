@@ -29,6 +29,7 @@ class Network(Module):
             array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_sender = Array(fifo.din.sender for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_payload = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_roundpar = Array(fifo.din.roundpar for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
@@ -56,6 +57,7 @@ class Network(Module):
                             array_dest_id[sink].eq(self.network_interface[source].msg.dest_id),
                             array_sender[sink].eq(self.network_interface[source].msg.sender),
                             array_payload[sink].eq(self.network_interface[source].msg.payload),
+                            array_roundpar[sink].eq(self.network_interface[source].msg.roundpar),
                             array_we[sink].eq(self.network_interface[source].valid),
                             self.network_interface[source].ack.eq(array_writable[sink])
                         )

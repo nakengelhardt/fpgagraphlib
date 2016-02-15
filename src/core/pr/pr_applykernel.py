@@ -28,6 +28,7 @@ class ApplyKernel(Module):
         self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.message_sender = Signal(nodeidsize)
         self.message_valid = Signal()
+        self.message_round = Signal()
         self.barrier_out = Signal()
         self.message_ack = Signal()
 
@@ -52,6 +53,7 @@ class ApplyKernel(Module):
         n_nrecvd = Signal(nodeidsize)
         n_nneighbors = Signal(nodeidsize)
         n_barrier = Signal()
+        n_round = Signal()
         n_valid = Signal()
         n_allrecvd = Signal()
         n_init = Signal()
@@ -71,6 +73,7 @@ class ApplyKernel(Module):
         i_nrecvd = [Signal(nodeidsize) for _ in range(3)]
         i_nneighbors = [Signal(nodeidsize) for _ in range(3)]
         i_barrier = [Signal() for _ in range(3)]
+        i_round = [Signal() for _ in range(3)]
         i_nodeid = [Signal(nodeidsize) for _ in range(3)]
         i_init = [Signal() for _ in range(3)]
         i_notend = [Signal() for _ in range(3)]
@@ -79,6 +82,7 @@ class ApplyKernel(Module):
             i_nrecvd[0].eq(self.state_in.nrecvd + 1),
             i_nneighbors[0].eq(self.state_in.nneighbors),
             i_barrier[0].eq(self.barrier_in),
+            i_round[0].eq(self.level_in[0]),
             i_nodeid[0].eq(self.nodeid_in),
             i_init[0].eq(self.level_in == 0),
             i_notend[0].eq(self.level_in < 30)
@@ -89,6 +93,8 @@ class ApplyKernel(Module):
         ] + [
             i_barrier[i].eq(i_barrier[i-1]) for i in range(1,3)
         ] + [
+            i_round[i].eq(i_round[i-1]) for i in range(1,3)
+        ] + [
             i_nodeid[i].eq(i_nodeid[i-1]) for i in range(1,3)
         ] + [
             i_init[i].eq(i_init[i-1]) for i in range(1,3)
@@ -98,6 +104,7 @@ class ApplyKernel(Module):
             n_nrecvd.eq(i_nrecvd[-1]),
             n_nneighbors.eq(i_nneighbors[-1]),
             n_barrier.eq(i_barrier[-1]),
+            n_round.eq(i_round[-1]),
             n_nodeid.eq(i_nodeid[-1]),
             n_allrecvd.eq(i_nrecvd[-1] == i_nneighbors[-1]),
             n_init.eq(i_init[-1]),
@@ -160,19 +167,24 @@ class ApplyKernel(Module):
 
         m_sender = [Signal(nodeidsize) for _ in range(10)]
         m_barrier = [Signal() for _ in range(10)]
+        m_round = [Signal() for _ in range(10)]
 
         self.sync += If(p2_ce, [
             m_sender[0].eq(n_nodeid),
-            m_barrier[0].eq(n_barrier)
+            m_barrier[0].eq(n_barrier),
+            m_round[0].eq(n_round)
         ] + [
             m_sender[i].eq(m_sender[i-1]) for i in range(1,10)
         ] + [
             m_barrier[i].eq(m_barrier[i-1]) for i in range(1,10)
+        ] + [
+            m_round[i].eq(m_round[i-1]) for i in range(1,10)
         ])
 
         self.comb += [
             self.barrier_out.eq(m_barrier[-1]),
-            self.message_sender.eq(m_sender[-1])
+            self.message_sender.eq(m_sender[-1]),
+            self.message_round.eq(m_round[-1])
         ]
 
     def gen_selfcheck(self, tb, quiet=False):
@@ -190,8 +202,8 @@ class ApplyKernel(Module):
             if (yield self.state_barrier):
                 assert(not (yield self.state_valid))
                 state_level += 1
-                if not quiet:
-                    print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
+                # if not quiet:
+                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
                 if state_level < 30:
                     for node in range(num_nodes_per_pe):
                         data = (yield tb.apply[pe_id].mem[node])

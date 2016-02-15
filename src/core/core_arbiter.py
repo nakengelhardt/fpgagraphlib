@@ -67,10 +67,14 @@ class Arbiter(Module):
         num_cycles = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.outfifo.din.barrier) and (yield self.outfifo.we):
-                level += 1
-                if not (yield self.start_message.select):
-                    for fifo in self.fifos:
-                        if not ((yield fifo.dout.barrier) and (yield fifo.readable) and (yield fifo.re)):
-                            print("{}\tWarning: barrier passed and not withdrawn correctly from fifo {}".format(num_cycles, self.fifos.index(fifo)))
+            if (yield self.outfifo.writable) and (yield self.outfifo.we):
+                if (yield self.outfifo.din.barrier):
+                    level += 1
+                    if not (yield self.start_message.select):
+                        for fifo in self.fifos:
+                            if not ((yield fifo.dout.barrier) and (yield fifo.readable) and (yield fifo.re)):
+                                print("{}\tWarning: barrier passed and not withdrawn correctly from fifo {}".format(num_cycles, self.fifos.index(fifo)))
+                else:
+                    if level % 2 == (yield self.outfifo.din.roundpar):
+                        print("{}\tWarning: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.outfifo.din.roundpar), level))
             yield

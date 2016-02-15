@@ -24,6 +24,7 @@ class ApplyKernel(Module):
         self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.message_sender = Signal(nodeidsize)
         self.message_valid = Signal()
+        self.message_round = Signal()
         self.barrier_out = Signal()
         self.message_ack = Signal()
 
@@ -46,6 +47,7 @@ class ApplyKernel(Module):
             self.nodeid_out.eq(self.nodeid_in),
             self.message_out.parent.eq(self.nodeid_in),
             self.message_sender.eq(self.nodeid_in),
+            self.message_round.eq(self.level_in[0]),
             self.message_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.message_in.parent != 0)),
             self.barrier_out.eq(self.barrier_in),
             self.state_barrier.eq(self.barrier_in),
