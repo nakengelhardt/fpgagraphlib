@@ -66,8 +66,11 @@ class Apply(Module):
         self.inactive = Signal()
         prev_was_barrier = Signal()
         prev_prev_was_barrier = Signal()
-        self.sync += If(self.apply_interface.valid & self.apply_interface.ack, prev_was_barrier.eq(self.apply_interface.msg.barrier))
-        self.sync += If(self.apply_interface.valid & self.apply_interface.ack, prev_prev_was_barrier.eq(prev_was_barrier))
+        self.sync += \
+            If(self.apply_interface.valid & self.apply_interface.ack,
+                prev_was_barrier.eq(self.apply_interface.msg.barrier),
+                prev_prev_was_barrier.eq(prev_was_barrier)
+            )
         self.comb += self.inactive.eq(prev_was_barrier & prev_prev_was_barrier)
 
         ## Stage 1

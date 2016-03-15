@@ -29,7 +29,7 @@ class Top(Module):
         
         start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
         layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_tuple_to_int((0, 1, dest_id, 0, payload), layout) for dest_id, payload in init_message] for init_message in config.init_messages]
+        initdata = [[convert_record_tuple_to_int((0, 1, msg['dest_id'], msg['sender'], msg['payload']), layout) for msg in init_message] for init_message in config.init_messages]
         for i in initdata:
             i.append(convert_record_tuple_to_int((1, 1, 0, 0, 0), layout))
         initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]

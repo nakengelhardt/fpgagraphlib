@@ -41,14 +41,13 @@ class ApplyKernel(Module):
             If(visited,
                 self.state_out.parent.eq(self.state_in.parent)
             ).Else(
-                self.state_out.parent.eq(self.message_in.parent)
+                self.state_out.parent.eq(self.sender_in)
             ),
             self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
-            self.message_out.parent.eq(self.nodeid_in),
             self.message_sender.eq(self.nodeid_in),
             self.message_round.eq(self.level_in[0]),
-            self.message_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.message_in.parent != 0)),
+            self.message_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.sender_in != 0)),
             self.barrier_out.eq(self.barrier_in),
             self.state_barrier.eq(self.barrier_in),
             self.ready.eq(self.message_ack)

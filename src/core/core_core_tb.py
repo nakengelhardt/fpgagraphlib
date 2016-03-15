@@ -69,9 +69,10 @@ class Core(Module):
             for i in range(num_pe):
                 if (yield start_message[i].ack):
                     if init_messages[i]:
-                        node, message = init_messages[i].pop()
-                        yield start_message[i].msg.dest_id.eq(node)
-                        yield start_message[i].msg.payload.eq(message)
+                        message = init_messages[i].pop()
+                        yield start_message[i].msg.dest_id.eq(message['dest_id'])
+                        yield start_message[i].msg.sender.eq(message['sender'])
+                        yield start_message[i].msg.payload.eq(message['payload'])
                         yield start_message[i].msg.barrier.eq(0)
                         yield start_message[i].valid.eq(1)
                     else:

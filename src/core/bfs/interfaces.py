@@ -7,7 +7,6 @@ from migen.genlib.record import *
 ## message payload format (user-defined)
 
 payload_layout = [
-    ( "parent", "nodeidsize", DIR_M_TO_S )
 ]
 
 ### Memory Interfaces ###

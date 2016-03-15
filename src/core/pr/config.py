@@ -14,35 +14,37 @@ class Config:
     def __init__(self, adj_dict, quiet=False):
         self.name = "pr"
         
-        nodeidsize = 16
-        num_nodes_per_pe = 2**5
-        edgeidsize = 16
-        max_edges_per_pe = 2**8
-        peidsize = 3
-        num_pe = 1
+        # nodeidsize = 16
+        # num_nodes_per_pe = 2**11
+        # edgeidsize = 16
+        # max_edges_per_pe = 2**13
+        # num_pe = 16
+        # peidsize = log2_int(num_pe)
         pe_groups = 4
-        inter_pe_delay = 256
+        inter_pe_delay = 0
         
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
         # edgeidsize = 16
         # max_edges_per_pe = 2**14
-        # peidsize = 5
         # num_pe = 32
+        # peidsize = log2_int(num_pe)
 
         # nodeidsize = 16
         # num_nodes_per_pe = 2**8
         # edgeidsize = 16
         # max_edges_per_pe = 2**12
-        # peidsize = 5
         # num_pe = 8
+        # peidsize = log2_int(num_pe)
 
-        # nodeidsize = 8
-        # num_nodes_per_pe = 2**4
-        # edgeidsize = 16
-        # max_edges_per_pe = 2**6
-        # peidsize = 1
-        # num_pe = 1
+        nodeidsize = 8
+        num_nodes_per_pe = 2**6
+        edgeidsize = 8
+        max_edges_per_pe = 2**8
+        peidsize = 1
+        num_pe = 2
+
+        assert(num_pe * num_nodes_per_pe > len(adj_dict))
 
         floatsize = 32
         payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))
@@ -67,7 +69,7 @@ class Config:
         init_messages = [list() for _ in range(num_pe)]
         for node in self.adj_dict:
             pe = node >> log2_int(num_nodes_per_pe)
-            init_messages[pe].append((node, self.addresslayout.const_base))
+            init_messages[pe].append(({'dest_id':node, 'sender':0, 'payload':self.addresslayout.const_base}))
 
         self.init_messages = init_messages
 

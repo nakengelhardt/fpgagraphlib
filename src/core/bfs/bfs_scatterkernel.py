@@ -28,7 +28,6 @@ class ScatterKernel(Module):
         ####
 
         self.comb += [
-            self.message_out.parent.eq(self.message_in.parent),
             self.neighbor_out.eq(self.neighbor_in),
             self.sender_out.eq(self.sender_in),
             self.round_out.eq(self.round_in),
