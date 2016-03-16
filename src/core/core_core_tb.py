@@ -73,6 +73,7 @@ class Core(Module):
                         yield start_message[i].msg.dest_id.eq(message['dest_id'])
                         yield start_message[i].msg.sender.eq(message['sender'])
                         yield start_message[i].msg.payload.eq(message['payload'])
+                        yield start_message[i].msg.roundpar.eq(1)
                         yield start_message[i].msg.barrier.eq(0)
                         yield start_message[i].valid.eq(1)
                     else:

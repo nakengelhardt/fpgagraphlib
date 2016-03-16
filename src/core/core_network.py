@@ -50,6 +50,7 @@ class Network(Module):
 
             self.comb+= If(have_barrier,
                             [array_barrier[i].eq(1) for i in range(num_pe)],
+                            [array_roundpar[i].eq(self.network_interface[source].msg.roundpar) for i in range(num_pe)],
                             [array_we[i].eq(~barrier_ack[i]) for i in range(num_pe)],
                             self.network_interface[source].ack.eq(barrier_done)
                         ).Else(
