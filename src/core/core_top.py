@@ -1,5 +1,8 @@
 from migen import *
 from tbsupport import *
+import migen.build.xilinx.common
+from migen.genlib.resetsync import AsyncResetSynchronizer
+
 
 from functools import reduce
 from operator import or_
@@ -17,11 +20,11 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from bfs.config import Config
+from pr.config import Config
 
 
 class Top(Module):
-    def __init__(self, config, tx):
+    def __init__(self, config, rx, tx):
         self.config = config
         num_pe = config.addresslayout.num_pe
         
@@ -43,7 +46,7 @@ class Top(Module):
 
         init = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
+        self.cycle_count = Signal(64)
         self.comb += [
             init.eq(reduce(or_, [i.readable for i in initfifos])),
             self.done.eq(~init & self.core.global_inactive)
@@ -67,49 +70,74 @@ class Top(Module):
 
         fsm = FSM()
         self.submodules += fsm
-        fsm.act("WAIT",
-            If(self.done,
-               NextState("SEND_RES_START")
+
+        rlen = Signal(32)
+        rcount = Signal(32)
+        fsm.act("IDLE",
+            NextValue(rcount, 0),
+            NextValue(rlen, rx.len),
+            If(rx.start,
+                NextState("RECEIVE")
             )
         )
-        fsm.act("SEND_RES_START",
-            tx.start.eq(1),
-            tx.len.eq(1),
-            tx.last.eq(1),
-            tx.off.eq(0),
-            If(tx.ack,
-               NextState("SEND_RES")
+        fsm.act("RECEIVE",
+            rx.ack.eq(1),
+            If(rx.data_valid,
+                rx.data_ren.eq(1),
+                NextValue(rcount, rcount + 4),
+                If(rcount + 4 >= rlen,
+                    NextState("TRANSMIT")
+                )
             )
         )
-        fsm.act("SEND_RES",
+        fsm.act("TRANSMIT",
             tx.start.eq(1),
-            tx.len.eq(1),
-            tx.last.eq(1),
-            tx.off.eq(0),
-            tx.data.eq(self.cycle_count),
+            tx.len.eq(4),
             tx.data_valid.eq(1),
+            tx.last.eq(1),
             If(tx.data_ren,
-               NextState("WAIT")
+                NextState("IDLE")
             )
         )
-
-
+        self.comb += [
+            tx.data.eq(Cat(self.cycle_count, self.done))
+        ]
 
 class WrappedTop(riffa.GenericRiffa):
     def __init__(self, config, combined_interface_rx, combined_interface_tx, c_pci_data_width=128):
         riffa.GenericRiffa.__init__(self, combined_interface_rx=combined_interface_rx, combined_interface_tx=combined_interface_tx, c_pci_data_width=c_pci_data_width)
         rx, tx = self.get_channel(0)
-        self.submodules.top = Top(config=config, tx=tx)
+        self.submodules.top = Top(config=config, rx=rx, tx=tx)
         self.ext_clk = Signal()
         self.ext_rst = Signal()
-        rst1 = Signal()
+        pll_locked = Signal()
+        pll_fb = Signal()
+        pll_sys = Signal()
         self.specials += [
-            Instance("FDPE", p_INIT=1, i_D=0, i_PRE=self.ext_rst,
-                i_CE=1, i_C=self.cd_sys.clk, o_Q=rst1),
-            Instance("FDPE", p_INIT=1, i_D=rst1, i_PRE=self.ext_rst,
-                i_CE=1, i_C=self.cd_sys.clk, o_Q=self.cd_sys.rst)
+            Instance("PLLE2_BASE",
+                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
+
+                     # VCO @ 1GHz
+                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=4.0,
+                     p_CLKFBOUT_MULT=4, p_DIVCLK_DIVIDE=1,
+                     i_CLKIN1=self.ext_clk, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
+
+                     # 125MHz
+                     p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
+
+                     # 500MHz
+                     p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0, #o_CLKOUT1=pll_sys4x,
+
+                     # 200MHz
+                     p_CLKOUT2_DIVIDE=5, p_CLKOUT2_PHASE=0.0, #o_CLKOUT2=pll_clk200,
+
+                     p_CLKOUT3_DIVIDE=2, p_CLKOUT3_PHASE=0.0, #o_CLKOUT3=,
+
+                     p_CLKOUT4_DIVIDE=4, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
+            ),
+            Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
+            AsyncResetSynchronizer(self.cd_sys, self.ext_rst | ~pll_locked)
         ]
-        self.comb += self.cd_sys.clk.eq(self.ext_clk)
 
 def export(config, filename='top.v'):
     c_pci_data_width = 128
@@ -132,11 +160,14 @@ def export(config, filename='top.v'):
     combined_interface_tx.start.name_override="chnl_tx"
     m.rx_clk.name_override="chnl_rx_clk"
     m.tx_clk.name_override="chnl_tx_clk"
+    so = dict(migen.build.xilinx.common.xilinx_special_overrides)
+    so.update(migen.build.xilinx.common.xilinx_s7_special_overrides)
     verilog.convert(m, 
                     name="top", 
                     ios=( { getattr(combined_interface_rx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} 
                         | {getattr(combined_interface_tx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} 
-                        | {m.rx_clk, m.tx_clk, m.ext_clk, m.ext_rst}) 
+                        | {m.rx_clk, m.tx_clk, m.ext_clk, m.ext_rst}),
+                    special_overrides=so
                     ).write(filename)
 
 
