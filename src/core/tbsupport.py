@@ -21,12 +21,14 @@ def convert_32b_int_to_float(i):
 
 def convert_int_to_record(n, record):
     s = bin(n)[2:]
-    total_length = sum([length for _, length in record])
+    total_length = sum([field[1] for field in record])
     if len(s) < total_length:
         s = '0'*(total_length-len(s)) + s
     res = {}
     curr_idx = 0
-    for attr, length in record[::-1]:
+    for field in record[::-1]:
+        attr = field[0]
+        length = field[1]
         res[attr] = int(s[curr_idx:curr_idx+length], 2)
         curr_idx += length
     return res
