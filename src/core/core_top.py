@@ -20,7 +20,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from pr.config import Config
+from cc.config import Config
 
 
 class Top(Module):
@@ -76,7 +76,7 @@ class Top(Module):
         fsm.act("IDLE",
             NextValue(rcount, 0),
             NextValue(rlen, rx.len),
-            If(rx.start,
+            If(self.done & rx.start,
                 NextState("RECEIVE")
             )
         )
@@ -172,9 +172,11 @@ def export(config, filename='top.v'):
 
 
 def sim(config):
+    rx = riffa.Interface(data_width=128, num_chnls=1)
     tx = riffa.Interface(data_width=128, num_chnls=1)
-    tb = Top(config, tx)
+    tb = Top(config, rx, tx)
     generators = []
+    generators.extend([riffa.gen_channel_write(rx, [1])])
     generators.extend([riffa.gen_channel_read(tx)])
     
     generators.extend([tb.core.gen_barrier_monitor()])
