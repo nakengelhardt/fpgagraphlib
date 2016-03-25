@@ -2,7 +2,6 @@ from migen import *
 from migen.genlib.record import *
 
 from bfs.interfaces import payload_layout
-from fidiv import FloatIntDivider
 
 
 class ScatterKernel(Module):

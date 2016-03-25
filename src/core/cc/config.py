@@ -2,8 +2,8 @@ from migen import *
 
 from core_address import AddressLayout
 from cc.interfaces import node_storage_layout
-from cc.cc_applykernel import ApplyKernel
-from cc.cc_scatterkernel import ScatterKernel
+from cc.applykernel import ApplyKernel
+from cc.scatterkernel import ScatterKernel
 
 class Config:
     def __init__(self, adj_dict, quiet=True):
