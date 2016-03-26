@@ -40,7 +40,7 @@ class Scatter(Module):
 
         # val: array of nodeids
         # resides in submodule
-        self.submodules.get_neighbors = Neighbors(addresslayout, adj_val)
+        self.submodules.get_neighbors = Neighbors(config, adj_val)
 
 
         # flow control variables
@@ -103,6 +103,9 @@ class Scatter(Module):
             self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_valid),
             self.get_neighbors.neighbor_ack.eq(self.scatterkernel.ready)
         ]
+
+        if config.has_edgedata:
+            self.comb += self.scatterkernel.edgedata_in.raw_bits().eq(self.get_neighbors.edgedata_out)
 
         # find destination PE
         if num_pe > 1:

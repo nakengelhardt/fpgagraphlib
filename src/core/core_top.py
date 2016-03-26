@@ -20,7 +20,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from cc.config import Config
+from sssp.config import Config
 
 
 class Top(Module):
@@ -179,14 +179,15 @@ def sim(config):
     generators.extend([riffa.gen_channel_write(rx, [1])])
     generators.extend([riffa.gen_channel_read(tx)])
     
-    generators.extend([tb.core.gen_barrier_monitor()])
+    # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
-    generators.extend([a.gen_selfcheck(tb.core , quiet=True) for a in tb.core.network.arbiter])
-    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=True) for a in tb.core.apply])
+    # generators.extend([a.gen_selfcheck(tb.core, quiet=True) for a in tb.core.network.arbiter])
+    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
+    generators.extend([a.scatterkernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.scatter])
     
-    generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
-    generators.extend([tb.core.gen_network_stats()])
-    run_simulation(tb, generators, vcd_name="tb.vcd")
+    # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
+    # generators.extend([tb.core.gen_network_stats()])
+    run_simulation(tb, generators)#, vcd_name="tb.vcd")
 
 
 def main():

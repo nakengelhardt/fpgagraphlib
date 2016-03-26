@@ -1,13 +1,14 @@
 from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
+import random
 
 class Neighbors(Module):
-    def __init__(self, addresslayout, adj_val):
-        nodeidsize = addresslayout.nodeidsize
-        num_nodes_per_pe = addresslayout.num_nodes_per_pe
-        num_pe = addresslayout.num_pe
-        edgeidsize = addresslayout.edgeidsize
-        max_edges_per_pe = addresslayout.max_edges_per_pe
+    def __init__(self, config, adj_val):
+        nodeidsize = config.addresslayout.nodeidsize
+        num_nodes_per_pe = config.addresslayout.num_nodes_per_pe
+        num_pe = config.addresslayout.num_pe
+        edgeidsize = config.addresslayout.edgeidsize
+        max_edges_per_pe = config.addresslayout.max_edges_per_pe
 
         # input
         self.start_idx = Signal(edgeidsize)
@@ -15,8 +16,8 @@ class Neighbors(Module):
         self.valid = Signal()
         self.ack = Signal()
         self.barrier_in = Signal()
-        self.message_in = Signal(addresslayout.payloadsize)
-        self.sender_in = Signal(addresslayout.nodeidsize)
+        self.message_in = Signal(config.addresslayout.payloadsize)
+        self.sender_in = Signal(config.addresslayout.nodeidsize)
         self.round_in = Signal()
 
         # output
@@ -24,18 +25,23 @@ class Neighbors(Module):
         self.neighbor_valid = Signal()
         self.neighbor_ack = Signal()
         self.barrier_out = Signal()
-        self.message_out = Signal(addresslayout.payloadsize)
-        self.sender_out = Signal(addresslayout.nodeidsize)
+        self.message_out = Signal(config.addresslayout.payloadsize)
+        self.sender_out = Signal(config.addresslayout.nodeidsize)
         self.round_out = Signal()
         self.num_neighbors_out = Signal(edgeidsize)
+        if config.has_edgedata:
+            self.edgedata_out = Signal(config.addresslayout.edgedatasize)
         ###
 
         # adjacency list storage (second half of CSR storage, index comes from input)
         # val: array of nodeids
         self.specials.mem_val = Memory(nodeidsize, max_edges_per_pe, init=adj_val)
         self.specials.rd_port_val = rd_port_val = self.mem_val.get_port(has_re=True)
-        self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
+        # self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
 
+        if config.has_edgedata:
+            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, max_edges_per_pe, init=[random.randrange(1,10) for _ in range(max_edges_per_pe)])
+            self.specials.rd_port_edge = rd_port_edge = self.mem_edge.get_port(has_re=True)
 
         next_node_idx = Signal(edgeidsize)
         end_node_idx = Signal(edgeidsize)
@@ -48,6 +54,8 @@ class Neighbors(Module):
             self.ack.eq(1),
             rd_port_val.adr.eq(self.start_idx),
             rd_port_val.re.eq(1),
+            rd_port_edge.adr.eq(self.start_idx),
+            rd_port_edge.re.eq(1),
             NextValue(self.message_out, self.message_in),
             NextValue(self.sender_out, self.sender_in),
             NextValue(self.round_out, self.round_in),
@@ -64,8 +72,10 @@ class Neighbors(Module):
         fsm.act("GET_NEIGHBORS", # iterate over neighbors
             self.neighbor_valid.eq(1),
             rd_port_val.adr.eq(next_node_idx),
+            rd_port_edge.adr.eq(next_node_idx),
             If(self.neighbor_ack,
                 rd_port_val.re.eq(1),
+                rd_port_edge.re.eq(1),
                 If(next_node_idx == end_node_idx,
                     NextState("IDLE")
                 ).Else(
@@ -82,7 +92,8 @@ class Neighbors(Module):
 
         # data path
         self.comb += [
-            self.neighbor.eq(rd_port_val.dat_r)
+            self.neighbor.eq(rd_port_val.dat_r),
+            self.edgedata_out.eq(rd_port_edge.dat_r)
         ]
 
 
@@ -101,6 +112,8 @@ class Neighbors(Module):
                 neighbor = (yield self.neighbor)
                 if not quiet:
                     print("{}\tMessage from node {} for node {}".format(num_cycles, curr_sender, neighbor))
+                    if tb.config.has_edgedata:
+                        print("Edgedata: " + str((yield self.edgedata_out)))
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
                         print("{}\tWarning: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
@@ -119,13 +132,3 @@ class Neighbors(Module):
                     to_be_sent = list(graph[curr_sender])
             yield
         print("{} memory reads.".format(num_mem_reads))
-
-if __name__ == "__main__":
-    from migen.fhdl import verilog
-    from pr.config import config
-    
-    addresslayout = config()
-
-    m = Neighbors(addresslayout, None)
-
-    print(verilog.convert(m))
