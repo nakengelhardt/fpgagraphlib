@@ -5,6 +5,8 @@ from sssp.interfaces import node_storage_layout
 from sssp.applykernel import ApplyKernel
 from sssp.scatterkernel import ScatterKernel
 
+import random
+
 class Config:
     def __init__(self, adj_dict, quiet=True):
         self.name = "sssp"
@@ -58,6 +60,9 @@ class Config:
 
 
         self.adj_dict = adj_dict
+        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+        self.adj_idx = adj_idx
+        self.adj_val = adj_val
 
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
@@ -66,7 +71,7 @@ class Config:
         
         self.has_edgedata = True
 
-        # self.init_edgedata = 
+        self.init_edgedata = [[random.randrange(1,10) for _ in range(max_edges_per_pe)] for _ in range(num_pe)]
 
         self.init_messages = [list() for _ in range(num_pe)]
         self.init_messages[0].append({'dest_id':1, 'sender':1, 'payload':0})

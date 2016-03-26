@@ -28,16 +28,16 @@ class Core(Module):
         num_pe = self.addresslayout.num_pe
         num_nodes_per_pe = self.addresslayout.num_nodes_per_pe
 
-        self.adj_dict = config.adj_dict
-        num_nodes = len(self.adj_dict)
-        self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
+        num_nodes = len(config.adj_dict)
 
-        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
-        init_nodedata = self.config.init_nodedata
+        if config.has_edgedata:
+            init_edgedata = config.init_edgedata
+        else:
+            init_edgedata = [None for _ in range(num_pe)]
 
         self.submodules.network = Network(config)
-        self.submodules.apply = [Apply(config, init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if init_nodedata else None)  for i in range(num_pe)]
-        self.submodules.scatter = [Scatter(config, adj_mat=(adj_idx[i], adj_val[i])) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, config.init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if config.init_nodedata else None)  for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]

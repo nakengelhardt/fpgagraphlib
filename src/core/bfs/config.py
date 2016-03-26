@@ -56,6 +56,11 @@ class Config:
         self.addresslayout.inter_pe_delay = inter_pe_delay
 
         self.adj_dict = adj_dict
+        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+        self.adj_idx = adj_idx
+        self.adj_val = adj_val
+
+        self.has_edgedata = False
 
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel

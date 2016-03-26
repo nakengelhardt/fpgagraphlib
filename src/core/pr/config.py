@@ -20,7 +20,7 @@ class Config:
         # max_edges_per_pe = 2**13
         # num_pe = 16
         # peidsize = log2_int(num_pe)
-        pe_groups = 4
+        pe_groups = 2
         inter_pe_delay = 0
         
         # nodeidsize = 16
@@ -39,8 +39,8 @@ class Config:
 
         nodeidsize = 8
         num_nodes_per_pe = 2**6
-        edgeidsize = 8
-        max_edges_per_pe = 2**8
+        edgeidsize = 16
+        max_edges_per_pe = 2**9
         peidsize = 1
         num_pe = 2
 
@@ -63,8 +63,13 @@ class Config:
         self.scatterkernel = ScatterKernel
 
         self.adj_dict = adj_dict
+        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+        self.adj_idx = adj_idx
+        self.adj_val = adj_val
 
         self.init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, num_pe*num_nodes_per_pe)]
+
+        self.has_edgedata = False
 
         init_messages = [list() for _ in range(num_pe)]
         for node in self.adj_dict:

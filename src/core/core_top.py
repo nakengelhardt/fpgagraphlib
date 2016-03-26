@@ -20,7 +20,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from sssp.config import Config
+from bfs.config import Config
 
 
 class Top(Module):
@@ -183,7 +183,7 @@ def sim(config):
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
     # generators.extend([a.gen_selfcheck(tb.core, quiet=True) for a in tb.core.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
-    generators.extend([a.scatterkernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.scatter])
+    # generators.extend([a.scatterkernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.scatter])
     
     # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
     # generators.extend([tb.core.gen_network_stats()])

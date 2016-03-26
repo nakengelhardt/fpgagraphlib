@@ -6,7 +6,7 @@ from core_neighbors import Neighbors
 from core_address import AddressLayout
 
 class Scatter(Module):
-    def __init__(self, config, adj_mat=None):
+    def __init__(self, config, adj_mat=None, edge_data=None):
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
@@ -40,7 +40,7 @@ class Scatter(Module):
 
         # val: array of nodeids
         # resides in submodule
-        self.submodules.get_neighbors = Neighbors(config, adj_val)
+        self.submodules.get_neighbors = Neighbors(config, adj_val, edge_data=edge_data)
 
 
         # flow control variables

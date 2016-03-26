@@ -1,9 +1,8 @@
 from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
-import random
 
 class Neighbors(Module):
-    def __init__(self, config, adj_val):
+    def __init__(self, config, adj_val, edge_data=None):
         nodeidsize = config.addresslayout.nodeidsize
         num_nodes_per_pe = config.addresslayout.num_nodes_per_pe
         num_pe = config.addresslayout.num_pe
@@ -40,7 +39,7 @@ class Neighbors(Module):
         # self.specials.wr_port_val = wr_port_val = self.mem_val.get_port(write_capable=True)
 
         if config.has_edgedata:
-            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, max_edges_per_pe, init=[random.randrange(1,10) for _ in range(max_edges_per_pe)])
+            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, max_edges_per_pe, init=edge_data)
             self.specials.rd_port_edge = rd_port_edge = self.mem_edge.get_port(has_re=True)
 
         next_node_idx = Signal(edgeidsize)
@@ -54,8 +53,8 @@ class Neighbors(Module):
             self.ack.eq(1),
             rd_port_val.adr.eq(self.start_idx),
             rd_port_val.re.eq(1),
-            rd_port_edge.adr.eq(self.start_idx),
-            rd_port_edge.re.eq(1),
+            rd_port_edge.adr.eq(self.start_idx) if config.has_edgedata else [],
+            rd_port_edge.re.eq(1) if config.has_edgedata else [],
             NextValue(self.message_out, self.message_in),
             NextValue(self.sender_out, self.sender_in),
             NextValue(self.round_out, self.round_in),
@@ -72,10 +71,10 @@ class Neighbors(Module):
         fsm.act("GET_NEIGHBORS", # iterate over neighbors
             self.neighbor_valid.eq(1),
             rd_port_val.adr.eq(next_node_idx),
-            rd_port_edge.adr.eq(next_node_idx),
+            rd_port_edge.adr.eq(next_node_idx) if config.has_edgedata else [],
             If(self.neighbor_ack,
                 rd_port_val.re.eq(1),
-                rd_port_edge.re.eq(1),
+                rd_port_edge.re.eq(1) if config.has_edgedata else [],
                 If(next_node_idx == end_node_idx,
                     NextState("IDLE")
                 ).Else(
@@ -93,7 +92,7 @@ class Neighbors(Module):
         # data path
         self.comb += [
             self.neighbor.eq(rd_port_val.dat_r),
-            self.edgedata_out.eq(rd_port_edge.dat_r)
+            self.edgedata_out.eq(rd_port_edge.dat_r) if config.has_edgedata else []
         ]
 
 
