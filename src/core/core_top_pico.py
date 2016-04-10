@@ -8,7 +8,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from functools import reduce
 from operator import or_
 
-import riffa
+import pico
 
 # import unittest
 import random
@@ -23,21 +23,10 @@ from core_interfaces import Message
 
 from bfs.config import Config
 
-_layout = [
-    ("valid", 1, DIR_M_TO_S),
-    ("rdy", 1, DIR_S_TO_M),
-    ("data", "data_width", DIR_M_TO_S)
-]
-
-class PicoStreamInterface(Record):
-    def __init__(self, data_width=128):
-        Record.__init__(self, set_layout_parameters(_layout, data_width=data_width))
-
 class Top(Module):
     def __init__(self, config, rx, tx):
         self.config = config
         num_pe = config.addresslayout.num_pe
-        self.clock_domains.cd_sys = ClockDomain()
 
         self.submodules.core = Core(config)
 
@@ -83,8 +72,8 @@ class Top(Module):
         self.submodules += fsm
 
         fsm.act("IDLE",
-            rx.rdy.eq(1),
-            If(rx.valid,
+            rx.rdy.eq(self.done),
+            If(rx.rdy & rx.valid,
                 NextState("RECEIVE")
             )
         )
@@ -104,18 +93,19 @@ class Top(Module):
 def export(config, filename='StreamLoopback128_migen.v'):
     data_width = 128
     num_chnls = 2
-    rx = [PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
-    tx = [PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
+    rx = [pico.PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
+    tx = [pico.PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
 
     m = Top(config, rx[0], tx[0])
     m.comb += [
         rx[1].connect(tx[1])
     ]
 
+    m.clock_domains.cd_sys = ClockDomain()
     m.cd_sys.clk.name_override = "clk"
     m.cd_sys.rst.name_override = "rst"
     for i in range(num_chnls):
-        for name in "valid", "rdy", "data":
+        for name in [x[0] for x in pico._stream_layout]:
             getattr(rx[i], name).name_override="s{}i_{}".format(i+1, name)
             getattr(tx[i], name).name_override="s{}o_{}".format(i+1, name)
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
@@ -128,11 +118,12 @@ def export(config, filename='StreamLoopback128_migen.v'):
                     ).write(filename)
 
 def sim(config):
-    rx = PicoStreamInterface(data_width=128)
-    tx = PicoStreamInterface(data_width=128)
+    rx = pico.PicoStreamInterface(data_width=128)
+    tx = pico.PicoStreamInterface(data_width=128)
     tb = Top(config, rx, tx)
     generators = []
-    #TODO: pico helper generators
+    generators.extend([pico.gen_channel_write(rx, [1])])
+    generators.extend([pico.gen_channel_read(tx, 4)])
 
     # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
@@ -142,7 +133,7 @@ def sim(config):
 
     # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
     # generators.extend([tb.core.gen_network_stats()])
-    run_simulation(tb, generators)#, vcd_name="tb.vcd")
+    run_simulation(tb, generators, vcd_name="tb.vcd")
 
 
 def main():
