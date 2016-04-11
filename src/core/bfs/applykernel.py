@@ -21,12 +21,12 @@ class ApplyKernel(Module):
         self.state_valid = Signal()
         self.state_barrier = Signal()
 
-        self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-        self.message_sender = Signal(nodeidsize)
-        self.message_valid = Signal()
-        self.message_round = Signal()
+        self.update_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_sender = Signal(nodeidsize)
+        self.update_valid = Signal()
+        self.update_round = Signal()
         self.barrier_out = Signal()
-        self.message_ack = Signal()
+        self.update_ack = Signal()
 
         ###
 
@@ -45,12 +45,12 @@ class ApplyKernel(Module):
             ),
             self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
-            self.message_sender.eq(self.nodeid_in),
-            self.message_round.eq(self.level_in[0]),
-            self.message_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.sender_in != 0)),
+            self.update_sender.eq(self.nodeid_in),
+            self.update_round.eq(self.level_in[0]),
+            self.update_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.sender_in != 0)),
             self.barrier_out.eq(self.barrier_in),
             self.state_barrier.eq(self.barrier_in),
-            self.ready.eq(self.message_ack)
+            self.ready.eq(self.update_ack)
         ]
 
     def gen_selfcheck(self, tb, quiet=False):
@@ -62,11 +62,11 @@ class ApplyKernel(Module):
         num_messages_out = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.barrier_out) and (yield self.message_ack):
+            if (yield self.barrier_out) and (yield self.update_ack):
                 level += 1
             if (yield self.valid_in) and (yield self.ready):
                 num_messages_in += 1
-            if (yield self.message_valid) and (yield self.message_ack):
+            if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 if not quiet:
                     print("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))

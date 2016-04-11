@@ -17,7 +17,7 @@ class Network(Module):
 
         fifos = [[RecordFIFO(layout=Message(**config.addresslayout.get_params()).layout,
                              depth=8,
-                             delay=config.addresslayout.inter_pe_delay #(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
+                             delay=(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
                              ) for i in range(num_pe)] for j in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]

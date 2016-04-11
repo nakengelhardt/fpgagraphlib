@@ -94,7 +94,7 @@ class Scatter(Module):
         self.submodules.scatterkernel = config.scatterkernel(config.addresslayout)
 
         self.comb += [
-            self.scatterkernel.message_in.raw_bits().eq(self.get_neighbors.message_out),
+            self.scatterkernel.update_in.raw_bits().eq(self.get_neighbors.message_out),
             self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.num_neighbors_out),
             self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor),
             self.scatterkernel.sender_in.eq(self.get_neighbors.sender_out),

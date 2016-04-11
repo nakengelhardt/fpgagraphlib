@@ -7,7 +7,7 @@ from bfs.interfaces import payload_layout
 class ScatterKernel(Module):
     def __init__(self, addresslayout):
 
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.num_neighbors_in = Signal(addresslayout.edgeidsize)
         self.neighbor_in = Signal(addresslayout.nodeidsize)
         self.sender_in = Signal(addresslayout.nodeidsize)

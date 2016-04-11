@@ -147,13 +147,13 @@ class Apply(Module):
             self.applykernel.valid_in.eq(valid2),
             self.applykernel.barrier_in.eq(barrier2),
             self.applykernel.level_in.eq(self.level),
-            self.applykernel.message_ack.eq(downstream_ack),
+            self.applykernel.update_ack.eq(downstream_ack),
             ready.eq(self.applykernel.ready),
             upstream_ack.eq(self.applykernel.ready & collision_re)
         ]
 
 
-        # if yes write parent value
+        # write state updates
         self.comb += [
             wr_port.adr.eq(addresslayout.local_adr(self.applykernel.nodeid_out)),
             wr_port.dat_w.eq(self.applykernel.state_out.raw_bits()),
@@ -175,10 +175,10 @@ class Apply(Module):
         self.comb += downstream_ack.eq(self.outfifo.writable)
 
         self.comb += [
-            self.outfifo.we.eq(self.applykernel.message_valid | self.applykernel.barrier_out),
-            self.outfifo.din.msg.eq(self.applykernel.message_out.raw_bits()),
-            self.outfifo.din.sender.eq(self.applykernel.message_sender),
-            self.outfifo.din.roundpar.eq(self.applykernel.message_round),
+            self.outfifo.we.eq(self.applykernel.update_valid | self.applykernel.barrier_out),
+            self.outfifo.din.msg.eq(self.applykernel.update_out.raw_bits()),
+            self.outfifo.din.sender.eq(self.applykernel.update_sender),
+            self.outfifo.din.roundpar.eq(self.applykernel.update_round),
             self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
         ]
 

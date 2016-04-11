@@ -4,11 +4,16 @@ from migen.genlib.record import *
 
 ### user-defined ###
 
-## message payload format (user-defined)
+## message payload format
 
-payload_layout = [
+message_layout = [
     ("dist", "edgedatasize", DIR_M_TO_S)
 ]
+
+update_layout = [
+    ("dist", "edgedatasize", DIR_M_TO_S)
+]
+
 
 ### Memory Interfaces ###
 

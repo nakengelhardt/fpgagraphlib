@@ -8,7 +8,7 @@ from fidiv import FloatIntDivider
 class ScatterKernel(Module):
     def __init__(self, addresslayout):
 
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.num_neighbors_in = Signal(addresslayout.edgeidsize)
         self.neighbor_in = Signal(addresslayout.nodeidsize)
         self.sender_in = Signal(addresslayout.nodeidsize)
@@ -30,7 +30,7 @@ class ScatterKernel(Module):
         self.submodules.divider = FloatIntDivider()
 
         self.comb += [
-            self.divider.dividend_i.eq(self.message_in.weight),
+            self.divider.dividend_i.eq(self.update_in.weight),
             self.divider.divisor_i.eq(self.num_neighbors_in),
             self.divider.valid_i.eq(self.valid_in),
             self.message_out.weight.eq(self.divider.quotient_o),

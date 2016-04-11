@@ -20,7 +20,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from bfs.config import Config
+from pr.config import Config
 
 
 class Top(Module):
@@ -85,6 +85,9 @@ class Top(Module):
             If(rx.data_valid,
                 rx.data_ren.eq(1),
                 NextValue(rcount, rcount + 4),
+                # NextValue(self.core.apply[0].extern_rd_port.adr, rx.data),
+                # NextValue(self.core.apply[0].extern_rd_port.re, 1),
+                # NextValue(self.core.apply[0].extern_rd_port.enable, 1),
                 If(rcount + 4 >= rlen,
                     NextState("TRANSMIT")
                 )
@@ -96,11 +99,12 @@ class Top(Module):
             tx.data_valid.eq(1),
             tx.last.eq(1),
             If(tx.data_ren,
+                # NextValue(self.core.apply[0].extern_rd_port.enable, 0),
                 NextState("IDLE")
             )
         )
         self.comb += [
-            tx.data.eq(Cat(self.cycle_count, self.done))
+            tx.data.eq(Cat(self.cycle_count, self.done)) #self.core.apply[0].extern_rd_port.dat_r[-32:],
         ]
 
 class WrappedTop(riffa.GenericRiffa):
@@ -115,15 +119,15 @@ class WrappedTop(riffa.GenericRiffa):
         pll_sys = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
+                     p_STARTUP_WAIT="TRUE", o_LOCKED=pll_locked,
 
                      # VCO @ 1GHz
                      p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=4.0,
-                     p_CLKFBOUT_MULT=4, p_DIVCLK_DIVIDE=1,
+                     p_CLKFBOUT_MULT=6, p_DIVCLK_DIVIDE=1,
                      i_CLKIN1=self.ext_clk, i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
 
                      # 125MHz
-                     p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
+                     p_CLKOUT0_DIVIDE=20, p_CLKOUT0_PHASE=0.0, o_CLKOUT0=pll_sys,
 
                      # 500MHz
                      p_CLKOUT1_DIVIDE=2, p_CLKOUT1_PHASE=0.0, #o_CLKOUT1=pll_sys4x,
@@ -136,7 +140,7 @@ class WrappedTop(riffa.GenericRiffa):
                      p_CLKOUT4_DIVIDE=4, p_CLKOUT4_PHASE=0.0, #o_CLKOUT4=
             ),
             Instance("BUFG", i_I=pll_sys, o_O=self.cd_sys.clk),
-            AsyncResetSynchronizer(self.cd_sys, self.ext_rst | ~pll_locked)
+            AsyncResetSynchronizer(self.cd_sys, ~pll_locked)
         ]
 
 def export(config, filename='top.v'):
@@ -243,7 +247,7 @@ def main():
             export_graph(adj_dict, args.graphsave)
 
     # print(adj_dict)
-    config = Config(adj_dict)
+    config = Config(adj_dict, quiet=False)
 
     if args.command=='sim':
         sim(config)

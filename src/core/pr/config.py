@@ -5,8 +5,8 @@ from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float, conver
 
 from core_address import AddressLayout
 from pr.interfaces import payload_layout, node_storage_layout
-from pr.pr_applykernel import ApplyKernel
-from pr.pr_scatterkernel import ScatterKernel
+from pr.applykernel import ApplyKernel
+from pr.scatterkernel import ScatterKernel
 
 
 
@@ -14,13 +14,13 @@ class Config:
     def __init__(self, adj_dict, quiet=False):
         self.name = "pr"
         
-        # nodeidsize = 16
-        # num_nodes_per_pe = 2**11
+        # nodeidsize = 17
+        # num_nodes_per_pe = 2**12
         # edgeidsize = 16
-        # max_edges_per_pe = 2**13
-        # num_pe = 16
+        # max_edges_per_pe = 2**14
+        # num_pe = 32
         # peidsize = log2_int(num_pe)
-        pe_groups = 2
+        pe_groups = 1
         inter_pe_delay = 0
         
         # nodeidsize = 16

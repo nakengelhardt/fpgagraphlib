@@ -25,12 +25,12 @@ class ApplyKernel(Module):
         self.state_valid = Signal()
         self.state_barrier = Signal()
 
-        self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-        self.message_sender = Signal(nodeidsize)
-        self.message_valid = Signal()
-        self.message_round = Signal()
+        self.update_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_sender = Signal(nodeidsize)
+        self.update_valid = Signal()
+        self.update_round = Signal()
         self.barrier_out = Signal()
-        self.message_ack = Signal()
+        self.update_ack = Signal()
 
         
 
@@ -136,7 +136,7 @@ class ApplyKernel(Module):
         p2_ce = Signal()
 
         self.comb += p1_ce.eq(p2_ce | ~n_allrecvd)
-        self.comb += p2_ce.eq(self.message_ack)
+        self.comb += p2_ce.eq(self.update_ack)
 
         # Second part: If at end, then multiply by 0.85 and add to const_base and send as message
         # 6 + 4 cycles latency
@@ -160,8 +160,8 @@ class ApplyKernel(Module):
             self.add2.a.eq(const_base),
             self.add2.b.eq(dyn_rank),
             self.add2.valid_i.eq(dyn_rank_valid),
-            self.message_out.weight.eq(self.add2.r),
-            self.message_valid.eq(self.add2.valid_o),
+            self.update_out.weight.eq(self.add2.r),
+            self.update_valid.eq(self.add2.valid_o),
             self.add2.ce.eq(p2_ce)
         ]
 
@@ -183,8 +183,8 @@ class ApplyKernel(Module):
 
         self.comb += [
             self.barrier_out.eq(m_barrier[-1]),
-            self.message_sender.eq(m_sender[-1]),
-            self.message_round.eq(m_round[-1])
+            self.update_sender.eq(m_sender[-1]),
+            self.update_round.eq(m_round[-1])
         ]
 
     def gen_selfcheck(self, tb, quiet=False):
@@ -210,14 +210,14 @@ class ApplyKernel(Module):
                         s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
                         if s['nrecvd'] != 0:
                             print("{}\tWarning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
-            if (yield self.barrier_out) and (yield self.message_ack):
+            if (yield self.barrier_out) and (yield self.update_ack):
                 out_level += 1
-                if (yield self.message_valid):
+                if (yield self.update_valid):
                     print("{}\tWarning: valid and barrier raised simultaneously on applykernel output on PE {}".format(num_cycles, pe_id))
-            if (yield self.message_valid) and (yield self.message_ack):
+            if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 if not quiet:
-                        print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.message_sender), out_level, convert_32b_int_to_float((yield self.message_out.weight))))
+                        print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
                 if out_level >= 30:
                     print("{}\tWarning: message sent after inactivity level reached".format(num_cycles))
             if (yield self.barrier_in) and (yield self.ready):

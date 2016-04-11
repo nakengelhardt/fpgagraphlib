@@ -1,12 +1,12 @@
 from migen import *
 from migen.genlib.record import *
 
-from sssp.interfaces import payload_layout, edge_storage_layout
+from sssp.interfaces import message_layout, update_layout, edge_storage_layout
 
 class ScatterKernel(Module):
     def __init__(self, addresslayout):
 
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_in = Record(set_layout_parameters(update_layout, **addresslayout.get_params()))
         self.num_neighbors_in = Signal(addresslayout.edgeidsize)
         self.neighbor_in = Signal(addresslayout.nodeidsize)
         self.edgedata_in = Record(set_layout_parameters(edge_storage_layout, **addresslayout.get_params()))
@@ -16,7 +16,7 @@ class ScatterKernel(Module):
         self.valid_in = Signal()
         self.ready = Signal()
 
-        self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.message_out = Record(set_layout_parameters(message_layout, **addresslayout.get_params()))
         self.neighbor_out = Signal(addresslayout.nodeidsize)
         self.sender_out = Signal(addresslayout.nodeidsize)
         self.round_out = Signal()
@@ -27,7 +27,8 @@ class ScatterKernel(Module):
         ####
 
         self.sync += If(self.message_ack,
-            self.message_out.dist.eq(self.message_in.dist + self.edgedata_in.dist),
+            self.message_out.dist.eq(self.update_in.dist 
+                + self.edgedata_in.dist),
             self.neighbor_out.eq(self.neighbor_in),
             self.sender_out.eq(self.sender_in),
             self.round_out.eq(self.round_in),
