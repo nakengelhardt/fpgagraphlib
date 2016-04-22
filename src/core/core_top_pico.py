@@ -3,12 +3,13 @@ from tbsupport import *
 from migen.fhdl import verilog
 import migen.build.xilinx.common
 from migen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import *
 
 
 from functools import reduce
 from operator import or_
 
-import pico
+from pico import PicoPlatform
 
 # import unittest
 import random
@@ -28,6 +29,18 @@ class Top(Module):
         self.config = config
         num_pe = config.addresslayout.num_pe
 
+        self.clock_domains.cd_sys = ClockDomain()
+        sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
+        self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
+
+        self.clock_domains.cd_pcie = ClockDomain()
+        clk, rst = config.platform.getStreamClkRst()
+        self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
+
+        self.clock_domains.cd_pico = ClockDomain()
+        bus_clk, bus_rst = config.platform.getBusClkRst()
+        self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
+
         self.submodules.core = Core(config)
 
         start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
@@ -44,11 +57,12 @@ class Top(Module):
 
         self.submodules += initfifos
 
+        start = Signal()
         init = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(64)
+        self.cycle_count = Signal(32)
         self.comb += [
-            init.eq(reduce(or_, [i.readable for i in initfifos])),
+            init.eq(start & reduce(or_, [i.readable for i in initfifos])),
             self.done.eq(~init & self.core.global_inactive)
         ]
 
@@ -61,69 +75,71 @@ class Top(Module):
             ]
 
         self.sync += [
-            If(init,
+            If(reduce(or_, [i.readable for i in initfifos]),
                 self.cycle_count.eq(0)
             ).Elif(~self.core.global_inactive,
                 self.cycle_count.eq(self.cycle_count + 1)
             )
         ]
 
-        fsm = FSM()
-        self.submodules += fsm
-
-        fsm.act("IDLE",
-            rx.rdy.eq(self.done),
-            If(rx.rdy & rx.valid,
-                NextState("RECEIVE")
-            )
-        )
-
-        fsm.act("RECEIVE",
-            tx.valid.eq(1),
-            If(tx.rdy,
-                NextState("IDLE")
-            )
-        )
-
+        cycle_count_pico = Signal(len(self.cycle_count))
+        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.cycle_count), "sys", "pico")
         self.comb += [
-            tx.data.eq(Cat(self.cycle_count, self.done))
+            self.cycle_count_transfer.i.eq(self.cycle_count),
+            cycle_count_pico.eq(self.cycle_count_transfer.o)
+        ]
+
+        start_pico = Signal()
+        self.specials += [
+            NoRetiming(start_pico),
+            MultiReg(start_pico, start, odomain="sys")
+        ]
+
+        done_pico = Signal()
+        self.specials += [
+            NoRetiming(self.done),
+            MultiReg(self.done, done_pico, odomain="pico")
+        ]
+
+        self.bus = config.platform.getBus()
+
+        self.sync.pico += [
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
+                self.bus.PicoDataOut.eq(cycle_count_pico)
+            ),
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
+                self.bus.PicoDataOut.eq(done_pico)
+            ),
+            If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
+                start_pico.eq(1)
+            )
         ]
 
 
 def export(config, filename='StreamLoopback128_migen.v'):
-    data_width = 128
-    num_chnls = 2
-    rx = [pico.PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
-    tx = [pico.PicoStreamInterface(data_width=data_width) for i in range(num_chnls)]
+    config.platform = PicoPlatform(bus_width=32, stream_width=128)
+    rx, tx = config.platform.getStreamPair()
 
-    m = Top(config, rx[0], tx[0])
-    m.comb += [
-        rx[1].connect(tx[1])
-    ]
+    m = Top(config, rx, tx)
 
-    m.clock_domains.cd_sys = ClockDomain()
-    m.cd_sys.clk.name_override = "clk"
-    m.cd_sys.rst.name_override = "rst"
-    for i in range(num_chnls):
-        for name in [x[0] for x in pico._stream_layout]:
-            getattr(rx[i], name).name_override="s{}i_{}".format(i+1, name)
-            getattr(tx[i], name).name_override="s{}o_{}".format(i+1, name)
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     verilog.convert(m,
-                    name="StreamLoopback128",
-                    ios=( {getattr(rx[i], name) for i in range(num_chnls) for name in ["valid", "rdy", "data"]}
-                        | {getattr(tx[i], name) for i in range(num_chnls) for name in ["valid", "rdy", "data"]}
-                        | {m.cd_sys.clk, m.cd_sys.rst}),
-                    special_overrides=so
+                    name="echo",
+                    ios=config.platform.get_ios(),
+                    special_overrides=so,
+                    create_clock_domains=False
                     ).write(filename)
+    with open("adj_val.data", 'wb') as f:
+        for x in config.adj_val:
+            f.write(struct.pack('=I', x))
 
 def sim(config):
-    rx = pico.PicoStreamInterface(data_width=128)
-    tx = pico.PicoStreamInterface(data_width=128)
+    config.platform = PicoPlatform(bus_width=32, stream_width=128)
+    rx, tx = config.platform.getStreamPair()
     tb = Top(config, rx, tx)
     generators = []
-    generators.extend([pico.gen_channel_write(rx, [1])])
-    generators.extend([pico.gen_channel_read(tx, 4)])
+    generators.extend([rx.write([1])])
+    generators.extend([tx.read(4)])
 
     # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])

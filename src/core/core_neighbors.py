@@ -5,7 +5,6 @@ class Neighbors(Module):
     def __init__(self, config, adj_val, edge_data=None):
         nodeidsize = config.addresslayout.nodeidsize
         num_nodes_per_pe = config.addresslayout.num_nodes_per_pe
-        num_pe = config.addresslayout.num_pe
         edgeidsize = config.addresslayout.edgeidsize
         max_edges_per_pe = config.addresslayout.max_edges_per_pe
 

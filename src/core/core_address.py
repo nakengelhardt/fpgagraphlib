@@ -56,14 +56,23 @@ class AddressLayout:
             else:
                 adj_val[i].extend([0 for _ in range(len(adj_val[i]), self.max_edges_per_pe)])
             assert len(adj_val[i]) == self.max_edges_per_pe
-            assert len(adj_idx[i]) == self.num_nodes_per_pe 
+            assert len(adj_idx[i]) == self.num_nodes_per_pe
 
         return adj_idx, adj_val
 
     def generate_partition_flat(self, adj_dict):
-        adj_idx, adj_val = self.generate_partition(adj_dict)
+        adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
+        adj_val = []
 
-        return [n<<self.edgeidsize | idx for sublist in adj_idx for (idx,n) in sublist], [item for sublist in adj_val for item in sublist]
+        for node, neighbors in adj_dict.items():
+            pe = node//self.num_nodes_per_pe
+            localnode = node % self.num_nodes_per_pe
+            idx = len(adj_val)
+            n = len(neighbors)
+            adj_idx[pe][localnode] = (idx, n)
+            adj_val.extend(neighbors)
+
+        return adj_idx, adj_val
 
     def repack(self, l, wordsize, pcie_width):
         words_per_line = pcie_width//wordsize

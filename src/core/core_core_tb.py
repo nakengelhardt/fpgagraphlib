@@ -22,7 +22,7 @@ import argparse
 class Core(Module):
     def __init__(self, config):
         self.config = config
-        
+
         self.addresslayout = self.config.addresslayout
 
         num_pe = self.addresslayout.num_pe
@@ -37,7 +37,7 @@ class Core(Module):
 
         self.submodules.network = Network(config)
         self.submodules.apply = [Apply(config, config.init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if config.init_nodedata else None)  for i in range(num_pe)]
-        self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -87,7 +87,7 @@ class Core(Module):
             yield start_message[i].valid.eq(1)
 
         barrier_done = [0 for i in range(num_pe)]
-        
+
         while 0 in barrier_done:
             yield
             for i in range(num_pe):
@@ -105,7 +105,7 @@ class Core(Module):
         while not (yield self.global_inactive):
             num_cycles += 1
             for i in range(num_pe):
-                if ((yield self.apply[i].apply_interface.valid) 
+                if ((yield self.apply[i].apply_interface.valid)
                     and (yield self.apply[i].apply_interface.ack)):
                     if (yield self.apply[i].apply_interface.msg.barrier):
                         print(str(num_cycles) + "\tBarrier enters Apply on PE " + str(i))

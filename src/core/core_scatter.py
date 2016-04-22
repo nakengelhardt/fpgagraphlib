@@ -2,11 +2,11 @@ from migen import *
 from migen.genlib.record import *
 
 from core_interfaces import ScatterInterface, NetworkInterface
-from core_neighbors import Neighbors
+from core_neighbors_hmc import Neighbors
 from core_address import AddressLayout
 
 class Scatter(Module):
-    def __init__(self, config, adj_mat=None, edge_data=None):
+    def __init__(self, config, adj_mat=None, edge_data=None, hmc_port=None):
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
@@ -40,7 +40,7 @@ class Scatter(Module):
 
         # val: array of nodeids
         # resides in submodule
-        self.submodules.get_neighbors = Neighbors(config, adj_val, edge_data=edge_data)
+        self.submodules.get_neighbors = Neighbors(config, adj_val, edge_data=edge_data, hmc_port=hmc_port)
 
 
         # flow control variables
@@ -63,13 +63,14 @@ class Scatter(Module):
         scatter_msg_valid1 = Signal()
         scatter_barrier1 = Signal()
         # valid1 requests get_neighbors, so don't set for barrier
-        self.sync += If( upstream_ack,
-                         scatter_msg1.eq(self.scatter_interface.payload),
-                         scatter_sender1.eq(self.scatter_interface.sender),
-                         scatter_round1.eq(self.scatter_interface.roundpar),
-                         scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier), 
-                         scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier) 
-                     )
+        self.sync += \
+        If( upstream_ack,
+            scatter_msg1.eq(self.scatter_interface.payload),
+            scatter_sender1.eq(self.scatter_interface.sender),
+            scatter_round1.eq(self.scatter_interface.roundpar),
+            scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier),
+            scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier)
+        )
 
         ## stage 2
 
