@@ -48,19 +48,16 @@ class Apply(Module):
         self.extern_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=len(rd_port.adr), datasize=len(rd_port.dat_r)))
         local_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=len(rd_port.adr), datasize=len(rd_port.dat_r)))
         self.comb += [
-            If(self.extern_rd_port.enable, 
+            If(self.extern_rd_port.enable,
                 rd_port.adr.eq(self.extern_rd_port.adr),
                 rd_port.re.eq(self.extern_rd_port.re)
             ).Else(
                 rd_port.adr.eq(local_rd_port.adr),
                 rd_port.re.eq(local_rd_port.re)
-            ), 
-            self.extern_rd_port.dat_r.eq(rd_port.dat_r), 
+            ),
+            self.extern_rd_port.dat_r.eq(rd_port.dat_r),
             local_rd_port.dat_r.eq(rd_port.dat_r)
         ]
-
-        # input handling
-        self.comb += self.apply_interface.ack.eq(upstream_ack)
 
         # detect termination (if all PEs receive 2 barriers in a row)
         self.inactive = Signal()
@@ -88,7 +85,8 @@ class Apply(Module):
             payload.eq(self.apply_interface.msg.payload),
             roundpar.eq(self.apply_interface.msg.roundpar),
             valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),
-            barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier)
+            barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier),
+            self.apply_interface.ack.eq(upstream_ack)
         ]
 
         # collision handling
@@ -107,7 +105,7 @@ class Apply(Module):
                      local_rd_port.re.eq(upstream_ack)
 
 
-        ## Stage 3
+        ## Stage 2
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
         payload2 = Signal(addresslayout.payloadsize)
@@ -118,21 +116,43 @@ class Apply(Module):
         ready = Signal()
 
         self.sync += [
-            valid2.eq(valid & collision_re), 
+            valid2.eq(valid & collision_re), #insert bubble if collision
             barrier2.eq(barrier & collision_re),
-            If(upstream_ack, 
-                dest_node_id2.eq(dest_node_id), 
+            If(upstream_ack,
+                dest_node_id2.eq(dest_node_id),
                 sender2.eq(sender),
                 payload2.eq(payload),
                 roundpar2.eq(roundpar)
             )
         ]
 
+        ## Stage 3
+        dest_node_id3 = Signal(nodeidsize)
+        sender3 = Signal(nodeidsize)
+        payload3 = Signal(addresslayout.payloadsize)
+        roundpar3 = Signal()
+        valid3 = Signal()
+        barrier3 = Signal()
+        data_invalid3 = Signal()
+        data3 = Signal(len(rd_port.dat_r))
+
+        self.sync += [
+            If(ready,
+                valid3.eq(valid2),
+                barrier3.eq(barrier2),
+                dest_node_id3.eq(dest_node_id2),
+                sender3.eq(sender2),
+                payload3.eq(payload2),
+                roundpar3.eq(roundpar2),
+                data3.eq(local_rd_port.dat_r)
+            )
+        ]
+
         # count levels
         self.level = Signal(32)
-        self.sync += If(barrier2 & ready, self.level.eq(self.level + 1))
+        self.sync += If(barrier3 & ready, self.level.eq(self.level + 1))
 
-        self.roundpar = roundpar2
+        self.roundpar = roundpar3
 
         downstream_ack = Signal()
 
@@ -140,12 +160,12 @@ class Apply(Module):
         self.submodules.applykernel = config.applykernel(config.addresslayout)
 
         self.comb += [
-            self.applykernel.nodeid_in.eq(dest_node_id2),
-            self.applykernel.sender_in.eq(sender2),
-            self.applykernel.message_in.raw_bits().eq(payload2),
-            self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),
-            self.applykernel.valid_in.eq(valid2),
-            self.applykernel.barrier_in.eq(barrier2),
+            self.applykernel.nodeid_in.eq(dest_node_id3),
+            self.applykernel.sender_in.eq(sender3),
+            self.applykernel.message_in.raw_bits().eq(payload3),
+            self.applykernel.state_in.raw_bits().eq(data3),
+            self.applykernel.valid_in.eq(valid3),
+            self.applykernel.barrier_in.eq(barrier3),
             self.applykernel.level_in.eq(self.level),
             self.applykernel.message_ack.eq(downstream_ack),
             ready.eq(self.applykernel.ready),
@@ -161,7 +181,7 @@ class Apply(Module):
         ]
         # TODO: reset/init
 
-        
+
         # output handling
         _layout = [
         ( "barrier", 1, DIR_M_TO_S ),
@@ -182,26 +202,26 @@ class Apply(Module):
             self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
         ]
 
-        payload3 = Signal(addresslayout.payloadsize)
-        sender3 = Signal(addresslayout.nodeidsize)
-        roundpar3 = Signal()
-        barrier3 = Signal()
-        valid3 = Signal()
+        payload4 = Signal(addresslayout.payloadsize)
+        sender4 = Signal(addresslayout.nodeidsize)
+        roundpar4 = Signal()
+        barrier4 = Signal()
+        valid4 = Signal()
 
         self.sync += If(self.scatter_interface.ack,
-            payload3.eq(self.outfifo.dout.msg),
-            sender3.eq(self.outfifo.dout.sender),
-            roundpar3.eq(self.outfifo.dout.roundpar),
-            barrier3.eq(self.outfifo.dout.barrier),
-            valid3.eq(self.outfifo.readable)
+            payload4.eq(self.outfifo.dout.msg),
+            sender4.eq(self.outfifo.dout.sender),
+            roundpar4.eq(self.outfifo.dout.roundpar),
+            barrier4.eq(self.outfifo.dout.barrier),
+            valid4.eq(self.outfifo.readable)
         )
 
         self.comb += [
-            self.scatter_interface.payload.eq(payload3),
-            self.scatter_interface.sender.eq(sender3),
-            self.scatter_interface.roundpar.eq(roundpar3),
-            self.scatter_interface.barrier.eq(barrier3),
-            self.scatter_interface.valid.eq(valid3)
+            self.scatter_interface.payload.eq(payload4),
+            self.scatter_interface.sender.eq(sender4),
+            self.scatter_interface.roundpar.eq(roundpar4),
+            self.scatter_interface.barrier.eq(barrier4),
+            self.scatter_interface.valid.eq(valid4)
         ]
 
         # send from fifo when receiver ready and no external request (has priority)

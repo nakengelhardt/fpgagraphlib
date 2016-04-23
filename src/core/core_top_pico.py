@@ -82,6 +82,18 @@ class Top(Module):
             )
         ]
 
+        hmc_perf_counters = [Signal(32) for _ in range(10)]
+        for i in range(10):
+            port = config.platform.getHMCPort(i)
+            self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+
+        hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
+        self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
+        self.comb += [
+            self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
+            Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
+        ]
+
         cycle_count_pico = Signal(len(self.cycle_count))
         self.submodules.cycle_count_transfer = BusSynchronizer(len(self.cycle_count), "sys", "pico")
         self.comb += [
@@ -110,6 +122,9 @@ class Top(Module):
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
                 self.bus.PicoDataOut.eq(done_pico)
             ),
+            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i),
+                self.bus.PicoDataOut.eq(hmc_perf_counters[i])
+            ) for i in range(10)],
             If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
                 start_pico.eq(1)
             )

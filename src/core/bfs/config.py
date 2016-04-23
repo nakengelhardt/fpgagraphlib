@@ -8,13 +8,13 @@ from bfs.scatterkernel import ScatterKernel
 class Config:
     def __init__(self, adj_dict, quiet=True):
         self.name = "bfs"
-        
-        # nodeidsize = 16
-        # num_nodes_per_pe = 2**11
-        # edgeidsize = 16
-        # max_edges_per_pe = 2**13
-        # num_pe = 16
-        # peidsize = log2_int(num_pe)
+
+        nodeidsize = 32
+        num_nodes_per_pe = 2**13
+        edgeidsize = 32
+        max_edges_per_pe = 0
+        num_pe = 9
+        peidsize = bits_for(num_pe)
         pe_groups = 1
         inter_pe_delay = 0
 
@@ -26,7 +26,7 @@ class Config:
         # num_pe = 1
         # pe_groups = 4
         # inter_pe_delay = 256
-        
+
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
         # edgeidsize = 16
@@ -41,12 +41,12 @@ class Config:
         # peidsize = 8
         # num_pe = 8
 
-        nodeidsize = 8
-        num_nodes_per_pe = 2**6
-        edgeidsize = 16
-        max_edges_per_pe = 2**9
-        peidsize = 1
-        num_pe = 2
+        # nodeidsize = 8
+        # num_nodes_per_pe = 2**6
+        # edgeidsize = 16
+        # max_edges_per_pe = 2**9
+        # peidsize = 1
+        # num_pe = 2
 
         payloadsize = nodeidsize
 
@@ -56,7 +56,7 @@ class Config:
         self.addresslayout.inter_pe_delay = inter_pe_delay
 
         self.adj_dict = adj_dict
-        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+        adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 
