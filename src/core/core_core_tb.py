@@ -37,7 +37,7 @@ class Core(Module):
 
         self.submodules.network = Network(config)
         self.submodules.apply = [Apply(config, config.init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if config.init_nodedata else None)  for i in range(num_pe)]
-        self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
