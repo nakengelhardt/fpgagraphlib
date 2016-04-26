@@ -3,7 +3,7 @@ from migen import *
 from functools import reduce
 from operator import and_
 
-from recordfifo import RecordFIFO
+from recordfifo import RecordFIFOBuffered
 from core_interfaces import Message, ApplyInterface, NetworkInterface
 from core_arbiter import Arbiter
 
@@ -15,15 +15,15 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(**config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(**config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[RecordFIFO(layout=Message(**config.addresslayout.get_params()).layout,
-                             depth=8,
-                             delay=(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
+        fifos = [[RecordFIFOBuffered(layout=Message(**config.addresslayout.get_params()).layout,
+                             depth=8#,
+                             #delay=(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
                              ) for i in range(num_pe)] for j in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
 
         self.comb += [self.arbiter[i].apply_interface.connect(self.apply_interface[i]) for i in range(num_pe)]
-        
+
         # connect fifos across PEs
         for source in range(num_pe):
             array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])

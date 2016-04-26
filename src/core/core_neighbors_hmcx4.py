@@ -1,13 +1,16 @@
 from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
+from migen.genlib.roundrobin import *
+
+from functools import reduce
+from operator import and_
 
 class Neighborsx4(Module):
-    def __init__(self, config, adj_val, edge_data=None, hmc_port=None):
+    def __init__(self, config, hmc_port=None):
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize
         payloadsize = config.addresslayout.payloadsize
-        num_pe = config.addresslayout.num_pe
 
         # input
         self.start_idx = [Signal(edgeidsize) for _ in range(4)]
@@ -35,7 +38,8 @@ class Neighborsx4(Module):
 
         #input
 
-        fifos = [SyncFIFO(2*edgeidsize+nodeidsize+payloadsize+2, 8) for _ in range(4)]
+        self.fifos = [SyncFIFO(2*edgeidsize+nodeidsize+payloadsize+2, 8) for _ in range(4)]
+        self.submodules += self.fifos
 
         for i in range(4):
             self.comb += [
@@ -44,9 +48,9 @@ class Neighborsx4(Module):
                 self.fifos[i].din.eq(Cat(self.start_idx[i], self.num_neighbors[i], self.sender_in[i], self.message_in[i], self.barrier_in[i], self.round_in[i]))
             ]
 
-        array_data = Array(fifo.dout for fifo in fifos)
-        array_re = Array(fifo.re for fifo in fifos)
-        array_readable = Array(fifo.readable for fifo in fifos)
+        array_data = Array(fifo.dout for fifo in self.fifos)
+        array_re = Array(fifo.re for fifo in self.fifos)
+        array_readable = Array(fifo.readable for fifo in self.fifos)
 
 
         chosen_start_idx = Signal(edgeidsize)
@@ -57,26 +61,26 @@ class Neighborsx4(Module):
         chosen_round_in = Signal()
         chosen_valid = Signal()
         chosen_ack = Signal()
-        chosen_from_pe = Signal(max=num_pe)
+        chosen_from_pe = Signal(2)
 
-        self.submodules.roundrobin = RoundRobin(num_pe, switch_policy=SP_CE)
+        self.submodules.roundrobin = RoundRobin(4, switch_policy=SP_CE)
 
-        self.sync += [
-            Cat(chosen_start_idx, chosen_num_neighbors, chosen_sender_in, chosen_message_in, chosen_barrier_in, chosen_round_in).eq(array_data[self.roundrobin.grant]),
-            chosen_valid.eq(array_readable[self.roundrobin.grant]),
-            chosen_from_pe.eq(self.roundrobin.grant)
+        self.comb += [
+            # If(chosen_ack,
+                Cat(chosen_start_idx, chosen_num_neighbors, chosen_sender_in, chosen_message_in, chosen_barrier_in, chosen_round_in).eq(array_data[self.roundrobin.grant]),
+                chosen_valid.eq(array_readable[self.roundrobin.grant]),
+                chosen_from_pe.eq(self.roundrobin.grant)
+            # )
         ]
         self.comb += [
-            array_re[self.roundrobin.grant].eq(chosen_ack), 
-            [self.roundrobin.request[i].eq(array_readable[i]) for i in range(len(fifos))], 
+            array_re[self.roundrobin.grant].eq(chosen_ack),
+            [self.roundrobin.request[i].eq(array_readable[i]) for i in range(len(self.fifos))],
             self.roundrobin.ce.eq(chosen_ack)
         ]
 
 
         num_injected = Signal(7)
         inject = Signal()
-
-        flush = Signal()
 
         no_tags_inflight = Signal()
 
@@ -123,15 +127,21 @@ class Neighborsx4(Module):
         self.num_hmc_commands_issued = Signal(32)
         self.num_hmc_commands_retired = Signal(32)
         self.num_hmc_responses = Signal(32)
+        self.num_reqs = [Signal(32) for _ in range(4)]
+        self.wrongs = [Signal(32) for _ in range(4)]
 
         self.sync += [
             If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1))
+            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
+            [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
         ]
 
-        from_pe = Signal(max=num_pe)
+        from_pe = Signal(2)
+        array_barrier = Array(self.barrier_out)
+        array_ack = Array(self.neighbor_ack)
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
@@ -161,12 +171,15 @@ class Neighborsx4(Module):
             )
         )
         fsm.act("BARRIER",
-            flush.eq(1),
-            If(no_tags_inflight & ~self.neighbor_valid,
-                self.barrier_out[from_pe].eq(1),
-                If(self.neighbor_ack,
-                    NextState("IDLE")
-                )
+            If(no_tags_inflight,
+                NextValue(array_barrier[from_pe], 1),
+                NextState("BARRIER_WAIT")
+            )
+        )
+        fsm.act("BARRIER_WAIT",
+            If(array_ack[from_pe],
+                NextValue(array_barrier[from_pe], 0),
+                NextState("IDLE")
             )
         )
 
@@ -188,7 +201,7 @@ class Neighborsx4(Module):
             ).Else(
                 update_dat_w.valid.eq(end_node_idx[2:4])
             ),
-            If(inject, no_tags_inflight.eq(self.tags.level == num_injected)).Else(no_tags_inflight.eq(self.tags.level == 64)),
+            no_tags_inflight.eq(self.tags.level == num_injected),
             inject.eq(~num_injected[6]),
             hmc_port.clk.eq(ClockSignal()),
             hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
@@ -203,17 +216,21 @@ class Neighborsx4(Module):
 
         for i in range(4):
             self.sync += [
-                self.neighbor_valid[i].eq(update_dat_r.valid > i),
                 self.message_out[i].eq(update_dat_r.message),
                 self.sender_out[i].eq(update_dat_r.sender),
                 self.round_out[i].eq(update_dat_r.round),
                 self.num_neighbors_out[i].eq(update_dat_r.num_neighbors),
-                self.neighbor[i].eq(self.answer_rd_port.dat_r[i*32:(i+1)*32])
+                self.neighbor[i].eq(self.answer_rd_port.dat_r[i*32:(i+1)*32]),
+                If(get_answer,
+                    self.neighbor_valid[i].eq(update_dat_r.valid > i)
+                ).Elif(self.neighbor_ack[i],
+                    self.neighbor_valid[i].eq(0)
+                )
             ]
 
         self.comb += [
             get_answer.eq(self.answers.readable & self.answers.re),
-            self.answers.re.eq(self.neighbor_ack | ~self.neighbor_valid),
+            self.answers.re.eq(reduce(and_, [self.neighbor_ack[i] | ~self.neighbor_valid[i]])),
             self.answer_wr_port.dat_w.eq(hmc_port.rd_data),
             self.answer_wr_port.adr.eq(hmc_port.rd_data_tag),
             self.answer_wr_port.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv),

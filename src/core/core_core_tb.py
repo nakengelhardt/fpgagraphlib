@@ -15,6 +15,7 @@ from core_address import AddressLayout
 from core_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
+from core_neighbors_hmcx4 import Neighborsx4
 
 import sys
 import argparse
@@ -38,6 +39,35 @@ class Core(Module):
         self.submodules.network = Network(config)
         self.submodules.apply = [Apply(config, config.init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if config.init_nodedata else None)  for i in range(num_pe)]
         self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+
+        if hasattr(config, "platform"):
+            assert(num_pe <= 36)
+            assert((num_pe % 4) == 0)
+            self.submodules.neighbors_hmc = [Neighborsx4(config, config.platform.getHMCPort(i)) for i in range(9)]
+            for i in range(9):
+                for j in range(4):
+                    n = i*4 + j
+                    if n < num_pe:
+                        self.comb += [
+                            self.neighbors_hmc[i].start_idx[j].eq(self.scatter[n].get_neighbors.start_idx),
+                            self.neighbors_hmc[i].num_neighbors[j].eq(self.scatter[n].get_neighbors.num_neighbors),
+                            self.neighbors_hmc[i].barrier_in[j].eq(self.scatter[n].get_neighbors.barrier_in),
+                            self.neighbors_hmc[i].message_in[j].eq(self.scatter[n].get_neighbors.message_in),
+                            self.neighbors_hmc[i].sender_in[j].eq(self.scatter[n].get_neighbors.sender_in),
+                            self.neighbors_hmc[i].round_in[j].eq(self.scatter[n].get_neighbors.round_in),
+                            self.neighbors_hmc[i].valid[j].eq(self.scatter[n].get_neighbors.valid),
+                            self.scatter[n].get_neighbors.ack.eq(self.neighbors_hmc[i].ack[j]),
+
+                            self.scatter[n].get_neighbors.neighbor.eq(self.neighbors_hmc[i].neighbor[j]),
+                            self.scatter[n].get_neighbors.barrier_out.eq(self.neighbors_hmc[i].barrier_out[j]),
+                            self.scatter[n].get_neighbors.message_out.eq(self.neighbors_hmc[i].message_out[j]),
+                            self.scatter[n].get_neighbors.sender_out.eq(self.neighbors_hmc[i].sender_out[j]),
+                            self.scatter[n].get_neighbors.round_out.eq(self.neighbors_hmc[i].round_out[j]),
+                            self.scatter[n].get_neighbors.num_neighbors_out.eq(self.neighbors_hmc[i].num_neighbors_out[j]),
+                            self.scatter[n].get_neighbors.neighbor_valid.eq(self.neighbors_hmc[i].neighbor_valid[j]),
+                            self.neighbors_hmc[i].neighbor_ack[j].eq(self.scatter[n].get_neighbors.neighbor_ack)
+                        ]
+
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]

@@ -10,10 +10,10 @@ class Config:
         self.name = "bfs"
 
         nodeidsize = 32
-        num_nodes_per_pe = 2**13
+        num_nodes_per_pe = 2**12
         edgeidsize = 32
         max_edges_per_pe = 0
-        num_pe = 9
+        num_pe = 4
         peidsize = bits_for(num_pe)
         pe_groups = 1
         inter_pe_delay = 0

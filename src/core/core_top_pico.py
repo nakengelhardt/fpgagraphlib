@@ -25,17 +25,14 @@ from core_interfaces import Message
 from bfs.config import Config
 
 class Top(Module):
-    def __init__(self, config, rx, tx):
+    def __init__(self, config):
         self.config = config
         num_pe = config.addresslayout.num_pe
 
         self.clock_domains.cd_sys = ClockDomain()
         sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
+        extra_clk = config.platform.getExtraClk()
         self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
-
-        self.clock_domains.cd_pcie = ClockDomain()
-        clk, rst = config.platform.getStreamClkRst()
-        self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
 
         self.clock_domains.cd_pico = ClockDomain()
         bus_clk, bus_rst = config.platform.getBusClkRst()
@@ -61,8 +58,12 @@ class Top(Module):
         init = Signal()
         self.done = Signal()
         self.cycle_count = Signal(32)
+
+        self.sync += [
+            init.eq(start & reduce(or_, [i.readable for i in initfifos]))
+        ]
+
         self.comb += [
-            init.eq(start & reduce(or_, [i.readable for i in initfifos])),
             self.done.eq(~init & self.core.global_inactive)
         ]
 
@@ -83,15 +84,25 @@ class Top(Module):
         ]
 
         hmc_perf_counters = [Signal(32) for _ in range(10)]
-        for i in range(10):
+        for i in range(9):
             port = config.platform.getHMCPort(i)
             self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+
+
 
         hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
         self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
         self.comb += [
             self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
             Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
+        ]
+
+        status_regs_pico = [Signal(32) for _ in range(2*num_pe)]
+        self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
+        self.comb += [
+            #self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued, n.num_hmc_commands_retired, n.num_hmc_responses))),
+            self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+            Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
         ]
 
         cycle_count_pico = Signal(len(self.cycle_count))
@@ -122,9 +133,12 @@ class Top(Module):
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
                 self.bus.PicoDataOut.eq(done_pico)
             ),
-            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i),
-                self.bus.PicoDataOut.eq(hmc_perf_counters[i])
-            ) for i in range(10)],
+            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i*4),
+                self.bus.PicoDataOut.eq(csr)
+            ) for i, csr in enumerate(hmc_perf_counters)],
+            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
+                self.bus.PicoDataOut.eq(csr)
+            ) for i, csr in enumerate(status_regs_pico)],
             If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
                 start_pico.eq(1)
             )
@@ -133,9 +147,8 @@ class Top(Module):
 
 def export(config, filename='StreamLoopback128_migen.v'):
     config.platform = PicoPlatform(bus_width=32, stream_width=128)
-    rx, tx = config.platform.getStreamPair()
 
-    m = Top(config, rx, tx)
+    m = Top(config)
 
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     verilog.convert(m,
@@ -150,8 +163,7 @@ def export(config, filename='StreamLoopback128_migen.v'):
 
 def sim(config):
     config.platform = PicoPlatform(bus_width=32, stream_width=128)
-    rx, tx = config.platform.getStreamPair()
-    tb = Top(config, rx, tx)
+    tb = Top(config)
     generators = []
     generators.extend([rx.write([1])])
     generators.extend([tx.read(4)])
