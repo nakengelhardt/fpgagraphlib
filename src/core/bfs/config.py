@@ -10,10 +10,10 @@ class Config:
         self.name = "bfs"
 
         nodeidsize = 32
-        num_nodes_per_pe = 2**12
+        num_nodes_per_pe = 2**11
         edgeidsize = 32
-        max_edges_per_pe = 0
-        num_pe = 4
+        max_edges_per_pe = 2**13
+        num_pe = 9
         peidsize = bits_for(num_pe)
         pe_groups = 1
         inter_pe_delay = 0
@@ -55,8 +55,13 @@ class Config:
         self.addresslayout.pe_groups = pe_groups
         self.addresslayout.inter_pe_delay = inter_pe_delay
 
+        self.use_hmc = True
+
         self.adj_dict = adj_dict
-        adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+        if self.use_hmc:
+            adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+        else:
+            adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 

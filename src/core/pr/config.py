@@ -13,16 +13,16 @@ from pr.scatterkernel import ScatterKernel
 class Config:
     def __init__(self, adj_dict, quiet=False):
         self.name = "pr"
-        
-        # nodeidsize = 17
-        # num_nodes_per_pe = 2**12
-        # edgeidsize = 16
-        # max_edges_per_pe = 2**14
-        # num_pe = 32
-        # peidsize = log2_int(num_pe)
+
+        nodeidsize = 32
+        num_nodes_per_pe = 2**11
+        edgeidsize = 32
+        max_edges_per_pe = 2**13
+        num_pe = 9
+        peidsize = bits_for(num_pe)
         pe_groups = 1
         inter_pe_delay = 0
-        
+
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
         # edgeidsize = 16
@@ -37,12 +37,12 @@ class Config:
         # num_pe = 8
         # peidsize = log2_int(num_pe)
 
-        nodeidsize = 8
-        num_nodes_per_pe = 2**6
-        edgeidsize = 16
-        max_edges_per_pe = 2**9
-        peidsize = 1
-        num_pe = 2
+        # nodeidsize = 8
+        # num_nodes_per_pe = 2**6
+        # edgeidsize = 16
+        # max_edges_per_pe = 2**9
+        # peidsize = 1
+        # num_pe = 2
 
         assert(num_pe * num_nodes_per_pe > len(adj_dict))
 
@@ -62,8 +62,13 @@ class Config:
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
+        self.use_hmc = True
+
         self.adj_dict = adj_dict
-        adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
+        if self.use_hmc:
+            adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+        else:
+            adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 

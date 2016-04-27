@@ -2,7 +2,7 @@ from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 
-class Neighbors(Module):
+class NeighborsHMC(Module):
     def __init__(self, config, adj_val, edge_data=None, hmc_port=None):
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize
@@ -33,8 +33,6 @@ class Neighbors(Module):
 
         num_injected = Signal(7)
         inject = Signal()
-
-        flush = Signal()
 
         no_tags_inflight = Signal()
 
@@ -116,12 +114,15 @@ class Neighbors(Module):
             )
         )
         fsm.act("BARRIER",
-            flush.eq(1),
             If(no_tags_inflight & ~self.neighbor_valid,
-                self.barrier_out.eq(1),
-                If(self.neighbor_ack,
-                    NextState("IDLE")
-                )
+                NextValue(self.barrier_out, 1),
+                NextState("BARRIER_WAIT")
+            )
+        )
+        fsm.act("BARRIER_WAIT",
+            If(self.neighbor_ack,
+                NextValue(self.barrier_out, 0),
+                NextState("IDLE")
             )
         )
 
@@ -138,12 +139,12 @@ class Neighbors(Module):
             update_dat_w.sender.eq(sender),
             update_dat_w.round.eq(roundpar),
             update_dat_w.num_neighbors.eq(num_neighbors),
-            If(next_node_idx + 16 < end_node_idx,
+            If(next_node_idx + 16 <= end_node_idx,
                 update_dat_w.valid.eq(3)
             ).Else(
                 update_dat_w.valid.eq(end_node_idx[2:4]-1)
             ),
-            If(inject, no_tags_inflight.eq(self.tags.level == num_injected)).Else(no_tags_inflight.eq(self.tags.level == 64)),
+            no_tags_inflight.eq(self.tags.level == num_injected),
             inject.eq(~num_injected[6]),
             hmc_port.clk.eq(ClockSignal()),
             hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
@@ -155,11 +156,21 @@ class Neighbors(Module):
         # receive reads
 
 
-        mux = Signal(3,reset=2**3-1)
+
+
+        last = Signal()
+        self.comb += [
+            last.eq(mux == (update_dat_r.valid)),
+            source.stb.eq(sink.stb),
+            source.eop.eq(sink.eop & last),
+            sink.ack.eq(last & source.ack)
+        ]
+
+        mux = Signal(3)
         valid = Signal()
 
         self.sync += [
-            If(self.answer_rd_port.re,
+            If(get_answer,
                 valid.eq(1),
                 mux.eq(0)
             ).Elif(self.neighbor_valid & self.neighbor_ack,
@@ -184,7 +195,7 @@ class Neighbors(Module):
         ]
 
         self.comb += [
-            get_answer.eq(self.answers.readable & self.answers.re),
+            get_answer.eq((mux>=update_dat_r.valid) & self.answers.readable & self.answers.re),
             self.answers.re.eq(self.neighbor_ack | ~self.neighbor_valid),
             self.answer_wr_port.dat_w.eq(hmc_port.rd_data),
             self.answer_wr_port.adr.eq(hmc_port.rd_data_tag),
@@ -196,5 +207,5 @@ class Neighbors(Module):
             self.update_rd_port.adr.eq(self.answers.dout),
             self.update_rd_port.re.eq(get_answer),
             self.tags.din.eq(self.answers.dout),
-            self.tags.we.eq(self.answer_rd_port.re)
+            self.tags.we.eq(get_answer)
         ]

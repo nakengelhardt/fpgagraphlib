@@ -2,11 +2,15 @@ from migen import *
 from migen.genlib.record import *
 
 from core_interfaces import ScatterInterface, NetworkInterface
-from core_neighbors_dummy import Neighbors
+
+from core_neighbors import Neighbors
+from core_neighbors_hmc import NeighborsHMC
+from core_neighbors_dummy import NeighborsDummy
+
 from core_address import AddressLayout
 
 class Scatter(Module):
-    def __init__(self, config, adj_mat=None, edge_data=None):
+    def __init__(self, config, adj_mat=None, edge_data=None, hmc_port=None):
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
@@ -40,7 +44,14 @@ class Scatter(Module):
 
         # val: array of nodeids
         # resides in submodule
-        self.submodules.get_neighbors = Neighbors(config, adj_val, edge_data=edge_data)
+
+        if config.use_hmc:
+            if num_pe < 10:
+                self.submodules.get_neighbors = NeighborsHMC(config, adj_val, hmc_port=hmc_port)
+            else:
+                self.submodules.get_neighbors = NeighborsDummy(config, adj_val)
+        else:
+            self.submodules.get_neighbors = Neighbors(config, adj_val, edge_data=edge_data)
 
 
         # flow control variables

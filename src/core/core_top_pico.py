@@ -22,7 +22,7 @@ from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
-from bfs.config import Config
+from pr.config import Config
 
 class Top(Module):
     def __init__(self, config):
@@ -33,6 +33,10 @@ class Top(Module):
         sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
         extra_clk = config.platform.getExtraClk()
         self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
+
+        # self.clock_domains.cd_pcie = ClockDomain()
+        # clk, rst = config.platform.getStreamClkRst()
+        # self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
 
         self.clock_domains.cd_pico = ClockDomain()
         bus_clk, bus_rst = config.platform.getBusClkRst()
@@ -83,7 +87,7 @@ class Top(Module):
             )
         ]
 
-        hmc_perf_counters = [Signal(32) for _ in range(10)]
+        hmc_perf_counters = [Signal(32) for _ in range(9)]
         for i in range(9):
             port = config.platform.getHMCPort(i)
             self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
@@ -97,11 +101,11 @@ class Top(Module):
             Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
         ]
 
-        status_regs_pico = [Signal(32) for _ in range(2*num_pe)]
+        status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
         self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
         self.comb += [
-            #self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued, n.num_hmc_commands_retired, n.num_hmc_responses))),
-            self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+            self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_commands_retired, n.get_neighbors.num_hmc_responses))),
+            # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
             Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
         ]
 
@@ -157,9 +161,10 @@ def export(config, filename='StreamLoopback128_migen.v'):
                     special_overrides=so,
                     create_clock_domains=False
                     ).write(filename)
-    with open("adj_val.data", 'wb') as f:
-        for x in config.adj_val:
-            f.write(struct.pack('=I', x))
+    if config.use_hmc:
+        with open("adj_val.data", 'wb') as f:
+            for x in config.adj_val:
+                f.write(struct.pack('=I', x))
 
 def sim(config):
     config.platform = PicoPlatform(bus_width=32, stream_width=128)
