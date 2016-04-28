@@ -31,7 +31,7 @@ class Top(Module):
 
         self.clock_domains.cd_sys = ClockDomain()
         sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
-        extra_clk = config.platform.getExtraClk()
+        # extra_clk = config.platform.getExtraClk()
         self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
 
         # self.clock_domains.cd_pcie = ClockDomain()
@@ -91,6 +91,10 @@ class Top(Module):
         for i in range(9):
             port = config.platform.getHMCPort(i)
             self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+            self.comb += [
+                port.wr_data.eq(0),
+                port.wr_data_valid.eq(0)
+            ]
 
 
 
@@ -101,13 +105,32 @@ class Top(Module):
             Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
         ]
 
-        status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
-        self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-        self.comb += [
-            self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_commands_retired, n.get_neighbors.num_hmc_responses))),
-            # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-            Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-        ]
+        if config.use_hmc:
+            if num_pe < 10:
+                status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
+                self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
+                self.comb += [
+                    self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_commands_retired, n.get_neighbors.num_hmc_responses))),
+                    # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                    Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
+                ]
+            else:
+                status_regs_pico = [Signal(32) for _ in range(4*9)]
+                self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
+                self.comb += [
+                    self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued, n.num_hmc_commands_retired, n.num_hmc_responses))),
+                    # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                    Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
+                ]
+        else:
+            status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
+            self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
+            self.comb += [
+                self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
+                # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
+            ]
+
 
         cycle_count_pico = Signal(len(self.cycle_count))
         self.submodules.cycle_count_transfer = BusSynchronizer(len(self.cycle_count), "sys", "pico")

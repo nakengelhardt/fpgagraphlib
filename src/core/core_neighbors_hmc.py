@@ -28,14 +28,15 @@ class getAnswer(Module):
         self.ack_out = Signal()
 
         update_dat_r = Record(set_layout_parameters(_data_layout,
-            nodeidsize=config.addresslayout.nodeidsize, 
-            edgeidsize=config.addresslayout.edgeidsize, 
+            nodeidsize=config.addresslayout.nodeidsize,
+            edgeidsize=config.addresslayout.edgeidsize,
             payloadsize=config.addresslayout.payloadsize))
         re = Signal()
 
         self.comb += [
             update_dat_r.raw_bits().eq(update_rd_port.dat_r),
             re.eq(self.ack_out | ~self.valid_out),
+            self.ack_in.eq(re),
             update_rd_port.adr.eq(self.tag_in),
             answer_rd_port.adr.eq(self.tag_in),
             update_rd_port.re.eq(re),
@@ -49,7 +50,7 @@ class getAnswer(Module):
         ]
 
         self.sync += [
-            If(re, 
+            If(re,
                 self.valid_out.eq(self.valid_in),
                 self.tag_out.eq(self.tag_in)
             )
@@ -97,8 +98,8 @@ class NeighborsHMC(Module):
 
 
         update_dat_w = Record(set_layout_parameters(_data_layout,
-            nodeidsize=config.addresslayout.nodeidsize, 
-            edgeidsize=config.addresslayout.edgeidsize, 
+            nodeidsize=config.addresslayout.nodeidsize,
+            edgeidsize=config.addresslayout.edgeidsize,
             payloadsize=config.addresslayout.payloadsize))
 
         self.submodules.tags = SyncFIFO(6, 2**6)
@@ -114,7 +115,7 @@ class NeighborsHMC(Module):
             self.update_wr_port.dat_w.eq(update_dat_w.raw_bits())
         ]
 
-        next_node_idx = Signal(edgeidsize)
+        current_node_idx = Signal(edgeidsize)
         end_node_idx = Signal(edgeidsize)
         last_neighbor = Signal()
 
@@ -124,19 +125,8 @@ class NeighborsHMC(Module):
         num_neighbors = Signal(edgeidsize)
 
         current_tag = Signal(6)
-        self.comb += If(inject, current_tag.eq(num_injected)).Else(current_tag.eq(self.tags.dout))
 
-        self.num_requests_accepted = Signal(32)
-        self.num_hmc_commands_issued = Signal(32)
-        self.num_hmc_commands_retired = Signal(32)
-        self.num_hmc_responses = Signal(32)
 
-        self.sync += [
-            If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
-            If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
-            If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1))
-        ]
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
@@ -149,21 +139,41 @@ class NeighborsHMC(Module):
                 NextState("BARRIER")
             ),
             If(self.valid & (self.num_neighbors != 0),
-                NextValue(next_node_idx, self.start_idx),
+                NextValue(current_node_idx, self.start_idx),
                 NextValue(end_node_idx, self.start_idx + (self.num_neighbors << 2)),
                 NextState("GET_NEIGHBORS")
             )
         )
+
         fsm.act("GET_NEIGHBORS",
             hmc_port.cmd_valid.eq(inject | self.tags.readable),
-            self.update_wr_port.we.eq(hmc_port.cmd_valid),
+            self.tags.re.eq(hmc_port.cmd_ready & ~inject),
             If(hmc_port.cmd_valid & hmc_port.cmd_ready,
-                NextValue(next_node_idx, next_node_idx + 16),
-                If(next_node_idx + 16 >= end_node_idx,
+                NextValue(current_node_idx, current_node_idx + 16),
+                If(current_node_idx + 16 >= end_node_idx,
                     NextState("IDLE")
                 )
             )
         )
+        self.comb += [
+            hmc_port.addr.eq(current_node_idx),
+            self.update_wr_port.adr.eq(current_tag),
+            self.update_wr_port.we.eq(hmc_port.cmd_valid),
+            update_dat_w.message.eq(message),
+            update_dat_w.sender.eq(sender),
+            update_dat_w.round.eq(roundpar),
+            update_dat_w.num_neighbors.eq(num_neighbors),
+            If(current_node_idx + 16 <= end_node_idx,
+                update_dat_w.valid.eq(3)
+            ).Else(
+                update_dat_w.valid.eq(end_node_idx[2:4]-1)
+            ),
+            hmc_port.clk.eq(ClockSignal()),
+            hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
+            hmc_port.size.eq(1),
+            hmc_port.tag.eq(current_tag),
+        ]
+
         fsm.act("BARRIER",
             If(no_tags_inflight & ~self.neighbor_valid,
                 NextValue(self.barrier_out, 1),
@@ -177,31 +187,14 @@ class NeighborsHMC(Module):
             )
         )
 
+        # tag injection
         self.sync += If(inject & hmc_port.cmd_ready & hmc_port.cmd_valid,
             num_injected.eq(num_injected + 1)
         )
-
-
-
         self.comb += [
-            hmc_port.addr.eq(next_node_idx),
-            self.update_wr_port.adr.eq(current_tag),
-            update_dat_w.message.eq(message),
-            update_dat_w.sender.eq(sender),
-            update_dat_w.round.eq(roundpar),
-            update_dat_w.num_neighbors.eq(num_neighbors),
-            If(next_node_idx + 16 <= end_node_idx,
-                update_dat_w.valid.eq(3)
-            ).Else(
-                update_dat_w.valid.eq(end_node_idx[2:4]-1)
-            ),
             no_tags_inflight.eq(self.tags.level == num_injected),
             inject.eq(~num_injected[6]),
-            hmc_port.clk.eq(ClockSignal()),
-            hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
-            hmc_port.size.eq(1),
-            If(inject, hmc_port.tag.eq(num_injected)).Else(hmc_port.tag.eq(self.tags.dout)),
-            self.tags.re.eq(hmc_port.cmd_ready & hmc_port.cmd_valid & ~inject)
+            If(inject, current_tag.eq(num_injected)).Else(current_tag.eq(self.tags.dout))
         ]
 
         # receive bursts from HMC - save data, put tag in queue for available answers
@@ -233,7 +226,7 @@ class NeighborsHMC(Module):
         last = Signal()
         self.comb += [
             last.eq(mux == (self.get_answer.burst_valid)),
-            self.get_answer.ack_in.eq(last & self.neighbor_ack)
+            self.get_answer.ack_out.eq(last & self.neighbor_ack)
         ]
 
         self.sync += [
@@ -251,7 +244,7 @@ class NeighborsHMC(Module):
             cases[i] = self.neighbor.eq(self.answer_rd_port.dat_r[i*32:(i+1)*32])
         self.comb += Case(mux, cases).makedefault()
 
-
+        # output
         self.comb += [
             self.neighbor_valid.eq(self.get_answer.valid_out),
             self.message_out.eq(self.get_answer.message_out),
@@ -261,3 +254,15 @@ class NeighborsHMC(Module):
         ]
 
 
+        # stats
+        self.num_requests_accepted = Signal(32)
+        self.num_hmc_commands_issued = Signal(32)
+        self.num_hmc_commands_retired = Signal(32)
+        self.num_hmc_responses = Signal(32)
+
+        self.sync += [
+            If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
+            If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
+            If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
+            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1))
+        ]

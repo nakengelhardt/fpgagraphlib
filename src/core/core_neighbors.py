@@ -94,6 +94,15 @@ class Neighbors(Module):
             self.edgedata_out.eq(rd_port_edge.dat_r) if config.has_edgedata else []
         ]
 
+        # stats
+        self.num_requests_accepted = Signal(32)
+        self.num_neighbors_issued = Signal(32)
+
+        self.sync += [
+            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            If(self.neighbor_valid & self.neighbor_ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+        ]
+
 
     def gen_selfcheck(self, tb, graph, quiet=True):
         curr_sender = 0
