@@ -2,6 +2,62 @@ from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 
+_data_layout = [
+    ("message", "payloadsize"),
+    ("sender", "nodeidsize"),
+    ("round", 1),
+    ("num_neighbors", "edgeidsize"),
+    ("valid", 2)
+]
+
+
+class getAnswer(Module):
+    def __init__(self, config, update_rd_port, answer_rd_port):
+        self.tag_in = Signal(6)
+        self.valid_in = Signal()
+        self.ack_in = Signal()
+
+        self.tag_out = Signal(6)
+        self.burst_out = Signal(128)
+        self.burst_valid = Signal(2)
+        self.message_out = Signal(config.addresslayout.payloadsize)
+        self.sender_out = Signal(config.addresslayout.nodeidsize)
+        self.round_out = Signal()
+        self.num_neighbors_out = Signal(config.addresslayout.edgeidsize)
+        self.valid_out = Signal()
+        self.ack_out = Signal()
+
+        update_dat_r = Record(set_layout_parameters(_data_layout,
+            nodeidsize=config.addresslayout.nodeidsize, 
+            edgeidsize=config.addresslayout.edgeidsize, 
+            payloadsize=config.addresslayout.payloadsize))
+        re = Signal()
+
+        self.comb += [
+            update_dat_r.raw_bits().eq(update_rd_port.dat_r),
+            re.eq(self.ack_out | ~self.valid_out),
+            update_rd_port.adr.eq(self.tag_in),
+            answer_rd_port.adr.eq(self.tag_in),
+            update_rd_port.re.eq(re),
+            answer_rd_port.re.eq(re),
+            self.burst_out.eq(answer_rd_port.dat_r),
+            self.burst_valid.eq(update_dat_r.valid),
+            self.message_out.eq(update_dat_r.message),
+            self.sender_out.eq(update_dat_r.sender),
+            self.round_out.eq(update_dat_r.round),
+            self.num_neighbors_out.eq(update_dat_r.num_neighbors),
+        ]
+
+        self.sync += [
+            If(re, 
+                self.valid_out.eq(self.valid_in),
+                self.tag_out.eq(self.tag_in)
+            )
+        ]
+
+
+
+
 class NeighborsHMC(Module):
     def __init__(self, config, adj_val, edge_data=None, hmc_port=None):
         nodeidsize = config.addresslayout.nodeidsize
@@ -39,15 +95,11 @@ class NeighborsHMC(Module):
         if not hmc_port:
             hmc_port = config.platform.getHMCPort(0)
 
-        _data_layout = [
-            ("message", config.addresslayout.payloadsize),
-            ("sender", config.addresslayout.nodeidsize),
-            ("round", 1),
-            ("num_neighbors", edgeidsize),
-            ("valid", 2)
-        ]
-        update_dat_r = Record(_data_layout)
-        update_dat_w = Record(_data_layout)
+
+        update_dat_w = Record(set_layout_parameters(_data_layout,
+            nodeidsize=config.addresslayout.nodeidsize, 
+            edgeidsize=config.addresslayout.edgeidsize, 
+            payloadsize=config.addresslayout.payloadsize))
 
         self.submodules.tags = SyncFIFO(6, 2**6)
         self.submodules.answers = SyncFIFO(6, 2**6)
@@ -59,7 +111,6 @@ class NeighborsHMC(Module):
         self.specials.update_wr_port = self.updatebuffer.get_port(write_capable=True)
 
         self.comb += [
-            update_dat_r.raw_bits().eq(self.update_rd_port.dat_r),
             self.update_wr_port.dat_w.eq(update_dat_w.raw_bits())
         ]
 
@@ -153,59 +204,60 @@ class NeighborsHMC(Module):
             self.tags.re.eq(hmc_port.cmd_ready & hmc_port.cmd_valid & ~inject)
         ]
 
-        # receive reads
-
-
-
-
-        last = Signal()
+        # receive bursts from HMC - save data, put tag in queue for available answers
         self.comb += [
-            last.eq(mux == (update_dat_r.valid)),
-            source.stb.eq(sink.stb),
-            source.eop.eq(sink.eop & last),
-            sink.ack.eq(last & source.ack)
+            self.answer_wr_port.dat_w.eq(hmc_port.rd_data),
+            self.answer_wr_port.adr.eq(hmc_port.rd_data_tag),
+            self.answer_wr_port.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv),
+            self.answers.din.eq(hmc_port.rd_data_tag),
+            self.answers.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv)
         ]
 
+        # look up available answer data in memories
+        self.submodules.get_answer = getAnswer(config=config, update_rd_port=self.update_rd_port, answer_rd_port=self.answer_rd_port)
+
+        self.comb += [
+            self.get_answer.tag_in.eq(self.answers.dout),
+            self.get_answer.valid_in.eq(self.answers.readable),
+            self.answers.re.eq(self.get_answer.ack_in)
+        ]
+
+        # recycle tags
+        self.comb += [
+            self.tags.din.eq(self.get_answer.tag_out),
+            self.tags.we.eq(self.get_answer.valid_out & self.get_answer.ack_out)
+        ]
+
+        # downconvert bursts
         mux = Signal(3)
-        valid = Signal()
+        last = Signal()
+        self.comb += [
+            last.eq(mux == (self.get_answer.burst_valid)),
+            self.get_answer.ack_in.eq(last & self.neighbor_ack)
+        ]
 
         self.sync += [
-            If(get_answer,
-                valid.eq(1),
-                mux.eq(0)
-            ).Elif(self.neighbor_valid & self.neighbor_ack,
-                mux.eq(mux+1),
-                valid.eq(mux < update_dat_r.valid)
+            If(self.neighbor_valid & self.neighbor_ack,
+                If(last,
+                    mux.eq(0)
+                ).Else(
+                    mux.eq(mux + 1)
+                )
             )
         ]
 
         cases = {}
         for i in range(4):
             cases[i] = self.neighbor.eq(self.answer_rd_port.dat_r[i*32:(i+1)*32])
-        self.sync += Case(mux, cases).makedefault()
+        self.comb += Case(mux, cases).makedefault()
 
-        get_answer = Signal()
-
-        self.sync += [
-            self.neighbor_valid.eq(valid),
-            self.message_out.eq(update_dat_r.message),
-            self.sender_out.eq(update_dat_r.sender),
-            self.round_out.eq(update_dat_r.round),
-            self.num_neighbors_out.eq(update_dat_r.num_neighbors),
-        ]
 
         self.comb += [
-            get_answer.eq((mux>=update_dat_r.valid) & self.answers.readable & self.answers.re),
-            self.answers.re.eq(self.neighbor_ack | ~self.neighbor_valid),
-            self.answer_wr_port.dat_w.eq(hmc_port.rd_data),
-            self.answer_wr_port.adr.eq(hmc_port.rd_data_tag),
-            self.answer_wr_port.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv),
-            self.answers.din.eq(hmc_port.rd_data_tag),
-            self.answers.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv),
-            self.answer_rd_port.adr.eq(self.answers.dout),
-            self.answer_rd_port.re.eq(get_answer),
-            self.update_rd_port.adr.eq(self.answers.dout),
-            self.update_rd_port.re.eq(get_answer),
-            self.tags.din.eq(self.answers.dout),
-            self.tags.we.eq(get_answer)
+            self.neighbor_valid.eq(self.get_answer.valid_out),
+            self.message_out.eq(self.get_answer.message_out),
+            self.sender_out.eq(self.get_answer.sender_out),
+            self.round_out.eq(self.get_answer.round_out),
+            self.num_neighbors_out.eq(self.get_answer.num_neighbors_out)
         ]
+
+

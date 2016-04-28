@@ -71,6 +71,8 @@ class AddressLayout:
             n = len(neighbors)
             adj_idx[pe][localnode] = (idx, n)
             adj_val.extend(neighbors)
+            if len(neighbors) % 4 != 0:
+                adj_val.extend(0 for _ in range(4-(len(neighbors) % 4)))
 
         return adj_idx, adj_val
 
