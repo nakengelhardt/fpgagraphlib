@@ -96,6 +96,8 @@ class NeighborsHMC(Module):
         if not hmc_port:
             hmc_port = config.platform.getHMCPort(0)
 
+        self.hmc_port = hmc_port
+
 
         update_dat_w = Record(set_layout_parameters(_data_layout,
             nodeidsize=config.addresslayout.nodeidsize,
@@ -259,10 +261,49 @@ class NeighborsHMC(Module):
         self.num_hmc_commands_issued = Signal(32)
         self.num_hmc_commands_retired = Signal(32)
         self.num_hmc_responses = Signal(32)
+        self.num_neighbors_issued = Signal(32)
 
         self.sync += [
             If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1))
+            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            If(self.neighbor_valid & self.neighbor_ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
+
+    def gen_selfcheck(self, tb, graph, quiet=True):
+        to_be_sent = dict()
+        level = 0
+        num_cycles = 0
+        num_mem_reads = 0
+        while not (yield tb.global_inactive):
+            num_cycles += 1
+            if (yield self.barrier_out):
+                level += 1
+            if (yield self.hmc_port.cmd_valid) and (yield self.hmc_port.cmd_ready):
+                num_mem_reads += 1
+            if (yield self.neighbor_valid) and (yield self.neighbor_ack):
+                neighbor = (yield self.neighbor)
+                curr_sender = (yield self.sender_out)
+                if not quiet:
+                    print("{}\tMessage from node {} for node {}".format(num_cycles, curr_sender, neighbor))
+                    if tb.config.has_edgedata:
+                        print("Edgedata: " + str((yield self.edgedata_out)))
+                if (not curr_sender in to_be_sent) or (not neighbor in to_be_sent[curr_sender]):
+                    if not neighbor in graph[curr_sender]:
+                        print("{}\tWarning: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
+                    else:
+                        print("{}\tWarning: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
+                else:
+                    to_be_sent[curr_sender].remove(neighbor)
+            if (yield self.valid) and (yield self.ack):
+                curr_sender = (yield self.sender_in)
+                print("get_neighbor: request for neighbors of node {}".format(curr_sender))
+                if not curr_sender in graph:
+                    print("{}\tWarning: invalid sender ({})".format(num_cycles, curr_sender))
+                else:
+                    if curr_sender in to_be_sent and to_be_sent[curr_sender]:
+                        print("{}\tWarning: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent[curr_sender], curr_sender))
+                    to_be_sent[curr_sender] = list(graph[curr_sender])
+            yield
+        print("{} memory reads.".format(num_mem_reads))

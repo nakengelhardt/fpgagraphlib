@@ -191,19 +191,21 @@ def export(config, filename='StreamLoopback128_migen.v'):
 
 def sim(config):
     config.platform = PicoPlatform(bus_width=32, stream_width=128)
-    tb = Top(config)
+    tb = Core(config)
     generators = []
-    generators.extend([rx.write([1])])
-    generators.extend([tx.read(4)])
 
-    # generators.extend([tb.core.gen_barrier_monitor()])
-    generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
-    # generators.extend([a.gen_selfcheck(tb.core, quiet=True) for a in tb.core.network.arbiter])
-    generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
-    # generators.extend([a.scatterkernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.scatter])
+    if config.use_hmc:
+        generators.extend([port.gen_responses(config.adj_val) for port in config.platform.HMCports])
 
-    # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
-    # generators.extend([tb.core.gen_network_stats()])
+    generators.extend([tb.gen_input()])
+    # generators.extend([tb.gen_barrier_monitor()])
+    generators.extend([s.get_neighbors.gen_selfcheck(tb, config.adj_dict, quiet=False) for s in tb.scatter])
+    # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.network.arbiter])
+    generators.extend([a.applykernel.gen_selfcheck(tb, quiet=True) for a in tb.apply])
+    # generators.extend([a.scatterkernel.gen_selfcheck(tb, quiet=False) for a in tb.scatter])
+
+    # generators.extend([a.gen_stats(tb) for a in tb.apply])
+    # generators.extend([tb.gen_network_stats()])
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
 
@@ -259,7 +261,6 @@ def main():
     if args.graphsave:
             export_graph(adj_dict, args.graphsave)
 
-    # print(adj_dict)
     config = Config(adj_dict)
 
     if args.command=='sim':

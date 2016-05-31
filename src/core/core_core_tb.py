@@ -41,10 +41,12 @@ class Core(Module):
 
 
         if config.use_hmc:
-            self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
-            if num_pe > 9:
+            if num_pe <= 9:
+                self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
+            else:
                 assert(num_pe <= 36)
                 assert((num_pe % 4) == 0)
+                self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
                 self.submodules.neighbors_hmc = [Neighborsx4(config, config.platform.getHMCPort(i)) for i in range(9)]
                 for i in range(9):
                     for j in range(4):

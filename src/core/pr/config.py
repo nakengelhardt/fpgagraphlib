@@ -14,14 +14,12 @@ class Config:
     def __init__(self, adj_dict, quiet=False):
         self.name = "pr"
 
-        nodeidsize = 32
-        num_nodes_per_pe = 2**11
-        edgeidsize = 32
-        max_edges_per_pe = 2**13
-        num_pe = 9
-        peidsize = bits_for(num_pe)
-        pe_groups = 1
-        inter_pe_delay = 0
+        # nodeidsize = 32
+        # num_nodes_per_pe = 2**11
+        # edgeidsize = 32
+        # max_edges_per_pe = 2**13
+        # num_pe = 9
+        # peidsize = bits_for(num_pe)
 
         # nodeidsize = 16
         # num_nodes_per_pe = 2**10
@@ -37,12 +35,15 @@ class Config:
         # num_pe = 8
         # peidsize = log2_int(num_pe)
 
-        # nodeidsize = 8
-        # num_nodes_per_pe = 2**6
-        # edgeidsize = 16
-        # max_edges_per_pe = 2**9
-        # peidsize = 1
-        # num_pe = 2
+        nodeidsize = 32
+        num_nodes_per_pe = 2**4
+        edgeidsize = 32
+        max_edges_per_pe = 2**6
+        peidsize = 4
+        num_pe = 16
+
+        pe_groups = 1
+        inter_pe_delay = 0
 
         assert(num_pe * num_nodes_per_pe > len(adj_dict))
 
