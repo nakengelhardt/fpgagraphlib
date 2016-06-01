@@ -15,6 +15,7 @@ from pico import PicoPlatform
 import random
 import sys
 import argparse
+import logging
 
 from recordfifo import RecordFIFO
 from graph_input import read_graph
@@ -198,7 +199,7 @@ def sim(config):
         generators.extend([port.gen_responses(config.adj_val) for port in config.platform.HMCports])
 
     generators.extend([tb.gen_input()])
-    # generators.extend([tb.gen_barrier_monitor()])
+    generators.extend([tb.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb, config.adj_dict, quiet=False) for s in tb.scatter])
     # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb, quiet=True) for a in tb.apply])
@@ -210,6 +211,23 @@ def sim(config):
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(name)-25s %(levelname)-8s %(message)s',
+                        datefmt='%m-%d %H:%M',
+                        filename='fpgagraphlib.log',
+                        filemode='w')
+    # define a Handler which writes INFO messages or higher to the sys.stderr
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    # set a format which is simpler for console use
+    formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
+    # tell the handler to use this format
+    console.setFormatter(formatter)
+    # add the handler to the root logger
+    logging.getLogger('').addHandler(console)
+
+    logger = logging.getLogger('config')
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-f', '--from-file', dest='graphfile',
                         help='filename containing graph')
@@ -241,6 +259,7 @@ def main():
     random.seed(s)
 
     if args.graphfile:
+        logger.info("Reading graph from file {}".format(args.graphfile))
         graphfile = open(args.graphfile)
         adj_dict = read_graph(graphfile)
     elif args.nodes:
@@ -253,22 +272,26 @@ def main():
             approach = args.approach
         else:
             approach = "random_walk"
+        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
         adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
     else:
         parser.print_help()
         exit(-1)
 
     if args.graphsave:
-            export_graph(adj_dict, args.graphsave)
+        logger.info("Saving graph to file {}".format(args.graphsave))
+        export_graph(adj_dict, args.graphsave)
 
     config = Config(adj_dict)
 
     if args.command=='sim':
+        logger.info("Starting Simulation")
         sim(config)
     if args.command=='export':
         filename = "top.v"
         if args.output:
             filename = args.output
+        logger.info("Exporting design to file {}".format(filename))
         export(config, filename=filename)
 
 

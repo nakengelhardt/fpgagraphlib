@@ -1,6 +1,8 @@
 from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 
+import logging
+
 class Neighbors(Module):
     def __init__(self, config, adj_val, edge_data=None):
         nodeidsize = config.addresslayout.nodeidsize
@@ -105,6 +107,7 @@ class Neighbors(Module):
 
 
     def gen_selfcheck(self, tb, graph, quiet=True):
+        logger = logging.getLogger('simulation.get_neighbors')
         curr_sender = 0
         to_be_sent = []
         level = 0
@@ -118,24 +121,24 @@ class Neighbors(Module):
                 num_mem_reads += 1
                 neighbor = (yield self.neighbor)
                 if not quiet:
-                    print("{}\tMessage from node {} for node {}".format(num_cycles, curr_sender, neighbor))
+                    logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
                     if tb.config.has_edgedata:
-                        print("Edgedata: " + str((yield self.edgedata_out)))
+                        logger.debug("Edgedata: " + str((yield self.edgedata_out)))
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
-                        print("{}\tWarning: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
+                        logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
                     else:
-                        print("{}\tWarning: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
+                        logger.warning("{}: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
                 else:
                     to_be_sent.remove(neighbor)
             if (yield self.valid) and (yield self.ack):
                 if to_be_sent:
-                    print("{}\tWarning: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent, curr_sender))
+                    logger.warning("{}: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent, curr_sender))
                 curr_sender = (yield self.sender_in)
                 if not curr_sender in graph:
-                    print("{}\tWarning: invalid sender ({})".format(num_cycles, curr_sender))
+                    logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))
                     to_be_sent = []
                 else:
                     to_be_sent = list(graph[curr_sender])
             yield
-        print("{} memory reads.".format(num_mem_reads))
+        logger.info("{} memory reads.".format(num_mem_reads))

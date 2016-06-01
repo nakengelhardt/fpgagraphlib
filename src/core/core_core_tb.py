@@ -2,6 +2,9 @@
 
 import unittest
 import random
+import sys
+import argparse
+import logging
 
 from migen import *
 from tbsupport import *
@@ -17,8 +20,6 @@ from core_apply import Apply
 from core_scatter import Scatter
 from core_neighbors_hmcx4 import Neighborsx4
 
-import sys
-import argparse
 
 class Core(Module):
     def __init__(self, config):
@@ -85,14 +86,14 @@ class Core(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
 
-
     def gen_input(self):
+        logger = logging.getLogger('simulation.input')
         num_pe = self.addresslayout.num_pe
         num_nodes_per_pe = self.addresslayout.num_nodes_per_pe
 
         init_messages = self.config.init_messages
 
-        # print(init_messages)
+        logger.debug("Initialization messages: {}".format(init_messages))
 
         start_message = [self.network.arbiter[i].start_message for i in range(num_pe)]
 
@@ -135,6 +136,7 @@ class Core(Module):
 
 
     def gen_barrier_monitor(self):
+        logger = logging.getLogger('simulation.barriermonitor')
         num_pe = self.addresslayout.num_pe
         num_cycles = 0
         while not (yield self.global_inactive):
@@ -143,30 +145,30 @@ class Core(Module):
                 if ((yield self.apply[i].apply_interface.valid)
                     and (yield self.apply[i].apply_interface.ack)):
                     if (yield self.apply[i].apply_interface.msg.barrier):
-                        print(str(num_cycles) + "\tBarrier enters Apply on PE " + str(i))
+                        logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(i))
                     # else:
-                    #     print(str(num_cycles) + "\tMessage for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
+                    #     logger.debug(str(num_cycles) + ": Message for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
                 if ((yield self.apply[i].applykernel.valid_in)
                     and (yield self.apply[i].applykernel.ready)
                     and not (yield self.apply[i].applykernel.barrier_in)):
                     if (yield self.apply[i].level) % 2 == (yield self.apply[i].roundpar):
-                        print("{}\tWarning: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].roundpar), (yield self.apply[i].level)))
+                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].roundpar), (yield self.apply[i].level)))
                 if ((yield self.apply[i].scatter_interface.barrier)
                     and (yield self.apply[i].scatter_interface.valid)
                     and (yield self.apply[i].scatter_interface.ack)):
-                    print(str(num_cycles) + "\tBarrier exits Apply on PE " + str(i))
+                    logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(i))
                 if ((yield self.scatter[i].scatter_interface.valid)
                     and (yield self.scatter[i].scatter_interface.ack)):
                     if (yield self.scatter[i].scatter_interface.barrier):
-                        print(str(num_cycles) + "\tBarrier enters Scatter on PE " + str(i))
+                        logger.debug(str(num_cycles) + ": Barrier enters Scatter on PE " + str(i))
                     # else:
-                    #     print(str(num_cycles) + "\tScatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
+                    #     logger.debug(str(num_cycles) + ": Scatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
                 if ((yield self.scatter[i].network_interface.valid)
                     and (yield self.scatter[i].network_interface.ack)):
                     if (yield self.scatter[i].network_interface.msg.barrier):
-                        print(str(num_cycles) + "\tBarrier exits Scatter on PE " + str(i))
+                        logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(i))
                     # else:
-                    #     print(str(num_cycles) + "\tMessage for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
+                    #     logger.debug(str(num_cycles) + ": Message for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
             yield
 
     def gen_network_stats(self):

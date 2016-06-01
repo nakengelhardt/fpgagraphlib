@@ -8,11 +8,13 @@ from pr.interfaces import payload_layout, node_storage_layout
 from pr.applykernel import ApplyKernel
 from pr.scatterkernel import ScatterKernel
 
-
+import logging
 
 class Config:
     def __init__(self, adj_dict, quiet=False):
         self.name = "pr"
+
+        logger = logging.getLogger('config')
 
         # nodeidsize = 32
         # num_nodes_per_pe = 2**11
@@ -84,9 +86,10 @@ class Config:
 
         self.init_messages = init_messages
 
-        if not quiet:
-            print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
-            print("num_pe = " + str(num_pe))
-            print("num_nodes_per_pe = " + str(num_nodes_per_pe))
-            print("max_edges_per_pe = " + str(max_edges_per_pe))
-            print("inter_pe_delay =", inter_pe_delay)
+        logger.info("nodeidsize = {}".format(nodeidsize))
+        logger.info("edgeidsize = {}".format(edgeidsize))
+        logger.info("peidsize = {}".format(peidsize))
+        logger.info("num_pe = " + str(num_pe))
+        logger.info("num_nodes_per_pe = " + str(num_nodes_per_pe))
+        logger.info("max_edges_per_pe = " + str(max_edges_per_pe))
+        logger.info("inter_pe_delay =" + str(inter_pe_delay))
