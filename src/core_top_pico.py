@@ -201,7 +201,7 @@ def sim(config):
     generators.extend([tb.gen_input()])
     generators.extend([tb.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb, config.adj_dict, quiet=False) for s in tb.scatter])
-    # generators.extend([a.gen_selfcheck(tb, quiet=True) for a in tb.network.arbiter])
+    generators.extend([a.gen_selfcheck(tb) for a in tb.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb, quiet=True) for a in tb.apply])
     # generators.extend([a.scatterkernel.gen_selfcheck(tb, quiet=False) for a in tb.scatter])
 

@@ -2,6 +2,8 @@ from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 
+import logging
+
 _data_layout = [
     ("message", "payloadsize"),
     ("sender", "nodeidsize"),
@@ -272,6 +274,7 @@ class NeighborsHMC(Module):
         ]
 
     def gen_selfcheck(self, tb, graph, quiet=True):
+        logger = logging.getLogger("simulation.get_neighbors")
         to_be_sent = dict()
         level = 0
         num_cycles = 0

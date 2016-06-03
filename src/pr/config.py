@@ -42,7 +42,7 @@ class Config:
         edgeidsize = 32
         max_edges_per_pe = 2**6
         peidsize = 4
-        num_pe = 16
+        num_pe = 2
 
         pe_groups = 1
         inter_pe_delay = 0
@@ -65,7 +65,7 @@ class Config:
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        self.use_hmc = True
+        self.use_hmc = False
 
         self.adj_dict = adj_dict
         if self.use_hmc:

@@ -119,6 +119,7 @@ class Core(Module):
         for i in range(num_pe):
             yield start_message[i].msg.dest_id.eq(0)
             yield start_message[i].msg.payload.eq(0)
+            yield start_message[i].msg.sender.eq(i<<log2_int(num_nodes_per_pe))
             yield start_message[i].msg.barrier.eq(1)
             yield start_message[i].valid.eq(1)
 
