@@ -65,8 +65,8 @@ class Arbiter(Module):
         # update barrier counter
         self.stage2 = stage2 = ApplyInterface(**addresslayout.get_params())
 
-        barrier_from_pe = Array(Signal() for _ in range(num_pe))
-        barrier_reached = Signal()
+        self.barrier_from_pe = barrier_from_pe = Array(Signal() for _ in range(num_pe))
+        self.barrier_reached = barrier_reached = Signal()
         self.comb += barrier_reached.eq(reduce(and_, barrier_from_pe))
 
         self.sync += [
@@ -122,13 +122,24 @@ class Arbiter(Module):
         logger = logging.getLogger("simulation.arbiter")
         level = 0
         num_cycles = 0
+        last_valid = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.stage1.valid) and (yield self.stage1.ack) and (yield self.stage1.msg.barrier):
-                logger.debug("Barrier (round {}) from PE {}".format((yield self.stage1.msg.roundpar), (yield tb.addresslayout.pe_adr(self.stage1.msg.sender))))
+                logger.debug("{}: Barrier (round {}) from PE {}".format(num_cycles, (yield self.stage1.msg.roundpar), (yield tb.addresslayout.pe_adr(self.stage1.msg.sender))))
+            if (yield self.stage2.ack) and (yield self.stage2.msg.barrier):
+                if (yield self.stage2.valid):
+                    logger.debug("{}: All barriers found".format(num_cycles))
+                elif last_valid:
+                    if not (yield self.barrier_from_pe[tb.addresslayout.pe_adr(self.stage2.msg.sender)]):
+                        logger.warning("{}: Barrier lost".format(num_cycles))
+                    else:
+                        logger.debug("{}: Barrier saved".format(num_cycles))
+            last_valid = (yield self.stage1.valid)
             if (yield self.apply_interface.valid) and (yield self.apply_interface.ack):
                 if (yield self.apply_interface.msg.barrier):
                     level += 1
+                    logger.debug("{}: Barrier passed to apply".format(num_cycles))
                 else:
                     if level % 2 == (yield self.apply_interface.msg.roundpar):
                         logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply_interface.msg.roundpar), level))

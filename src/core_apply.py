@@ -17,7 +17,7 @@ _memory_port_layout = [
 ]
 
 class Apply(Module):
-    def __init__(self, config, init_nodedata=None):
+    def __init__(self, config, pe_id, init_nodedata=None):
         self.config = config
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
@@ -197,7 +197,8 @@ class Apply(Module):
         self.comb += [
             self.outfifo.we.eq(self.applykernel.update_valid | self.applykernel.barrier_out),
             self.outfifo.din.msg.eq(self.applykernel.update_out.raw_bits()),
-            self.outfifo.din.sender.eq(self.applykernel.update_sender),
+            If(self.applykernel.barrier_out, self.outfifo.din.sender.eq(pe_id << log2_int(num_nodes_per_pe))
+            ).Else(self.outfifo.din.sender.eq(self.applykernel.update_sender)),
             self.outfifo.din.roundpar.eq(self.applykernel.update_round),
             self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
         ]

@@ -106,7 +106,7 @@ class Neighbors(Module):
         ]
 
 
-    def gen_selfcheck(self, tb, graph, quiet=True):
+    def gen_selfcheck(self, tb, graph):
         logger = logging.getLogger('simulation.get_neighbors')
         curr_sender = 0
         to_be_sent = []
@@ -120,10 +120,9 @@ class Neighbors(Module):
             if (yield self.neighbor_valid) and (yield self.neighbor_ack):
                 num_mem_reads += 1
                 neighbor = (yield self.neighbor)
-                if not quiet:
-                    logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
-                    if tb.config.has_edgedata:
-                        logger.debug("Edgedata: " + str((yield self.edgedata_out)))
+                logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
+                if tb.config.has_edgedata:
+                    logger.debug("Edgedata: " + str((yield self.edgedata_out)))
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))

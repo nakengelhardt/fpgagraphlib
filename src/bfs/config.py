@@ -5,18 +5,19 @@ from bfs.interfaces import node_storage_layout
 from bfs.applykernel import ApplyKernel
 from bfs.scatterkernel import ScatterKernel
 
-class Config:
-    def __init__(self, adj_dict, quiet=True):
-        self.name = "bfs"
+import logging
 
-        nodeidsize = 32
-        num_nodes_per_pe = 2**11
-        edgeidsize = 32
-        max_edges_per_pe = 2**13
-        num_pe = 9
-        peidsize = bits_for(num_pe)
-        pe_groups = 1
-        inter_pe_delay = 0
+class Config:
+    def __init__(self, adj_dict):
+        self.name = "bfs"
+        logger = logging.getLogger('config')
+
+        # nodeidsize = 32
+        # num_nodes_per_pe = 2**11
+        # edgeidsize = 32
+        # max_edges_per_pe = 2**13
+        # num_pe = 9
+        # peidsize = bits_for(num_pe)
 
         # nodeidsize = 16
         # num_nodes_per_pe = 2**13
@@ -41,12 +42,15 @@ class Config:
         # peidsize = 8
         # num_pe = 8
 
-        # nodeidsize = 8
-        # num_nodes_per_pe = 2**6
-        # edgeidsize = 16
-        # max_edges_per_pe = 2**9
-        # peidsize = 1
-        # num_pe = 2
+        nodeidsize = 32
+        num_nodes_per_pe = 2**4
+        edgeidsize = 32
+        max_edges_per_pe = 2**6
+        peidsize = 4
+        num_pe = 2
+
+        pe_groups = 1
+        inter_pe_delay = 0
 
         payloadsize = nodeidsize
 
@@ -75,8 +79,12 @@ class Config:
         self.init_messages = [list() for _ in range(num_pe)]
         self.init_messages[0].append({'dest_id':1, 'sender':1, 'payload':0})
 
-        if not quiet:
-            print("nodeidsize = {}\nedgeidsize = {}\npeidsize = {}".format(nodeidsize, edgeidsize, peidsize))
-            print("num_pe = " + str(num_pe))
-            print("num_nodes_per_pe = " + str(num_nodes_per_pe))
-            print("max_edges_per_pe = " + str(max_edges_per_pe))
+        logger.info("Algorithm: BFS")
+        logger.info("Using HMC: " + "YES" if self.use_hmc else "NO")
+        logger.info("nodeidsize = {}".format(nodeidsize))
+        logger.info("edgeidsize = {}".format(edgeidsize))
+        logger.info("peidsize = {}".format(peidsize))
+        logger.info("num_pe = " + str(num_pe))
+        logger.info("num_nodes_per_pe = " + str(num_nodes_per_pe))
+        logger.info("max_edges_per_pe = " + str(max_edges_per_pe))
+        logger.info("inter_pe_delay =" + str(inter_pe_delay))

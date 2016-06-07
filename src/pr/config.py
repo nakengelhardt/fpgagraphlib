@@ -11,7 +11,7 @@ from pr.scatterkernel import ScatterKernel
 import logging
 
 class Config:
-    def __init__(self, adj_dict, quiet=False):
+    def __init__(self, adj_dict):
         self.name = "pr"
 
         logger = logging.getLogger('config')
@@ -86,6 +86,8 @@ class Config:
 
         self.init_messages = init_messages
 
+        logger.info("Algorithm: PageRank")
+        logger.info("Using HMC: " + "YES" if self.use_hmc else "NO")
         logger.info("nodeidsize = {}".format(nodeidsize))
         logger.info("edgeidsize = {}".format(edgeidsize))
         logger.info("peidsize = {}".format(peidsize))

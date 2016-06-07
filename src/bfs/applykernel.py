@@ -3,6 +3,8 @@ from migen.genlib.record import *
 
 from bfs.interfaces import payload_layout, node_storage_layout
 
+import logging
+
 class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
@@ -53,7 +55,8 @@ class ApplyKernel(Module):
             self.ready.eq(self.update_ack)
         ]
 
-    def gen_selfcheck(self, tb, quiet=False):
+    def gen_selfcheck(self, tb):
+        logger = logging.getLogger("simulation.applykernel")
         num_pe = len(tb.apply)
         pe_id = [a.applykernel for a in tb.apply].index(self)
         level = 0
@@ -64,12 +67,12 @@ class ApplyKernel(Module):
             num_cycles += 1
             if (yield self.barrier_out) and (yield self.update_ack):
                 level += 1
+                logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, level))
             if (yield self.valid_in) and (yield self.ready):
                 num_messages_in += 1
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
-                if not quiet:
-                    print("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
+                logger.debug("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
-        print("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
-        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
+        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
+        logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

@@ -251,10 +251,17 @@ class NeighborsHMC(Module):
         # output
         self.comb += [
             self.neighbor_valid.eq(self.get_answer.valid_out),
-            self.message_out.eq(self.get_answer.message_out),
-            self.sender_out.eq(self.get_answer.sender_out),
-            self.round_out.eq(self.get_answer.round_out),
-            self.num_neighbors_out.eq(self.get_answer.num_neighbors_out)
+            If(self.barrier_out,
+                self.message_out.eq(message),
+                self.sender_out.eq(sender),
+                self.round_out.eq(roundpar),
+                self.num_neighbors_out.eq(num_neighbors)
+            ).Else(
+                self.message_out.eq(self.get_answer.message_out),
+                self.sender_out.eq(self.get_answer.sender_out),
+                self.round_out.eq(self.get_answer.round_out),
+                self.num_neighbors_out.eq(self.get_answer.num_neighbors_out)
+            )
         ]
 
 
@@ -273,7 +280,7 @@ class NeighborsHMC(Module):
             If(self.neighbor_valid & self.neighbor_ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
 
-    def gen_selfcheck(self, tb, graph, quiet=True):
+    def gen_selfcheck(self, tb, graph):
         logger = logging.getLogger("simulation.get_neighbors")
         to_be_sent = dict()
         level = 0
@@ -288,10 +295,9 @@ class NeighborsHMC(Module):
             if (yield self.neighbor_valid) and (yield self.neighbor_ack):
                 neighbor = (yield self.neighbor)
                 curr_sender = (yield self.sender_out)
-                if not quiet:
-                    logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
-                    if tb.config.has_edgedata:
-                        logger.debug("Edgedata: " + str((yield self.edgedata_out)))
+                logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
+                if tb.config.has_edgedata:
+                    logger.debug("Edgedata: " + str((yield self.edgedata_out)))
                 if (not curr_sender in to_be_sent) or (not neighbor in to_be_sent[curr_sender]):
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))

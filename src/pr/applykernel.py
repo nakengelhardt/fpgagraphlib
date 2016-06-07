@@ -6,6 +6,8 @@ from pr.interfaces import payload_layout, node_storage_layout
 from faddsub import FAddSub
 from fmul import FMul
 
+import logging
+
 class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
@@ -32,7 +34,7 @@ class ApplyKernel(Module):
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
-        
+
 
         ###
 
@@ -41,7 +43,7 @@ class ApplyKernel(Module):
         self.comb += const_base.eq(addresslayout.const_base) # init to 0.15/num_nodes
         const_0_85 = Signal(floatsize)
         self.comb += const_0_85.eq(0x3f59999a)
-        
+
         p1_ce = Signal()
 
         self.comb += self.ready.eq(p1_ce)
@@ -146,16 +148,16 @@ class ApplyKernel(Module):
         self.submodules.mul = FMul()
 
         self.comb += [
-            self.mul.a.eq(nodeweight), 
-            self.mul.b.eq(const_0_85), 
-            self.mul.valid_i.eq(send_message), 
-            dyn_rank.eq(self.mul.r), 
-            dyn_rank_valid.eq(self.mul.valid_o), 
+            self.mul.a.eq(nodeweight),
+            self.mul.b.eq(const_0_85),
+            self.mul.valid_i.eq(send_message),
+            dyn_rank.eq(self.mul.r),
+            dyn_rank_valid.eq(self.mul.valid_o),
             self.mul.ce.eq(p2_ce)
         ]
 
         self.submodules.add2 = FAddSub()
-        
+
         self.comb += [
             self.add2.a.eq(const_base),
             self.add2.b.eq(dyn_rank),
@@ -187,7 +189,8 @@ class ApplyKernel(Module):
             self.update_round.eq(m_round[-1])
         ]
 
-    def gen_selfcheck(self, tb, quiet=False):
+    def gen_selfcheck(self, tb):
+        logger = logging.getLogger("simulation.applykernel")
         num_pe = len(tb.apply)
         num_nodes_per_pe = tb.addresslayout.num_nodes_per_pe
         pe_id = [a.applykernel for a in tb.apply].index(self)
@@ -202,35 +205,32 @@ class ApplyKernel(Module):
             if (yield self.state_barrier):
                 assert(not (yield self.state_valid))
                 state_level += 1
-                # if not quiet:
-                print("{}\tPE {} raised to level {}".format(num_cycles, pe_id, state_level))
+                logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, state_level))
                 if state_level < 30:
                     for node in range(num_nodes_per_pe):
                         data = (yield tb.apply[pe_id].mem[node])
                         s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
                         if s['nrecvd'] != 0:
-                            print("{}\tWarning: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
+                            logger.warning("{}: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
             if (yield self.barrier_out) and (yield self.update_ack):
                 out_level += 1
                 if (yield self.update_valid):
-                    print("{}\tWarning: valid and barrier raised simultaneously on applykernel output on PE {}".format(num_cycles, pe_id))
+                    logger.warning("{}: valid and barrier raised simultaneously on applykernel output on PE {}".format(num_cycles, pe_id))
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
-                if not quiet:
-                        print("{}\tNode {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
+                logger.debug("{}: Node {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
                 if out_level >= 30:
-                    print("{}\tWarning: message sent after inactivity level reached".format(num_cycles))
+                    logger.warning("{}: message sent after inactivity level reached".format(num_cycles))
             if (yield self.barrier_in) and (yield self.ready):
                 in_level += 1
             if (yield self.valid_in) and (yield self.ready):
                 num_messages_in += 1
                 if (yield self.barrier_in):
-                    print("{}\tWarning: valid and barrier raised simultaneously on applykernel input on PE {}".format(num_cycles, pe_id))
-                if not quiet:
-                    if in_level == 0:
-                        print("{}\tInit message for node {}".format(num_cycles, (yield self.nodeid_in)))
-                    else:
-                        print("{}\tMessage {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
+                    logger.warning("{}: valid and barrier raised simultaneously on applykernel input on PE {}".format(num_cycles, pe_id))
+                if in_level == 0:
+                    logger.debug("{}: Init message for node {}".format(num_cycles, (yield self.nodeid_in)))
+                else:
+                    logger.debug("{}: Message {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
             yield
-        print("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, state_level, num_messages_in, num_messages_out))
-        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
+        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, state_level, num_messages_in, num_messages_out))
+        logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
