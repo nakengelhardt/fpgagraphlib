@@ -19,6 +19,7 @@ _memory_port_layout = [
 class Apply(Module):
     def __init__(self, config, pe_id, init_nodedata=None):
         self.config = config
+        self.pe_id = pe_id
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
@@ -229,12 +230,11 @@ class Apply(Module):
         self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)
 
     def gen_stats(self, tb):
-        pe_id = tb.apply.index(self)
         num_cycles = 0
         with open("{}.mem_dump.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as memdumpfile:
             memdumpfile.write("Time\tPE\tMemory address\n")
             while not (yield tb.global_inactive):
                 num_cycles += 1
                 if (yield self.rd_port.re):
-                    memdumpfile.write("{}\t{}\t{}\n".format(num_cycles, pe_id, (yield self.rd_port.adr)))
+                    memdumpfile.write("{}\t{}\t{}\n".format(num_cycles, self.pe_id, (yield self.rd_port.adr)))
                 yield

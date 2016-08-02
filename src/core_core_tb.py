@@ -43,11 +43,11 @@ class Core(Module):
 
         if config.use_hmc:
             if num_pe <= 9:
-                self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
+                self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
             else:
                 assert(num_pe <= 36)
                 assert((num_pe % 4) == 0)
-                self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+                self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
                 self.submodules.neighbors_hmc = [Neighborsx4(config, config.platform.getHMCPort(i)) for i in range(9)]
                 for i in range(9):
                     for j in range(4):
@@ -73,7 +73,7 @@ class Core(Module):
                                 self.neighbors_hmc[i].neighbor_ack[j].eq(self.scatter[n].get_neighbors.neighbor_ack)
                             ]
         else:
-            self.submodules.scatter = [Scatter(config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+            self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -92,8 +92,6 @@ class Core(Module):
         num_nodes_per_pe = self.addresslayout.num_nodes_per_pe
 
         init_messages = self.config.init_messages
-
-        logger.debug("Initialization messages: {}".format(init_messages))
 
         start_message = [self.network.arbiter[i].start_message for i in range(num_pe)]
 

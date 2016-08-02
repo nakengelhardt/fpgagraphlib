@@ -4,7 +4,8 @@ from migen.genlib.fsm import FSM, NextState, NextValue
 import logging
 
 class Neighbors(Module):
-    def __init__(self, config, adj_val, edge_data=None):
+    def __init__(self, pe_id, config, adj_val, edge_data=None):
+        self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         num_nodes_per_pe = config.addresslayout.num_nodes_per_pe
         edgeidsize = config.addresslayout.edgeidsize
@@ -107,7 +108,7 @@ class Neighbors(Module):
 
 
     def gen_selfcheck(self, tb, graph):
-        logger = logging.getLogger('simulation.get_neighbors')
+        logger = logging.getLogger('simulation.get_neighbors' + str(self.pe_id))
         curr_sender = 0
         to_be_sent = []
         level = 0

@@ -20,7 +20,7 @@ class Network(Module):
                              #delay=(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
                              ) for i in range(num_pe)] for j in range(num_pe)]
         self.submodules.fifos = fifos
-        self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
+        self.submodules.arbiter = [Arbiter(sink, config, fifos[sink]) for sink in range(num_pe)]
 
         self.comb += [self.arbiter[i].apply_interface.connect(self.apply_interface[i]) for i in range(num_pe)]
 
@@ -48,11 +48,22 @@ class Network(Module):
 
             sink = Signal(config.addresslayout.peidsize)
 
+            num_msgs_since_last_barrier = Array(Signal(config.addresslayout.nodeidsize) for _ in range(num_pe))
+
+            self.sync += [
+                If(barrier_done,
+                    [num_msgs_since_last_barrier[i].eq(0) for i in range(num_pe)]
+                ).Elif(~have_barrier & self.network_interface[source].valid & self.network_interface[source].ack,
+                    num_msgs_since_last_barrier[sink].eq(num_msgs_since_last_barrier[sink]+1)
+                )
+            ]
+
             self.comb+= If(have_barrier,
                             [array_barrier[i].eq(1) for i in range(num_pe)],
                             [array_roundpar[i].eq(self.network_interface[source].msg.roundpar) for i in range(num_pe)],
                             [array_we[i].eq(~barrier_ack[i]) for i in range(num_pe)],
                             [array_sender[i].eq(self.network_interface[source].msg.sender) for i in range(num_pe)],
+                            [array_dest_id[i].eq(num_msgs_since_last_barrier[i]) for i in range(num_pe)],
                             self.network_interface[source].ack.eq(barrier_done)
                         ).Else(
                             sink.eq(self.network_interface[source].dest_pe),

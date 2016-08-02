@@ -14,8 +14,8 @@ _msg_layout = [
 ]
 
 class Message(Record):
-    def __init__(self, **kwargs):
-        Record.__init__(self, set_layout_parameters(_msg_layout, **kwargs))
+    def __init__(self, name=None, **kwargs):
+        Record.__init__(self, set_layout_parameters(_msg_layout, **kwargs), name=name)
 
 ## interface between arbiter / apply
 
@@ -26,8 +26,8 @@ _apply_layout = [
 ]
 
 class ApplyInterface(Record):
-    def __init__(self, **kwargs):
-        Record.__init__(self, set_layout_parameters(_apply_layout, **kwargs))
+    def __init__(self, name=None, **kwargs):
+        Record.__init__(self, set_layout_parameters(_apply_layout, **kwargs), name=name)
 
 
 ## interface between apply / scatter
@@ -42,8 +42,8 @@ _scatter_layout = [
 ]
 
 class ScatterInterface(Record):
-    def __init__(self, **kwargs):
-        Record.__init__(self, set_layout_parameters(_scatter_layout, **kwargs))
+    def __init__(self, name=None, **kwargs):
+        Record.__init__(self, set_layout_parameters(_scatter_layout, **kwargs), name=name)
 
 ## interface between scatter / network
 
@@ -56,5 +56,5 @@ _network_layout = [
 ]
 
 class NetworkInterface(Record):
-    def __init__(self, **kwargs):
-        Record.__init__(self, set_layout_parameters(_network_layout, **kwargs))
+    def __init__(self, name=None, **kwargs):
+        Record.__init__(self, set_layout_parameters(_network_layout, **kwargs), name=name)

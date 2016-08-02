@@ -42,7 +42,7 @@ class Config:
         edgeidsize = 32
         max_edges_per_pe = 2**6
         peidsize = 4
-        num_pe = 2
+        num_pe = 16
 
         pe_groups = 1
         inter_pe_delay = 0

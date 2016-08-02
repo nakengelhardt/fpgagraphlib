@@ -62,7 +62,8 @@ class getAnswer(Module):
 
 
 class NeighborsHMC(Module):
-    def __init__(self, config, adj_val, edge_data=None, hmc_port=None):
+    def __init__(self, pe_id, config, adj_val, edge_data=None, hmc_port=None):
+        self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize
 
@@ -281,7 +282,7 @@ class NeighborsHMC(Module):
         ]
 
     def gen_selfcheck(self, tb, graph):
-        logger = logging.getLogger("simulation.get_neighbors")
+        logger = logging.getLogger("simulation.get_neighbors" + str(self.pe_id))
         to_be_sent = dict()
         level = 0
         num_cycles = 0
