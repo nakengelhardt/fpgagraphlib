@@ -2,7 +2,6 @@ from migen import *
 
 import logging
 
-to_be_sent = dict()
 
 class NeighborsDummy(Module):
     def __init__(self, config, adj_val, edge_data=None):
@@ -33,6 +32,7 @@ class NeighborsDummy(Module):
         self.num_neighbors_out = Signal(edgeidsize)
 
     def gen_selfcheck(self, tb, graph, quiet=True):
+        to_be_sent = [dict(), dict()]
         logger = logging.getLogger('simulation.get_neighbors')
         level = 0
         num_cycles = 0
@@ -40,29 +40,35 @@ class NeighborsDummy(Module):
             num_cycles += 1
             if (yield self.barrier_out):
                 level += 1
+                rnd = (yield self.round_out)
+                for sender in to_be_sent[rnd]:
+                    if to_be_sent[rnd][sender]:
+                        logger.warning("{}: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent[rnd][sender], sender))
             if (yield self.neighbor_valid) and (yield self.neighbor_ack):
                 neighbor = (yield self.neighbor)
                 curr_sender = (yield self.sender_out)
+                rnd = (yield self.round_out)
                 if not quiet:
                     logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
                     if tb.config.has_edgedata:
                         logger.debug("Edgedata: " + str((yield self.edgedata_out)))
-                if (not curr_sender in to_be_sent):
+                if (not curr_sender in to_be_sent[rnd]):
                     logger.warning("{}: sending message from node {} whose request was not registered!".format(num_cycles, curr_sender))
-                elif (not neighbor in to_be_sent[curr_sender]):
+                elif (not neighbor in to_be_sent[rnd][curr_sender]):
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
                     else:
                         logger.warning("{}: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
                 else:
-                    to_be_sent[curr_sender].remove(neighbor)
+                    to_be_sent[rnd][curr_sender].remove(neighbor)
             if (yield self.valid) and (yield self.ack):
                 curr_sender = (yield self.sender_in)
-                logger.debug("request for neighbors of node {}".format(curr_sender))
+                rnd = (yield self.round_in)
+                logger.debug("{}: request for neighbors of node {}".format(num_cycles, curr_sender))
                 if not curr_sender in graph:
                     logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))
                 else:
-                    if curr_sender in to_be_sent and to_be_sent[curr_sender]:
-                        logger.warning("{}: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent[curr_sender], curr_sender))
-                    to_be_sent[curr_sender] = list(graph[curr_sender])
+                    if curr_sender in to_be_sent[rnd] and to_be_sent[rnd][curr_sender]:
+                        logger.warning("{}: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent[rnd][curr_sender], curr_sender))
+                    to_be_sent[rnd][curr_sender] = list(graph[curr_sender])
             yield

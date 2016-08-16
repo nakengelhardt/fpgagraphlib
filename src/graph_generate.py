@@ -2,9 +2,11 @@
 
 import argparse
 import random_connected_graph
+import logging
 
 def generate_graph(num_nodes, num_edges, approach="random_walk", digraph=False):
-    print("Generating {}directed graph with {} nodes and {} edges".format("" if digraph else "un", num_nodes, num_edges))
+    logger = logging.getLogger('graph_generate')
+    logger.debug("Generating {}directed graph with {} nodes and {} edges".format("" if digraph else "un", num_nodes, num_edges))
     fn = getattr(random_connected_graph, approach)
     nodes = list(range(1, num_nodes+1))
     graph = fn(nodes, num_edges, digraph=digraph)
@@ -57,7 +59,7 @@ def main():
         approach = "random_walk"
 
     d = generate_graph(num_nodes, num_edges, approach=approach)
-    
+
     for source in d:
         for sink in d[source]:
             print("{} {}".format(source, sink))

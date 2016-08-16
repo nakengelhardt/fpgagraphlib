@@ -46,12 +46,12 @@ class Scatter(Module):
         # resides in submodule
 
         if config.use_hmc:
-            if num_pe < 10:
-                self.submodules.get_neighbors = NeighborsHMC(pe_id, config, adj_val, hmc_port=hmc_port)
+            if num_pe <= 9:
+                self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=adj_val, hmc_port=hmc_port)
             else:
-                self.submodules.get_neighbors = NeighborsDummy(config, adj_val)
+                self.submodules.get_neighbors = NeighborsDummy(config=config, adj_val=adj_val)
         else:
-            self.submodules.get_neighbors = Neighbors(pe_id, config, adj_val, edge_data=edge_data)
+            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val, edge_data=edge_data)
 
 
         # flow control variables

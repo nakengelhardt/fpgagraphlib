@@ -62,7 +62,8 @@ class getAnswer(Module):
 
 
 class NeighborsHMC(Module):
-    def __init__(self, pe_id, config, adj_val, edge_data=None, hmc_port=None):
+    def __init__(self, pe_id, config, adj_val=None, edge_data=None, hmc_port=None):
+        assert(adj_val)
         self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize

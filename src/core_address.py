@@ -22,7 +22,7 @@ class AddressLayout:
         self.num_nodes_per_pe = num_nodes_per_pe
         self.max_edges_per_pe = max_edges_per_pe
         self.payloadsize = payloadsize
-        for k, v in kwargs:
+        for k, v in kwargs.items():
             setattr(self, k, v)
 
     def get_params(self):

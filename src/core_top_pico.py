@@ -5,21 +5,16 @@ import migen.build.xilinx.common
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import *
 
+import logging
 
 from functools import reduce
 from operator import or_
 
 from pico import PicoPlatform
 
-# import unittest
-import random
-import sys
-import argparse
-import logging
+from core_init import init_parse
 
 from recordfifo import RecordFIFO
-from graph_input import read_graph
-from graph_generate import generate_graph, export_graph
 from core_core_tb import Core
 from core_interfaces import Message
 
@@ -107,7 +102,7 @@ class Top(Module):
         ]
 
         if config.use_hmc:
-            if num_pe < 10:
+            if num_pe <= 9:
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
                 self.comb += [
@@ -211,78 +206,9 @@ def sim(config):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(name)-25s %(levelname)-8s %(message)s',
-                        datefmt='%m-%d %H:%M',
-                        filename='fpgagraphlib.log',
-                        filemode='w')
-    # define a Handler which writes INFO messages or higher to the sys.stderr
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    # set a format which is simpler for console use
-    formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
-    # tell the handler to use this format
-    console.setFormatter(formatter)
-    # add the handler to the root logger
-    logging.getLogger('').addHandler(console)
+    args, config = init_parse()
 
     logger = logging.getLogger('config')
-
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('-f', '--from-file', dest='graphfile',
-                        help='filename containing graph')
-    parser.add_argument('-n', '--nodes', type=int,
-                        help='number of nodes to generate')
-    parser.add_argument('-e', '--edges', type=int,
-                        help='number of edges to generate')
-    parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
-    parser.add_argument('-s', '--seed', type=int,
-                        help='seed to initialise random number generator')
-    parser.add_argument('--random-walk', action='store_const',
-                        const='random_walk', dest='approach',
-                        help='use a random-walk generation algorithm (default)')
-    parser.add_argument('--naive', action='store_const',
-                        const='naive', dest='approach',
-                        help='use a naive generation algorithm (slower)')
-    parser.add_argument('--partition', action='store_const',
-                        const='partition', dest='approach',
-                        help='use a partition-based generation algorithm (biased)')
-    parser.add_argument('--save-graph', dest='graphsave', help='save graph to a file')
-    parser.add_argument('command', help="one of 'sim' or 'export'")
-    parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
-    args = parser.parse_args()
-
-    if args.seed:
-        s = args.seed
-    else:
-        s = 42
-    random.seed(s)
-
-    if args.graphfile:
-        logger.info("Reading graph from file {}".format(args.graphfile))
-        graphfile = open(args.graphfile)
-        adj_dict = read_graph(graphfile)
-    elif args.nodes:
-        num_nodes = args.nodes
-        if args.edges:
-            num_edges = args.edges
-        else:
-            num_edges = num_nodes - 1
-        if args.approach:
-            approach = args.approach
-        else:
-            approach = "random_walk"
-        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
-    else:
-        parser.print_help()
-        exit(-1)
-
-    if args.graphsave:
-        logger.info("Saving graph to file {}".format(args.graphsave))
-        export_graph(adj_dict, args.graphsave)
-
-    config = Config(adj_dict)
 
     if args.command=='sim':
         logger.info("Starting Simulation")
@@ -293,7 +219,6 @@ def main():
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
         export(config, filename=filename)
-
 
 if __name__ == '__main__':
     main()
