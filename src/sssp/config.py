@@ -44,7 +44,7 @@ class Config:
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         self.init_messages[0].append({'dest_id':1, 'sender':1, 'payload':0})
 
-        logger.info("Algorithm: BFS")
+        logger.info("Algorithm: SSSP")
         logger.info("Using HMC: " + "YES" if self.use_hmc else "NO")
         logger.info("nodeidsize = {}".format(self.addresslayout.nodeidsize))
         logger.info("edgeidsize = {}".format(self.addresslayout.edgeidsize))

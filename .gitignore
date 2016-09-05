@@ -17,4 +17,5 @@ __pycache__
 *.sublime*
 src/bfs/pcie_integration/
 build/
-run/
+run/*
+!run/config.ini

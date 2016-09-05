@@ -3,6 +3,8 @@ from migen.genlib.record import *
 
 from cc.interfaces import payload_layout, node_storage_layout
 
+import logging
+
 class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
@@ -49,6 +51,7 @@ class ApplyKernel(Module):
         ]
 
     def gen_selfcheck(self, tb, quiet=False):
+        logger = logging.getLogger("simulation.applykernel")
         num_pe = len(tb.apply)
         pe_id = [a.applykernel for a in tb.apply].index(self)
         level = 0
@@ -61,14 +64,14 @@ class ApplyKernel(Module):
                 level += 1
             if (yield self.valid_in) and (yield self.ready):
                 if (yield self.barrier_in):
-                    print("Warning: Simultaneous valid / barrier!")
+                    logger.warning("Warning: Simultaneous valid / barrier!")
                 num_messages_in += 1
                 if not quiet:
-                    print("State in: {} / Message in: {} / {}update".format((yield self.state_in.color), (yield self.message_in.color), "" if (yield self.update_valid) else "no "))
+                    logger.debug("State in: {} / Message in: {} / {}update".format((yield self.state_in.color), (yield self.message_in.color), "" if (yield self.update_valid) else "no "))
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 if not quiet:
-                    print("Node " + str((yield self.nodeid_out)) + " updated in round " + str(level) +". New color: " + str((yield self.update_out.color)))
+                    logger.debug("Node " + str((yield self.nodeid_out)) + " updated in round " + str(level) +". New color: " + str((yield self.update_out.color)))
             yield
-        print("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
-        print("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
+        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
+        logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

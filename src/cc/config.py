@@ -41,8 +41,8 @@ class Config:
             self.init_messages[pe].append(({'dest_id':node, 'sender':0, 'payload':node}))
 
 
-        logger.info("Algorithm: BFS")
-        logger.info("Using HMC: " + "YES" if self.use_hmc else "NO")
+        logger.info("Algorithm: CC")
+        logger.info("Using HMC: " + ("YES" if self.use_hmc else "NO"))
         logger.info("nodeidsize = {}".format(self.addresslayout.nodeidsize))
         logger.info("edgeidsize = {}".format(self.addresslayout.edgeidsize))
         logger.info("peidsize = {}".format(self.addresslayout.peidsize))
