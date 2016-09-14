@@ -9,7 +9,7 @@ import random
 import logging
 
 class Config:
-    def __init__(self, adj_dict, use_hmc=False, **kwargs):
+    def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
         self.name = "sssp"
 
         logger = logging.getLogger('config')
@@ -23,6 +23,7 @@ class Config:
         #edgedata not supported yet on HMC
         assert(use_hmc==False)
         self.use_hmc = use_hmc
+        self.share_mem_port = share_mem_port
 
         self.adj_dict = adj_dict
         if self.use_hmc:
@@ -43,13 +44,3 @@ class Config:
 
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         self.init_messages[0].append({'dest_id':1, 'sender':1, 'payload':0})
-
-        logger.info("Algorithm: SSSP")
-        logger.info("Using HMC: " + "YES" if self.use_hmc else "NO")
-        logger.info("nodeidsize = {}".format(self.addresslayout.nodeidsize))
-        logger.info("edgeidsize = {}".format(self.addresslayout.edgeidsize))
-        logger.info("peidsize = {}".format(self.addresslayout.peidsize))
-        logger.info("num_pe = " + str(self.addresslayout.num_pe))
-        logger.info("num_nodes_per_pe = " + str(self.addresslayout.num_nodes_per_pe))
-        logger.info("max_edges_per_pe = " + str(self.addresslayout.max_edges_per_pe))
-        logger.info("inter_pe_delay =" + str(self.addresslayout.inter_pe_delay))

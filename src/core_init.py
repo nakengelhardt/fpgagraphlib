@@ -96,9 +96,9 @@ def init_parse():
         graphfile = open(config['graph'].get('graphfile'))
         adj_dict = read_graph(graphfile)
     elif 'nodes' in config['graph']:
-        num_nodes = config['graph'].getint('nodes')
+        num_nodes = eval(config['graph'].get('nodes'))
         if 'edges' in config['graph']:
-            num_edges = config['graph'].getint('edges')
+            num_edges = eval(config['graph'].get('edges'))
         else:
             num_edges = num_nodes - 1
         if 'approach' in config['graph']:
@@ -122,4 +122,17 @@ def init_parse():
     for k in config['arch']:
         kwargs[k] = eval(config['arch'].get(k))
 
-    return args, algo.Config(adj_dict, **kwargs)
+    algo_config = algo.Config(adj_dict, **kwargs)
+
+    logger.info("Algorithm: " + algo_config.name)
+    logger.info("Using HMC: " + ("YES" if algo_config.use_hmc else "NO"))
+    logger.info("Sharing ports: " + ("YES" if algo_config.share_mem_port else "NO"))
+    logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
+    logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
+    logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
+    logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
+    logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
+    logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
+    logger.info("inter_pe_delay =" + str(algo_config.addresslayout.inter_pe_delay))
+
+    return args, algo_config

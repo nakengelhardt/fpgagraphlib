@@ -16,6 +16,7 @@ __pycache__
 *.gtkw
 *.sublime*
 src/bfs/pcie_integration/
-build/
+build/*
+!build/config.ini
 run/*
 !run/config.ini

@@ -46,10 +46,10 @@ class Scatter(Module):
         # resides in submodule
 
         if config.use_hmc:
-            if num_pe <= 9:
-                self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=adj_val, hmc_port=hmc_port)
-            else:
+            if config.share_mem_port:
                 self.submodules.get_neighbors = NeighborsDummy(config=config, adj_val=adj_val)
+            else:
+                self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=adj_val, hmc_port=hmc_port)
         else:
             self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val, edge_data=edge_data)
 

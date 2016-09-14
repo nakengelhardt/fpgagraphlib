@@ -1,9 +1,9 @@
 from migen import *
 
 from migen.genlib.roundrobin import *
-from recordfifo import RecordFIFO
+from migen.genlib.fifo import *
 
-from core_interfaces import ApplyInterface, Message
+from core_interfaces import ApplyInterface, Message, _msg_layout
 
 from functools import reduce
 from operator import and_
@@ -39,14 +39,14 @@ class Arbiter(Module):
 
         # even/odd storage queues
         # TODO: not using message contents, switch to SyncFIFO?
-        self.submodules.outfifo_even = RecordFIFO(layout=Message(**addresslayout.get_params()).layout, depth=128)
-        self.submodules.outfifo_odd  = RecordFIFO(layout=Message(**addresslayout.get_params()).layout, depth=128)
+        self.submodules.outfifo_even = SyncFIFOBuffered(layout_len(set_layout_parameters(_msg_layout,**addresslayout.get_params())), depth=128)
+        self.submodules.outfifo_odd  = SyncFIFOBuffered(layout_len(set_layout_parameters(_msg_layout,**addresslayout.get_params())), depth=128)
 
-        array_outfifo_din = Array([self.outfifo_even.din.raw_bits(), self.outfifo_odd.din.raw_bits()])
+        array_outfifo_din = Array([self.outfifo_even.din, self.outfifo_odd.din])
         array_outfifo_writable = Array([self.outfifo_even.writable, self.outfifo_odd.writable])
         array_outfifo_we = Array([self.outfifo_even.we, self.outfifo_odd.we])
 
-        array_outfifo_dout = Array([self.outfifo_even.dout.raw_bits(), self.outfifo_odd.dout.raw_bits()])
+        array_outfifo_dout = Array([self.outfifo_even.dout, self.outfifo_odd.dout])
         array_outfifo_readable = Array([self.outfifo_even.readable, self.outfifo_odd.readable])
         array_outfifo_re = Array([self.outfifo_even.re, self.outfifo_odd.re])
 
@@ -69,24 +69,29 @@ class Arbiter(Module):
         self.barrier_from_pe = barrier_from_pe = Array(Signal() for _ in range(num_pe))
         self.num_from_pe = num_from_pe = Array(Array(Signal(nodeidsize) for _ in range(2)) for _ in range(num_pe))
         self.num_expected_from_pe = num_expected_from_pe = Array(Array(Signal(nodeidsize) for _ in range(2)) for _ in range(num_pe))
+        self.all_from_pe = Array(Array(Signal() for _ in range (num_pe)) for _ in range(2))
+        self.all_messages_recvd = Signal()
         self.all_barriers_recvd = all_barriers_recvd = Signal()
         self.round_collecting = Signal()
         self.barrier_reached = Signal()
         self.comb += [
             all_barriers_recvd.eq(reduce(and_, barrier_from_pe)),
-            self.barrier_reached.eq(all_barriers_recvd & reduce(and_, [num_from_pe[i][self.round_collecting] == num_expected_from_pe[i][self.round_collecting] for i in range(num_pe)]))
+            self.all_messages_recvd.eq(reduce(and_, self.all_from_pe[self.round_collecting])),
+            self.barrier_reached.eq(all_barriers_recvd & self.all_messages_recvd)
         ]
 
         self.sync += [
             If(stage1.valid & stage1.ack,
                 If(stage1.msg.barrier,
+                    # all_barriers_recvd will be 1 while stage2 is barrier
                     barrier_from_pe[addresslayout.pe_adr(stage1.msg.sender)].eq(1),
                     num_expected_from_pe[addresslayout.pe_adr(stage1.msg.sender)][stage1.msg.roundpar].eq(stage1.msg.dest_id)
-                    # all_barriers_recvd will be 1 while stage2 is barrier
                 ).Else(
                     num_from_pe[addresslayout.pe_adr(stage1.msg.sender)][stage1.msg.roundpar].eq(num_from_pe[addresslayout.pe_adr(stage1.msg.sender)][stage1.msg.roundpar] + 1)
                 )
-            )]
+            ),
+            [self.all_from_pe[i][j].eq(num_from_pe[j][i] == num_expected_from_pe[j][i]) for i in range(2) for j in range(num_pe)]
+        ]
 
         self.sync += [
             If(stage2.ack,
@@ -101,21 +106,22 @@ class Arbiter(Module):
         ]
 
         self.comb += [
-            stage1.ack.eq(stage2.ack)
+            stage1.ack.eq(stage2.ack & ~self.barrier_reached)
         ]
 
         # sort messages into fifos
+        barrier_message_const = Message(**addresslayout.get_params())
         self.comb += [
+            barrier_message_const.barrier.eq(1),
+            barrier_message_const.roundpar.eq(self.round_collecting),
             If(self.barrier_reached,
-                self.outfifo_even.din.barrier.eq(1),
-                self.outfifo_even.din.roundpar.eq(self.round_collecting),
-                self.outfifo_odd.din.barrier.eq(1),
-                self.outfifo_odd.din.roundpar.eq(self.round_collecting),
+                self.outfifo_even.din.eq(barrier_message_const.raw_bits()),
+                self.outfifo_odd.din.eq(barrier_message_const.raw_bits()),
                 stage2.ack.eq(array_outfifo_writable[self.round_collecting]),
                 array_outfifo_we[self.round_collecting].eq(1),
             ).Else(
-                self.outfifo_even.din.raw_bits().eq(stage2.msg.raw_bits()),
-                self.outfifo_odd.din.raw_bits().eq(stage2.msg.raw_bits()),
+                self.outfifo_even.din.eq(stage2.msg.raw_bits()),
+                self.outfifo_odd.din.eq(stage2.msg.raw_bits()),
                 stage2.ack.eq(array_outfifo_writable[stage2.msg.roundpar] & ~ self.barrier_reached),
                 array_outfifo_we[stage2.msg.roundpar].eq(stage2.valid & ~stage2.msg.barrier),
             )
@@ -149,20 +155,23 @@ class Arbiter(Module):
         level = 0
         num_cycles = 0
         last_valid = 0
-        from_pe_since_last_barrier = [0 for _ in range(tb.addresslayout.num_pe)]
+        from_pe_since_last_barrier = [[0 for _ in range(tb.addresslayout.num_pe)] for _ in range(2)]
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.stage1.valid) and (yield self.stage1.ack):
                 sender_pe = (yield tb.addresslayout.pe_adr(self.stage1.msg.sender))
+                roundpar = (yield self.stage1.msg.roundpar)
                 if (yield self.stage1.msg.barrier):
-                    if (yield self.stage1.msg.roundpar) != (yield self.round_collecting):
-                        logger.warning("{}: received barrier for round {} but currently waiting for {}".format(num_cycles, (yield self.stage1.msg.roundpar), (yield self.round_collecting)))
-                    if from_pe_since_last_barrier[sender_pe] != (yield self.stage1.msg.dest_id):
-                        logger.warning("{}: received {} messages from PE {} but barrier says {} were sent".format(num_cycles, from_pe_since_last_barrier[sender_pe], sender_pe, (yield self.stage1.msg.dest_id)))
-                    from_pe_since_last_barrier[sender_pe] = 0
+                    if roundpar != (yield self.round_collecting):
+                        logger.warning("{}: received barrier for round {} but currently waiting for {}".format(num_cycles, roundpar, (yield self.round_collecting)))
+                    if from_pe_since_last_barrier[roundpar][sender_pe] != (yield self.stage1.msg.dest_id):
+                        logger.warning("{}: received {} messages from PE {} but barrier says {} were sent".format(num_cycles, from_pe_since_last_barrier[roundpar][sender_pe], sender_pe, (yield self.stage1.msg.dest_id)))
+                    from_pe_since_last_barrier[roundpar][sender_pe] = 0
                     logger.debug("{}: Barrier (round {}) from PE {}".format(num_cycles, (yield self.stage1.msg.roundpar), sender_pe))
                 else:
-                    from_pe_since_last_barrier[sender_pe] += 1
+                    if from_pe_since_last_barrier[roundpar][sender_pe] != (yield self.num_from_pe[sender_pe][roundpar]):
+                        logger.warning("{}: received {} messages but count is {}".format(num_cycles, from_pe_since_last_barrier[roundpar][sender_pe], (yield self.num_from_pe[sender_pe][roundpar])))
+                    from_pe_since_last_barrier[roundpar][sender_pe] += 1
             if (yield self.stage2.ack) and (yield self.stage2.msg.barrier):
                 if (yield self.all_barriers_recvd):
                     logger.debug("{}: All barriers found".format(num_cycles))

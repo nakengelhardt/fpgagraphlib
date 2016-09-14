@@ -42,7 +42,8 @@ class Core(Module):
 
 
         if config.use_hmc:
-            if num_pe <= 9:
+            if not config.share_mem_port:
+                assert(num_pe <= 9)
                 self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
             else:
                 assert(num_pe <= 36)

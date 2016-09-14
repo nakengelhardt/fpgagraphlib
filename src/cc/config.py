@@ -8,7 +8,7 @@ from cc.scatterkernel import ScatterKernel
 import logging
 
 class Config:
-    def __init__(self, adj_dict, use_hmc=False, **kwargs):
+    def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
         self.name = "cc"
         logger = logging.getLogger('config')
 
@@ -18,6 +18,7 @@ class Config:
         self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
 
         self.use_hmc = use_hmc
+        self.share_mem_port = share_mem_port
 
         self.adj_dict = adj_dict
         if self.use_hmc:
@@ -39,14 +40,3 @@ class Config:
         for node in self.adj_dict:
             pe = node >> log2_int(self.addresslayout.num_nodes_per_pe)
             self.init_messages[pe].append(({'dest_id':node, 'sender':0, 'payload':node}))
-
-
-        logger.info("Algorithm: CC")
-        logger.info("Using HMC: " + ("YES" if self.use_hmc else "NO"))
-        logger.info("nodeidsize = {}".format(self.addresslayout.nodeidsize))
-        logger.info("edgeidsize = {}".format(self.addresslayout.edgeidsize))
-        logger.info("peidsize = {}".format(self.addresslayout.peidsize))
-        logger.info("num_pe = " + str(self.addresslayout.num_pe))
-        logger.info("num_nodes_per_pe = " + str(self.addresslayout.num_nodes_per_pe))
-        logger.info("max_edges_per_pe = " + str(self.addresslayout.max_edges_per_pe))
-        logger.info("inter_pe_delay =" + str(self.addresslayout.inter_pe_delay))

@@ -102,7 +102,7 @@ class Top(Module):
         ]
 
         if config.use_hmc:
-            if num_pe <= 9:
+            if not config.share_mem_port:
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
                 self.comb += [
