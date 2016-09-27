@@ -4,7 +4,7 @@ import argparse
 import logging
 import configparser
 
-from migen import log2_int
+from migen import log2_int, bits_for
 
 from graph_input import read_graph
 from graph_generate import generate_graph, export_graph
@@ -121,6 +121,9 @@ def init_parse():
     kwargs = dict()
     for k in config['arch']:
         kwargs[k] = eval(config['arch'].get(k))
+
+    kwargs["num_channels"] = 4
+    kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
 
     algo_config = algo.Config(adj_dict, **kwargs)
 

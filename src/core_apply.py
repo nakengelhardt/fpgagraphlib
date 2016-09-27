@@ -76,7 +76,7 @@ class Apply(Module):
         dest_node_id = Signal(nodeidsize)
         sender = Signal(nodeidsize)
         payload = Signal(addresslayout.payloadsize)
-        roundpar = Signal()
+        roundpar = Signal(config.addresslayout.channel_bits)
         valid = Signal()
         barrier = Signal()
 
@@ -110,7 +110,7 @@ class Apply(Module):
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
         payload2 = Signal(addresslayout.payloadsize)
-        roundpar2 = Signal()
+        roundpar2 = Signal(config.addresslayout.channel_bits)
         valid2 = Signal()
         barrier2 = Signal()
         data_invalid2 = Signal()
@@ -131,7 +131,7 @@ class Apply(Module):
         dest_node_id3 = Signal(nodeidsize)
         sender3 = Signal(nodeidsize)
         payload3 = Signal(addresslayout.payloadsize)
-        roundpar3 = Signal()
+        roundpar3 = Signal(config.addresslayout.channel_bits)
         valid3 = Signal()
         barrier3 = Signal()
         data_invalid3 = Signal()
@@ -186,7 +186,7 @@ class Apply(Module):
         # output handling
         _layout = [
         ( "barrier", 1, DIR_M_TO_S ),
-        ( "roundpar", 1, DIR_M_TO_S ),
+        ( "roundpar", config.addresslayout.channel_bits, DIR_M_TO_S ),
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
@@ -206,7 +206,7 @@ class Apply(Module):
 
         payload4 = Signal(addresslayout.payloadsize)
         sender4 = Signal(addresslayout.nodeidsize)
-        roundpar4 = Signal()
+        roundpar4 = Signal(config.addresslayout.channel_bits)
         barrier4 = Signal()
         valid4 = Signal()
 

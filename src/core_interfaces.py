@@ -7,7 +7,7 @@ from migen.genlib.record import *
 
 _msg_layout = [
     ( "barrier", 1, DIR_M_TO_S ),
-    ( "roundpar", 1, DIR_M_TO_S ),
+    ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "dest_id", "nodeidsize", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),
     ( "payload", "payloadsize", DIR_M_TO_S )
@@ -36,7 +36,7 @@ _scatter_layout = [
     ( "barrier", 1, DIR_M_TO_S),
     ( "valid", 1, DIR_M_TO_S ),
     ( "ack", 1, DIR_S_TO_M ),
-    ( "roundpar", 1, DIR_M_TO_S ),
+    ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),
     ( "payload", "payloadsize", DIR_M_TO_S )
 ]

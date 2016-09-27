@@ -12,7 +12,7 @@ class ScatterKernel(Module):
         self.num_neighbors_in = Signal(addresslayout.edgeidsize)
         self.neighbor_in = Signal(addresslayout.nodeidsize)
         self.sender_in = Signal(addresslayout.nodeidsize)
-        self.round_in = Signal()
+        self.round_in = Signal(addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.valid_in = Signal()
         self.ready = Signal()
@@ -20,7 +20,7 @@ class ScatterKernel(Module):
         self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.neighbor_out = Signal(addresslayout.nodeidsize)
         self.sender_out = Signal(addresslayout.nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(addresslayout.channel_bits)
         self.valid_out = Signal()
         self.message_ack = Signal()
         self.barrier_out = Signal()
@@ -42,9 +42,9 @@ class ScatterKernel(Module):
         neighbor = [ Signal(addresslayout.nodeidsize) for _ in range(self.divider.latency + 1) ]
         sender = [ Signal(addresslayout.nodeidsize) for _ in range(self.divider.latency + 1) ]
         barrier = [ Signal() for _ in range(self.divider.latency + 1) ]
-        roundpar = [ Signal() for _ in range(self.divider.latency + 1) ]
+        roundpar = [ Signal(addresslayout.channel_bits) for _ in range(self.divider.latency + 1) ]
 
-        self.sync += If(self.message_ack, 
+        self.sync += If(self.message_ack,
             [ neighbor[i+1].eq(neighbor[i]) for i in range(self.divider.latency) ],
             [ sender[i+1].eq(sender[i]) for i in range(self.divider.latency) ],
             [ barrier[i+1].eq(barrier[i]) for i in range(self.divider.latency) ],

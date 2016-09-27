@@ -11,7 +11,7 @@ class ScatterKernel(Module):
         self.neighbor_in = Signal(addresslayout.nodeidsize)
         self.edgedata_in = Record(set_layout_parameters(edge_storage_layout, **addresslayout.get_params()))
         self.sender_in = Signal(addresslayout.nodeidsize)
-        self.round_in = Signal()
+        self.round_in = Signal(addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.valid_in = Signal()
         self.ready = Signal()
@@ -19,7 +19,7 @@ class ScatterKernel(Module):
         self.message_out = Record(set_layout_parameters(message_layout, **addresslayout.get_params()))
         self.neighbor_out = Signal(addresslayout.nodeidsize)
         self.sender_out = Signal(addresslayout.nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(addresslayout.channel_bits)
         self.valid_out = Signal()
         self.message_ack = Signal()
         self.barrier_out = Signal()
@@ -27,7 +27,7 @@ class ScatterKernel(Module):
         ####
 
         self.sync += If(self.message_ack,
-            self.message_out.dist.eq(self.update_in.dist 
+            self.message_out.dist.eq(self.update_in.dist
                 + self.edgedata_in.dist),
             self.neighbor_out.eq(self.neighbor_in),
             self.sender_out.eq(self.sender_in),

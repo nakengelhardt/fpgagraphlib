@@ -108,7 +108,7 @@ class Core(Module):
                         yield start_message[i].msg.dest_id.eq(message['dest_id'])
                         yield start_message[i].msg.sender.eq(message['sender'])
                         yield start_message[i].msg.payload.eq(message['payload'])
-                        yield start_message[i].msg.roundpar.eq(1)
+                        yield start_message[i].msg.roundpar.eq(self.addresslayout.num_channels - 1)
                         yield start_message[i].msg.barrier.eq(0)
                         yield start_message[i].valid.eq(1)
                     else:
@@ -151,7 +151,7 @@ class Core(Module):
                 if ((yield self.apply[i].applykernel.valid_in)
                     and (yield self.apply[i].applykernel.ready)
                     and not (yield self.apply[i].applykernel.barrier_in)):
-                    if (yield self.apply[i].level) % 2 == (yield self.apply[i].roundpar):
+                    if ((yield self.apply[i].level) - 1) % self.addresslayout.num_channels != (yield self.apply[i].roundpar):
                         logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].roundpar), (yield self.apply[i].level)))
                 if ((yield self.apply[i].scatter_interface.barrier)
                     and (yield self.apply[i].scatter_interface.valid)

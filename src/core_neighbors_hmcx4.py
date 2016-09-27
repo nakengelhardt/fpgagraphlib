@@ -10,7 +10,7 @@ from operator import and_
 _data_layout = [
     ("message", "payloadsize"),
     ("sender", "nodeidsize"),
-    ("round", 1),
+    ("round", "channel_bits"),
     ("num_neighbors", "edgeidsize"),
     ("from_pe", 2),
     ("valid", 3),
@@ -33,7 +33,7 @@ class BurstDownconverter(Module):
         self.neighbor_ack = Signal()
         self.message_out = Signal(payloadsize)
         self.sender_out = Signal(nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(config.addresslayout.channel_bits)
         self.num_neighbors_out = Signal(edgeidsize)
         self.barrier_out = Signal()
 
@@ -98,7 +98,7 @@ class Neighborsx4(Module):
         self.barrier_in = [Signal() for _ in range(4)]
         self.message_in = [Signal(payloadsize) for _ in range(4)]
         self.sender_in = [Signal(nodeidsize) for _ in range(4)]
-        self.round_in = [Signal() for _ in range(4)]
+        self.round_in = [Signal(config.addresslayout.channel_bits) for _ in range(4)]
 
         # output
         self.neighbor = [Signal(nodeidsize) for _ in range(4)]
@@ -107,7 +107,7 @@ class Neighborsx4(Module):
         self.barrier_out = [Signal() for _ in range(4)]
         self.message_out = [Signal(payloadsize) for _ in range(4)]
         self.sender_out = [Signal(nodeidsize) for _ in range(4)]
-        self.round_out = [Signal() for _ in range(4)]
+        self.round_out = [Signal(config.addresslayout.channel_bits) for _ in range(4)]
         self.num_neighbors_out = [Signal(edgeidsize) for _ in range(4)]
 
         ###
@@ -136,7 +136,7 @@ class Neighborsx4(Module):
         chosen_sender_in = Signal(nodeidsize)
         chosen_message_in = Signal(payloadsize)
         chosen_barrier_in = Signal()
-        chosen_round_in = Signal()
+        chosen_round_in = Signal(config.addresslayout.channel_bits)
         chosen_valid = Signal()
         chosen_ack = Signal()
         chosen_from_pe = Signal(2)
@@ -189,7 +189,7 @@ class Neighborsx4(Module):
 
         message = Signal(payloadsize)
         sender = Signal(nodeidsize)
-        roundpar = Signal()
+        roundpar = Signal(config.addresslayout.channel_bits)
         num_neighbors = Signal(edgeidsize)
 
         current_tag = Signal(6)

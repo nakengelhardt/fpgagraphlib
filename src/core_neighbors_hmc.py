@@ -7,7 +7,7 @@ import logging
 _data_layout = [
     ("message", "payloadsize"),
     ("sender", "nodeidsize"),
-    ("round", 1),
+    ("round", "channel_bits"),
     ("num_neighbors", "edgeidsize"),
     ("valid", 2)
 ]
@@ -24,7 +24,7 @@ class getAnswer(Module):
         self.burst_valid = Signal(2)
         self.message_out = Signal(config.addresslayout.payloadsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(config.addresslayout.channel_bits)
         self.num_neighbors_out = Signal(config.addresslayout.edgeidsize)
         self.valid_out = Signal()
         self.ack_out = Signal()
@@ -76,7 +76,7 @@ class NeighborsHMC(Module):
         self.barrier_in = Signal()
         self.message_in = Signal(config.addresslayout.payloadsize)
         self.sender_in = Signal(config.addresslayout.nodeidsize)
-        self.round_in = Signal()
+        self.round_in = Signal(config.addresslayout.channel_bits)
 
         # output
         self.neighbor = Signal(nodeidsize)
@@ -85,7 +85,7 @@ class NeighborsHMC(Module):
         self.barrier_out = Signal()
         self.message_out = Signal(config.addresslayout.payloadsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(config.addresslayout.channel_bits)
         self.num_neighbors_out = Signal(edgeidsize)
 
         ###
@@ -127,7 +127,7 @@ class NeighborsHMC(Module):
 
         message = Signal(config.addresslayout.payloadsize)
         sender = Signal(config.addresslayout.nodeidsize)
-        roundpar = Signal()
+        roundpar = Signal(config.addresslayout.channel_bits)
         num_neighbors = Signal(edgeidsize)
 
         current_tag = Signal(6)

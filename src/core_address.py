@@ -29,7 +29,10 @@ class AddressLayout:
         return dict((key, getattr(self, key)) for key in dir(self) if key not in dir(self.__class__))
 
     def pe_adr(self, nodeid):
-        return nodeid[log2_int(self.num_nodes_per_pe):log2_int(self.num_nodes_per_pe)+self.peidsize]
+        if isinstance(nodeid, Signal):
+            return nodeid[log2_int(self.num_nodes_per_pe):log2_int(self.num_nodes_per_pe)+self.peidsize]
+        else:
+            return nodeid >> log2_int(self.num_nodes_per_pe)
 
     def local_adr(self, nodeid):
         return nodeid[:log2_int(self.num_nodes_per_pe)]

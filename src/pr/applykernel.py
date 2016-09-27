@@ -30,7 +30,7 @@ class ApplyKernel(Module):
         self.update_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
-        self.update_round = Signal()
+        self.update_round = Signal(addresslayout.channel_bits)
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
@@ -55,7 +55,7 @@ class ApplyKernel(Module):
         n_nrecvd = Signal(nodeidsize)
         n_nneighbors = Signal(nodeidsize)
         n_barrier = Signal()
-        n_round = Signal()
+        n_round = Signal(addresslayout.channel_bits)
         n_valid = Signal()
         n_allrecvd = Signal()
         n_init = Signal()
@@ -75,7 +75,7 @@ class ApplyKernel(Module):
         i_nrecvd = [Signal(nodeidsize) for _ in range(3)]
         i_nneighbors = [Signal(nodeidsize) for _ in range(3)]
         i_barrier = [Signal() for _ in range(3)]
-        i_round = [Signal() for _ in range(3)]
+        i_round = [Signal(addresslayout.channel_bits) for _ in range(3)]
         i_nodeid = [Signal(nodeidsize) for _ in range(3)]
         i_init = [Signal() for _ in range(3)]
         i_notend = [Signal() for _ in range(3)]
@@ -84,7 +84,7 @@ class ApplyKernel(Module):
             i_nrecvd[0].eq(self.state_in.nrecvd + 1),
             i_nneighbors[0].eq(self.state_in.nneighbors),
             i_barrier[0].eq(self.barrier_in),
-            i_round[0].eq(self.level_in[0]),
+            i_round[0].eq(self.level_in[0:addresslayout.channel_bits]),
             i_nodeid[0].eq(self.nodeid_in),
             i_init[0].eq(self.level_in == 0),
             i_notend[0].eq(self.level_in < 30)
@@ -169,7 +169,7 @@ class ApplyKernel(Module):
 
         m_sender = [Signal(nodeidsize) for _ in range(10)]
         m_barrier = [Signal() for _ in range(10)]
-        m_round = [Signal() for _ in range(10)]
+        m_round = [Signal(addresslayout.channel_bits) for _ in range(10)]
 
         self.sync += If(p2_ce, [
             m_sender[0].eq(n_nodeid),

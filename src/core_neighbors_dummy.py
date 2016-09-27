@@ -19,7 +19,7 @@ class NeighborsDummy(Module):
         self.barrier_in = Signal()
         self.message_in = Signal(config.addresslayout.payloadsize)
         self.sender_in = Signal(config.addresslayout.nodeidsize)
-        self.round_in = Signal()
+        self.round_in = Signal(config.addresslayout.channel_bits)
 
         # output
         self.neighbor = Signal(nodeidsize)
@@ -28,11 +28,11 @@ class NeighborsDummy(Module):
         self.barrier_out = Signal()
         self.message_out = Signal(config.addresslayout.payloadsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
-        self.round_out = Signal()
+        self.round_out = Signal(config.addresslayout.channel_bits)
         self.num_neighbors_out = Signal(edgeidsize)
 
     def gen_selfcheck(self, tb, graph, quiet=True):
-        to_be_sent = [dict(), dict()]
+        to_be_sent = [dict() for _ in range(tb.config.addresslayout.num_channels)]
         logger = logging.getLogger('simulation.get_neighbors')
         level = 0
         num_cycles = 0

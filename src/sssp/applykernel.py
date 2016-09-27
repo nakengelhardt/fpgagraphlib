@@ -24,7 +24,7 @@ class ApplyKernel(Module):
         self.update_out = Record(set_layout_parameters(update_layout, **addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
-        self.update_round = Signal()
+        self.update_round = Signal(addresslayout.channel_bits)
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
@@ -44,7 +44,7 @@ class ApplyKernel(Module):
             self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
             self.update_sender.eq(self.nodeid_in),
-            self.update_round.eq(self.level_in[0]),
+            self.update_round.eq(self.level_in[0:addresslayout.channel_bits]),
             self.barrier_out.eq(self.barrier_in),
             self.state_barrier.eq(self.barrier_in),
             self.ready.eq(self.update_ack)
