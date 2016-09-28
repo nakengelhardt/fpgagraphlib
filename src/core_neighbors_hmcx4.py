@@ -27,13 +27,14 @@ class BurstDownconverter(Module):
         nodeidsize = len(self.update_in.sender)
         edgeidsize = len(self.update_in.num_neighbors)
         payloadsize = len(self.update_in.message)
+        channel_bits = len(self.update_in.round)
 
         self.neighbor = Signal(nodeidsize)
         self.neighbor_valid = Signal()
         self.neighbor_ack = Signal()
         self.message_out = Signal(payloadsize)
         self.sender_out = Signal(nodeidsize)
-        self.round_out = Signal(config.addresslayout.channel_bits)
+        self.round_out = Signal(channel_bits)
         self.num_neighbors_out = Signal(edgeidsize)
         self.barrier_out = Signal()
 
@@ -88,7 +89,7 @@ class Neighborsx4(Module):
         edgeidsize = config.addresslayout.edgeidsize
         payloadsize = config.addresslayout.payloadsize
 
-        update_layout = set_layout_parameters(_data_layout, payloadsize=config.addresslayout.payloadsize, nodeidsize=config.addresslayout.nodeidsize, edgeidsize=config.addresslayout.edgeidsize)
+        update_layout = set_layout_parameters(_data_layout,  **config.addresslayout.get_params())
 
         # input
         self.start_idx = [Signal(edgeidsize) for _ in range(4)]
@@ -116,7 +117,7 @@ class Neighborsx4(Module):
 
         #input
 
-        self.fifos = [SyncFIFO(2*edgeidsize+nodeidsize+payloadsize+2, 8) for _ in range(4)]
+        self.fifos = [SyncFIFO(len(Cat(self.start_idx[0], self.num_neighbors[0], self.sender_in[0], self.message_in[0], self.barrier_in[0], self.round_in[0])), 8) for _ in range(4)]
         self.submodules += self.fifos
 
         for i in range(4):

@@ -29,10 +29,7 @@ class getAnswer(Module):
         self.valid_out = Signal()
         self.ack_out = Signal()
 
-        update_dat_r = Record(set_layout_parameters(_data_layout,
-            nodeidsize=config.addresslayout.nodeidsize,
-            edgeidsize=config.addresslayout.edgeidsize,
-            payloadsize=config.addresslayout.payloadsize))
+        update_dat_r = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
         re = Signal()
 
         self.comb += [
@@ -102,11 +99,7 @@ class NeighborsHMC(Module):
 
         self.hmc_port = hmc_port
 
-
-        update_dat_w = Record(set_layout_parameters(_data_layout,
-            nodeidsize=config.addresslayout.nodeidsize,
-            edgeidsize=config.addresslayout.edgeidsize,
-            payloadsize=config.addresslayout.payloadsize))
+        update_dat_w = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
 
         self.submodules.tags = SyncFIFO(6, 2**6)
         self.submodules.answers = SyncFIFO(6, 2**6)
