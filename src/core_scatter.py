@@ -1,13 +1,15 @@
 from migen import *
 from migen.genlib.record import *
 
-from core_interfaces import ScatterInterface, NetworkInterface
+from core_interfaces import ScatterInterface, NetworkInterface, _msg_layout
 
 from core_neighbors import Neighbors
 from core_neighbors_hmc import NeighborsHMC
 from core_neighbors_dummy import NeighborsDummy
 
 from core_address import AddressLayout
+
+from recordfifo import RecordFIFO
 
 class Scatter(Module):
     def __init__(self, pe_id, config, adj_mat=None, edge_data=None, hmc_port=None):
@@ -119,22 +121,31 @@ class Scatter(Module):
         if config.has_edgedata:
             self.comb += self.scatterkernel.edgedata_in.raw_bits().eq(self.get_neighbors.edgedata_out)
 
+        # buffer output
+        self.submodules.outfifo = RecordFIFO(layout=set_layout_parameters(_msg_layout, **config.addresslayout.get_params()), depth=2)
+
+        self.comb += [
+            self.outfifo.din.dest_id.eq(self.scatterkernel.neighbor_out),
+            self.outfifo.din.payload.eq(self.scatterkernel.message_out.raw_bits()),
+            self.outfifo.din.sender.eq(self.scatterkernel.sender_out),
+            self.outfifo.din.roundpar.eq(self.scatterkernel.round_out),
+            self.outfifo.din.barrier.eq(self.scatterkernel.barrier_out),
+            self.outfifo.we.eq(self.scatterkernel.valid_out | self.scatterkernel.barrier_out),
+            self.scatterkernel.message_ack.eq(self.outfifo.writable)
+        ]
+
         # find destination PE
         if num_pe > 1:
             neighbor_pe = Signal(peidsize)
-            self.comb += neighbor_pe.eq(addresslayout.pe_adr(self.scatterkernel.neighbor_out))
+            self.comb += neighbor_pe.eq(addresslayout.pe_adr(self.outfifo.dout.dest_id))
         else:
             neighbor_pe = 0
 
         # send out messages
         self.comb += [
-            self.network_interface.msg.dest_id.eq(self.scatterkernel.neighbor_out),
-            self.network_interface.msg.payload.eq(self.scatterkernel.message_out.raw_bits()),
-            self.network_interface.msg.sender.eq(self.scatterkernel.sender_out),
-            self.network_interface.msg.roundpar.eq(self.scatterkernel.round_out),
-            self.network_interface.msg.barrier.eq(self.scatterkernel.barrier_out),
-            self.network_interface.broadcast.eq(self.scatterkernel.barrier_out),
-            self.network_interface.valid.eq(self.scatterkernel.valid_out | self.scatterkernel.barrier_out),
+            self.outfifo.dout.connect(self.network_interface.msg),
+            self.network_interface.broadcast.eq(self.outfifo.dout.barrier),
+            self.network_interface.valid.eq(self.outfifo.readable),
             self.network_interface.dest_pe.eq(neighbor_pe),
-            self.scatterkernel.message_ack.eq(self.network_interface.ack)
+            self.outfifo.re.eq(self.network_interface.ack)
         ]
