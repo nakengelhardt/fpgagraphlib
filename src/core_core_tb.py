@@ -15,7 +15,7 @@ from graph_input import read_graph
 from graph_generate import generate_graph
 
 from core_address import AddressLayout
-from core_network import Network
+from fifo_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
 from core_neighbors_hmcx4 import Neighborsx4
@@ -50,8 +50,8 @@ class Core(Module):
                 # assert((num_pe % 4) == 0)
                 self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
                 self.submodules.neighbors_hmc = [Neighborsx4(pe_id=i*4, config=config, hmc_port=config.platform.getHMCPort(i)) for i in range(9)]
-                for i in range(9):
-                    for j in range(4):
+                for j in range(4):
+                    for i in range(9):
                         n = i*4 + j
                         if n < num_pe:
                             self.comb += [
