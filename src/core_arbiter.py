@@ -63,13 +63,23 @@ class Arbiter(Module):
                 )
             )
 
+        self.submodules.outfifo = SyncFIFO(layout_len(set_layout_parameters(_msg_layout,**addresslayout.get_params())), depth=2)
+
         # choose between init and regular message channel
-        self.comb += \
+        self.comb += [
             If(self.start_message.select,
-                self.start_message.connect(self.apply_interface_out)
+                self.outfifo.din.eq(self.start_message.msg.raw_bits()),
+                self.outfifo.we.eq(self.start_message.valid),
+                self.start_message.ack.eq(self.outfifo.writable)
             ).Else(
-                apply_interface_internal.connect(self.apply_interface_out)
-            )
+                self.outfifo.din.eq(apply_interface_internal.msg.raw_bits()),
+                self.outfifo.we.eq(apply_interface_internal.valid),
+                apply_interface_internal.ack.eq(self.outfifo.writable)
+            ),
+            self.apply_interface_out.msg.raw_bits().eq(self.outfifo.dout),
+            self.apply_interface_out.valid.eq(self.outfifo.readable),
+            self.outfifo.re.eq(self.apply_interface_out.ack)
+        ]
 
 
     def gen_selfcheck(self, tb):
@@ -79,7 +89,7 @@ class Arbiter(Module):
 
         while not (yield tb.global_inactive):
             num_cycles += 1
-            
+
             if (yield self.apply_interface_out.valid) and (yield self.apply_interface_out.ack):
                 if (yield self.apply_interface_out.msg.barrier):
                     level += 1
