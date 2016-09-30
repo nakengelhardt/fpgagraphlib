@@ -5,6 +5,7 @@ from migen.genlib.roundrobin import *
 from functools import reduce
 from operator import and_
 import logging
+import math
 
 from recordfifo import RecordFIFOBuffered
 from core_interfaces import _msg_layout, ApplyInterface, NetworkInterface
@@ -94,9 +95,9 @@ class MuxTree(Module):
             ]
 
         else:
-            subgroup_length = (len(in_array) + mux_factor - 1)/mux_factor
+            subgroup_length = math.ceil(len(in_array)/mux_factor)
             self.submodules.submux = [MuxTree(config, in_array[i*subgroup_length:min(len(in_array), (i+1)*subgroup_length)]) for i in range(mux_factor)]
-            self.submodules.mux = MuxTree(config, [self.submux.apply_interface_out for i in range(mux_factor)])
+            self.submodules.mux = MuxTree(config, [self.submux[i].apply_interface_out for i in range(mux_factor)])
             self.comb += [
                 [self.submux[i].current_round.eq(self.current_round) for i in range(mux_factor)],
                 self.mux.current_round.eq(self.current_round)
