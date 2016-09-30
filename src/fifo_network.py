@@ -71,7 +71,7 @@ class Arbiter(Module):
 class MuxTree(Module):
     def __init__(self, config, in_array):
         mux_factor = 6
-        self.apply_interface_out = ApplyInterface(**config.addresslayout.get_params())
+        self.apply_interface_out = ApplyInterface(name="mux_apply_interface_out", **config.addresslayout.get_params())
         self.current_round = Signal(config.addresslayout.channel_bits)
 
         if len(in_array) == 1:
@@ -100,7 +100,8 @@ class MuxTree(Module):
             self.submodules.mux = MuxTree(config, [self.submux[i].apply_interface_out for i in range(mux_factor)])
             self.comb += [
                 [self.submux[i].current_round.eq(self.current_round) for i in range(mux_factor)],
-                self.mux.current_round.eq(self.current_round)
+                self.mux.current_round.eq(self.current_round),
+                self.mux.apply_interface_out.connect(self.apply_interface_out)
             ]
 
 
@@ -119,7 +120,7 @@ class Network(Module):
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_pe)]
 
-        fifo_apply_interface_out = [[ApplyInterface(**config.addresslayout.get_params()) for _ in range(num_pe)] for j in range(num_pe)]
+        fifo_apply_interface_out = [[ApplyInterface(name="mux_apply_interface_in", **config.addresslayout.get_params()) for _ in range(num_pe)] for j in range(num_pe)]
 
         for source in range(num_pe):
             for sink in range(num_pe):
