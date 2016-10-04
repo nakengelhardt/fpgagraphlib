@@ -75,10 +75,10 @@ class MuxTree(Module):
         self.current_round = Signal(config.addresslayout.channel_bits)
 
         if len(in_array) == 1:
-            in_array[0].connect(self.apply_interface_out)
+            self.comb += in_array[0].connect(self.apply_interface_out)
 
         elif len(in_array) <= mux_factor:
-            self.submodules.roundrobin = RoundRobin(config.addresslayout.num_pe, switch_policy=SP_CE)
+            self.submodules.roundrobin = RoundRobin(len(in_array), switch_policy=SP_CE)
 
             # arrays for choosing incoming fifo to use
             array_data = Array(interface.msg.raw_bits() for interface in in_array)
@@ -91,7 +91,7 @@ class MuxTree(Module):
                 self.apply_interface_out.valid.eq(array_readable[self.roundrobin.grant] & (array_round[self.roundrobin.grant] == self.current_round)),
                 array_re[self.roundrobin.grant].eq(self.apply_interface_out.ack & (array_round[self.roundrobin.grant] == self.current_round)),
                 [self.roundrobin.request[i].eq(array_readable[i] & (array_round[i] == self.current_round)) for i in range(len(in_array))],
-                self.roundrobin.ce.eq(self.apply_interface_out.ack)
+                self.roundrobin.ce.eq(self.apply_interface_out.ack | ~self.apply_interface_out.valid)
             ]
 
         else:
