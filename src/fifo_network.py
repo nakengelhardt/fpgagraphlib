@@ -7,7 +7,7 @@ from operator import and_
 import logging
 import math
 
-from recordfifo import RecordFIFOBuffered
+from recordfifo import RecordFIFO, RecordFIFOBuffered
 from core_interfaces import _msg_layout, ApplyInterface, NetworkInterface
 from core_barriercounter import Barriercounter
 
@@ -75,9 +75,18 @@ class MuxTree(Module):
         self.current_round = Signal(config.addresslayout.channel_bits)
 
         if len(in_array) == 1:
-            self.comb += in_array[0].connect(self.apply_interface_out)
+            self.submodules.fifo = RecordFIFO(layout=self.apply_interface_out.msg.layout, depth=2)
+            self.comb += [
+                in_array[0].msg.connect(self.fifo.din),
+                self.fifo.we.eq(in_array[0].valid),
+                in_array[0].ack.eq(self.fifo.writable),
+                self.fifo.dout.connect(self.apply_interface_out.msg),
+                self.apply_interface_out.valid.eq(self.fifo.readable),
+                self.fifo.re.eq(self.apply_interface_out.ack)
+            ]
 
         elif len(in_array) <= mux_factor:
+            self.submodules.fifo = RecordFIFO(layout=self.apply_interface_out.msg.layout, depth=2)
             self.submodules.roundrobin = RoundRobin(len(in_array), switch_policy=SP_CE)
 
             # arrays for choosing incoming fifo to use
@@ -87,11 +96,14 @@ class MuxTree(Module):
             array_round = Array(interface.msg.roundpar for interface in in_array)
 
             self.comb += [
-                self.apply_interface_out.msg.raw_bits().eq(array_data[self.roundrobin.grant]),
-                self.apply_interface_out.valid.eq(array_readable[self.roundrobin.grant] & (array_round[self.roundrobin.grant] == self.current_round)),
-                array_re[self.roundrobin.grant].eq(self.apply_interface_out.ack & (array_round[self.roundrobin.grant] == self.current_round)),
+                self.fifo.din.raw_bits().eq(array_data[self.roundrobin.grant]),
+                self.fifo.we.eq(array_readable[self.roundrobin.grant] & (array_round[self.roundrobin.grant] == self.current_round)),
+                array_re[self.roundrobin.grant].eq(self.fifo.writable & (array_round[self.roundrobin.grant] == self.current_round)),
                 [self.roundrobin.request[i].eq(array_readable[i] & (array_round[i] == self.current_round)) for i in range(len(in_array))],
-                self.roundrobin.ce.eq(self.apply_interface_out.ack | ~self.apply_interface_out.valid)
+                self.roundrobin.ce.eq(self.fifo.writable | ~self.fifo.we),
+                self.fifo.dout.connect(self.apply_interface_out.msg),
+                self.apply_interface_out.valid.eq(self.fifo.readable),
+                self.fifo.re.eq(self.apply_interface_out.ack)
             ]
 
         else:
