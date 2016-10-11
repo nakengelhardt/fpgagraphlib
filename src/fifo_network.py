@@ -32,17 +32,9 @@ class Arbiter(Module):
         self.current_round = Signal(config.addresslayout.channel_bits)
 
         self.comb += [
-            self.apply_interface_in.connect(self.barriercounter.apply_interface_in)
+            self.apply_interface_in.connect(self.barriercounter.apply_interface_in),
+            self.current_round.eq(self.barriercounter.round_accepting)
         ]
-
-        self.sync += \
-            If(self.barriercounter.change_rounds,
-                If(self.current_round < config.addresslayout.num_channels - 1,
-                    self.current_round.eq(self.current_round + 1)
-                ).Else(
-                    self.current_round.eq(0)
-                )
-            )
 
         # choose between init and regular message channel
         self.comb += \
