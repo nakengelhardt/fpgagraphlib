@@ -1,6 +1,6 @@
 from migen import *
 from migen.genlib.record import *
-from recordfifo import RecordFIFOBuffered
+from recordfifo import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
 from core_address import AddressLayout
@@ -34,6 +34,10 @@ class Apply(Module):
 
         ####
 
+        apply_interface_in_fifo = InterfaceFIFO(layout=self.apply_interface.layout, depth=2)
+        self.submodules += apply_interface_in_fifo
+        self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
+
         # should pipeline advance?
         upstream_ack = Signal()
 
@@ -65,8 +69,8 @@ class Apply(Module):
         prev_was_barrier = Signal()
         prev_prev_was_barrier = Signal()
         self.sync += \
-            If(self.apply_interface.valid & self.apply_interface.ack,
-                prev_was_barrier.eq(self.apply_interface.msg.barrier),
+            If(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.ack,
+                prev_was_barrier.eq(apply_interface_in_fifo.dout.msg.barrier),
                 prev_prev_was_barrier.eq(prev_was_barrier)
             )
         self.comb += self.inactive.eq(prev_was_barrier & prev_prev_was_barrier)
@@ -81,13 +85,13 @@ class Apply(Module):
         barrier = Signal()
 
         self.comb += [
-            dest_node_id.eq(self.apply_interface.msg.dest_id),
-            sender.eq(self.apply_interface.msg.sender),
-            payload.eq(self.apply_interface.msg.payload),
-            roundpar.eq(self.apply_interface.msg.roundpar),
-            valid.eq(self.apply_interface.valid & ~self.apply_interface.msg.barrier),
-            barrier.eq(self.apply_interface.valid & self.apply_interface.msg.barrier),
-            self.apply_interface.ack.eq(upstream_ack)
+            dest_node_id.eq(apply_interface_in_fifo.dout.msg.dest_id),
+            sender.eq(apply_interface_in_fifo.dout.msg.sender),
+            payload.eq(apply_interface_in_fifo.dout.msg.payload),
+            roundpar.eq(apply_interface_in_fifo.dout.msg.roundpar),
+            valid.eq(apply_interface_in_fifo.dout.valid & ~apply_interface_in_fifo.dout.msg.barrier),
+            barrier.eq(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.msg.barrier),
+            apply_interface_in_fifo.dout.ack.eq(upstream_ack)
         ]
 
         # collision handling
