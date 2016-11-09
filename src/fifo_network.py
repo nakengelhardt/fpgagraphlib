@@ -66,6 +66,9 @@ class MuxTree(Module):
         self.apply_interface_out = ApplyInterface(name="mux_apply_interface_out", **config.addresslayout.get_params())
         self.current_round = Signal(config.addresslayout.channel_bits)
 
+        if len(in_array) == 0:
+            raise ValueError("in_array should not be empty")
+
         if len(in_array) == 1:
             self.submodules.fifo = RecordFIFO(layout=self.apply_interface_out.msg.layout, depth=2)
             self.comb += [
@@ -100,10 +103,11 @@ class MuxTree(Module):
 
         else:
             subgroup_length = math.ceil(len(in_array)/mux_factor)
-            self.submodules.submux = [MuxTree(config, in_array[i*subgroup_length:min(len(in_array), (i+1)*subgroup_length)]) for i in range(mux_factor)]
-            self.submodules.mux = MuxTree(config, [self.submux[i].apply_interface_out for i in range(mux_factor)])
+            num_submuxes = math.ceil(len(in_array)/subgroup_length)
+            self.submodules.submux = [MuxTree(config, in_array[i*subgroup_length:min(len(in_array), (i+1)*subgroup_length)]) for i in range(num_submuxes)]
+            self.submodules.mux = MuxTree(config, [self.submux[i].apply_interface_out for i in range(num_submuxes)])
             self.comb += [
-                [self.submux[i].current_round.eq(self.current_round) for i in range(mux_factor)],
+                [self.submux[i].current_round.eq(self.current_round) for i in range(num_submuxes)],
                 self.mux.current_round.eq(self.current_round),
                 self.mux.apply_interface_out.connect(self.apply_interface_out)
             ]

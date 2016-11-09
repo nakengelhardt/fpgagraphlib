@@ -3,6 +3,8 @@ from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 from migen.genlib.roundrobin import *
 
+from recordfifo import RecordFIFO
+
 from functools import reduce
 from operator import and_
 
@@ -203,13 +205,36 @@ class Neighborsx4(Module):
         self.num_reqs = [Signal(32) for _ in range(4)]
         self.wrongs = [Signal(32) for _ in range(4)]
 
-        self.sync += [
-            If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
-            If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
-            If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
-            [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
+        # self.sync += [
+        #     If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
+        #     If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
+        #     If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
+        #     If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+        #     [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
+        #     [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
+        # ]
+
+        hmc_req_layout = [
+        ("addr", len(hmc_port.addr)),
+        ("tag", len(hmc_port.tag)),
+        ("size", len(hmc_port.size))
+        ]
+
+        hmc_req_fifo = RecordFIFO(layout=hmc_req_layout, depth=2)
+        self.submodules += hmc_req_fifo
+
+        self.comb += [
+            hmc_req_fifo.din.addr.eq(next_node_idx),
+            hmc_req_fifo.din.tag.eq(current_tag),
+            hmc_req_fifo.din.size.eq(1),
+            hmc_port.addr.eq(hmc_req_fifo.dout.addr),
+            hmc_port.clk.eq(ClockSignal()),
+            hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
+            hmc_port.size.eq(hmc_req_fifo.dout.size),
+            hmc_port.tag.eq(hmc_req_fifo.dout.tag),
+            hmc_port.cmd_valid.eq(hmc_req_fifo.readable),
+            hmc_req_fifo.re.eq(hmc_port.cmd_ready),
+            self.tags.re.eq(hmc_req_fifo.writable & hmc_req_fifo.we & ~inject)
         ]
 
         from_pe = Signal(2)
@@ -235,9 +260,9 @@ class Neighborsx4(Module):
             )
         )
         fsm.act("GET_NEIGHBORS",
-            hmc_port.cmd_valid.eq(inject | self.tags.readable),
-            self.update_wr_port.we.eq(hmc_port.cmd_valid),
-            If(hmc_port.cmd_valid & hmc_port.cmd_ready,
+            hmc_req_fifo.we.eq(inject | self.tags.readable),
+            self.update_wr_port.we.eq(hmc_req_fifo.we),
+            If(hmc_req_fifo.writable & hmc_req_fifo.we,
                 NextValue(next_node_idx, next_node_idx + 16),
                 If(next_node_idx + 16 >= end_node_idx,
                     NextState("IDLE")
@@ -256,14 +281,13 @@ class Neighborsx4(Module):
             )
         )
 
-        self.sync += If(inject & hmc_port.cmd_ready & hmc_port.cmd_valid,
+        self.sync += If(inject & hmc_req_fifo.writable & hmc_req_fifo.we,
             num_injected.eq(num_injected + 1)
         )
 
 
 
         self.comb += [
-            hmc_port.addr.eq(next_node_idx),
             self.update_wr_port.adr.eq(current_tag),
             update_dat_w.message.eq(message),
             update_dat_w.sender.eq(sender),
@@ -277,11 +301,6 @@ class Neighborsx4(Module):
             ),
             no_tags_inflight.eq(self.tags.level == num_injected),
             inject.eq(~num_injected[6]),
-            hmc_port.clk.eq(ClockSignal()),
-            hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
-            hmc_port.size.eq(1),
-            If(inject, hmc_port.tag.eq(num_injected)).Else(hmc_port.tag.eq(self.tags.dout)),
-            self.tags.re.eq(hmc_port.cmd_ready & hmc_port.cmd_valid & ~inject)
         ]
 
         # receive bursts from HMC - save data, put tag in queue for available answers
