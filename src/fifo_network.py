@@ -10,6 +10,7 @@ import math
 from recordfifo import RecordFIFO, RecordFIFOBuffered
 from core_interfaces import _msg_layout, ApplyInterface, NetworkInterface
 from core_barriercounter import Barriercounter
+from core_barrierdistributor import BarrierDistributor
 
 class Arbiter(Module):
     def __init__(self, pe_id, config):
@@ -113,6 +114,7 @@ class MuxTree(Module):
             ]
 
 
+
 class Network(Module):
     def __init__(self, config):
         num_pe = config.addresslayout.num_pe
@@ -147,60 +149,22 @@ class Network(Module):
                 self.arbiter[sink].apply_interface_out.connect(self.apply_interface[sink])
             ]
 
+        self.submodules.barrierdistributor = [BarrierDistributor(config) for _ in range(num_pe)]
 
         # connect PE outgoing ports
         for source in range(num_pe):
-            array_dest_id = Array(fifo.din.dest_id for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_sender = Array(fifo.din.sender for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_payload = Array(fifo.din.payload for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_roundpar = Array(fifo.din.roundpar for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_barrier = Array(fifo.din.barrier for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_msg = Array(fifo.din.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
             array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
-
-            have_barrier = Signal()
-            curr_barrier = Signal(config.addresslayout.peidsize)
-            barrier_ack = Signal()
-            barrier_done = Signal()
             sink = Signal(config.addresslayout.peidsize)
-            num_msgs_since_last_barrier = Array(Signal(config.addresslayout.nodeidsize) for _ in range(num_pe))
 
             self.comb += [
-                have_barrier.eq(self.network_interface[source].msg.barrier & self.network_interface[source].valid),
-                barrier_done.eq(curr_barrier == (num_pe - 1))
+                self.network_interface[source].connect(self.barrierdistributor[source].network_interface_in)
             ]
 
-            self.sync += [
-                If(have_barrier & barrier_ack,
-                    num_msgs_since_last_barrier[curr_barrier].eq(0),
-                    If(~barrier_done,
-                        curr_barrier.eq(curr_barrier + 1)
-                    ).Else(
-                        curr_barrier.eq(0)
-                    )
-                )
-            ]
-
-            self.sync += [
-                If(~have_barrier & self.network_interface[source].valid & self.network_interface[source].ack,
-                    num_msgs_since_last_barrier[sink].eq(num_msgs_since_last_barrier[sink]+1)
-                )
-            ]
-
-            self.comb+= [
-                If(have_barrier,
-                    sink.eq(curr_barrier),
-                    barrier_ack.eq(array_writable[sink]),
-                    array_barrier[sink].eq(1),
-                    array_dest_id[sink].eq(num_msgs_since_last_barrier[sink]),
-                    self.network_interface[source].ack.eq(barrier_ack & barrier_done)
-                ).Else(
-                    sink.eq(self.network_interface[source].dest_pe),
-                    array_dest_id[sink].eq(self.network_interface[source].msg.dest_id),
-                    self.network_interface[source].ack.eq(array_writable[sink])
-                ),
-                array_sender[sink].eq(self.network_interface[source].msg.sender),
-                array_payload[sink].eq(self.network_interface[source].msg.payload),
-                array_roundpar[sink].eq(self.network_interface[source].msg.roundpar),
-                array_we[sink].eq(self.network_interface[source].valid),
+            self.comb += [
+                sink.eq(self.barrierdistributor[source].network_interface_out.dest_pe),
+                array_msg[sink].eq(self.barrierdistributor[source].network_interface_out.msg.raw_bits()),
+                array_we[sink].eq(self.barrierdistributor[source].network_interface_out.valid),
+                self.barrierdistributor[source].network_interface_out.ack.eq(array_writable[sink])
             ]
