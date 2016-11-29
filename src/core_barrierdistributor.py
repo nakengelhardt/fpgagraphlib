@@ -42,7 +42,7 @@ class BarrierDistributor(Module):
                 sink.eq(curr_barrier),
                 self.network_interface_out.dest_pe.eq(curr_barrier),
                 self.network_interface_out.msg.dest_id.eq(num_msgs_since_last_barrier[sink]),
-                self.network_interface_in.ack.eq(barrier_done)
+                self.network_interface_in.ack.eq(barrier_done & self.network_interface_out.ack)
             ).Else(
                 sink.eq(self.network_interface_in.dest_pe),
                 self.network_interface_out.dest_pe.eq(self.network_interface_in.dest_pe),

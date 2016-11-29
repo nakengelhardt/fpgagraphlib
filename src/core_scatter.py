@@ -10,6 +10,7 @@ from core_neighbors_dummy import NeighborsDummy
 from core_address import AddressLayout
 
 from recordfifo import RecordFIFO
+from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
     def __init__(self, pe_id, config, adj_mat=None, edge_data=None, hmc_port=None):
@@ -141,11 +142,17 @@ class Scatter(Module):
         else:
             neighbor_pe = 0
 
+        self.submodules.barrierdistributor = BarrierDistributor(config)
+
         # send out messages
         self.comb += [
-            self.outfifo.dout.connect(self.network_interface.msg),
-            self.network_interface.broadcast.eq(self.outfifo.dout.barrier),
-            self.network_interface.valid.eq(self.outfifo.readable),
-            self.network_interface.dest_pe.eq(neighbor_pe),
-            self.outfifo.re.eq(self.network_interface.ack)
+            self.outfifo.dout.connect(self.barrierdistributor.network_interface_in.msg),
+            self.barrierdistributor.network_interface_in.broadcast.eq(self.outfifo.dout.barrier),
+            self.barrierdistributor.network_interface_in.valid.eq(self.outfifo.readable),
+            self.barrierdistributor.network_interface_in.dest_pe.eq(neighbor_pe),
+            self.outfifo.re.eq(self.barrierdistributor.network_interface_in.ack)
+        ]
+
+        self.comb += [
+            self.barrierdistributor.network_interface_out.connect(self.network_interface)
         ]
