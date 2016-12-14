@@ -205,14 +205,14 @@ class Neighborsx4(Module):
         self.num_reqs = [Signal(32) for _ in range(4)]
         self.wrongs = [Signal(32) for _ in range(4)]
 
-        # self.sync += [
-        #     If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
-        #     If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
-        #     If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-        #     If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-        #     [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
-        #     [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
-        # ]
+        self.sync += [
+            If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
+            If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
+            If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
+            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
+            [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
+        ]
 
         hmc_req_layout = [
         ("addr", len(hmc_port.addr)),

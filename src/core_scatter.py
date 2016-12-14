@@ -32,12 +32,9 @@ class Scatter(Module):
 
         # memory layout (TODO: replace with an actual record)
         def _pack_adj_idx(adj_idx):
-            return [b<<edgeidsize | a for a,b in adj_idx] if adj_idx else None
+            return [b<<edgeidsize | a for a,b in adj_idx]
 
-        if adj_mat != None:
-            adj_idx, adj_val = adj_mat
-        else:
-            adj_idx, adj_val = None, None
+        adj_idx, adj_val = adj_mat
 
         # CSR edge storage: (idx, val) tuple of arrays
         # idx: array of (start_adr, num_neighbors)

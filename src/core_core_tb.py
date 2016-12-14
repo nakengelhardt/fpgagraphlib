@@ -52,7 +52,7 @@ class Core(Module):
                 self.submodules.neighbors_hmc = [Neighborsx4(pe_id=i*4, config=config, hmc_port=config.platform.getHMCPort(i)) for i in range(9)]
                 for j in range(4):
                     for i in range(9):
-                        n = i*4 + j
+                        n = j*4 + i
                         if n < num_pe:
                             self.comb += [
                                 self.neighbors_hmc[i].start_idx[j].eq(self.scatter[n].get_neighbors.start_idx),
