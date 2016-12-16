@@ -3,6 +3,8 @@ from migen.genlib.fsm import FSM, NextState, NextValue
 
 import logging
 
+from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
+
 class Neighbors(Module):
     def __init__(self, pe_id, config, adj_val, edge_data=None):
         self.pe_id = pe_id
@@ -12,24 +14,10 @@ class Neighbors(Module):
         max_edges_per_pe = config.addresslayout.max_edges_per_pe
 
         # input
-        self.start_idx = Signal(edgeidsize)
-        self.num_neighbors = Signal(edgeidsize)
-        self.valid = Signal()
-        self.ack = Signal()
-        self.barrier_in = Signal()
-        self.message_in = Signal(config.addresslayout.payloadsize)
-        self.sender_in = Signal(config.addresslayout.nodeidsize)
-        self.round_in = Signal(config.addresslayout.channel_bits)
+        self.neighbor_in = Record(set_layout_parameters(_neighbor_in_layout, **config.addresslayout.get_params()))
 
         # output
-        self.neighbor = Signal(nodeidsize)
-        self.neighbor_valid = Signal()
-        self.neighbor_ack = Signal()
-        self.barrier_out = Signal()
-        self.message_out = Signal(config.addresslayout.payloadsize)
-        self.sender_out = Signal(config.addresslayout.nodeidsize)
-        self.round_out = Signal(config.addresslayout.channel_bits)
-        self.num_neighbors_out = Signal(edgeidsize)
+        self.neighbor_out = Record(set_layout_parameters(_neighbor_out_layout, **config.addresslayout.get_params()))
         if config.has_edgedata:
             self.edgedata_out = Signal(config.addresslayout.edgedatasize)
         ###
@@ -52,29 +40,29 @@ class Neighbors(Module):
         # control path
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
-            self.ack.eq(1),
-            rd_port_val.adr.eq(self.start_idx),
+            self.neighbor_in.ack.eq(1),
+            rd_port_val.adr.eq(self.neighbor_in.start_idx),
             rd_port_val.re.eq(1),
-            rd_port_edge.adr.eq(self.start_idx) if config.has_edgedata else [],
+            rd_port_edge.adr.eq(self.neighbor_in.start_idx) if config.has_edgedata else [],
             rd_port_edge.re.eq(1) if config.has_edgedata else [],
-            NextValue(self.message_out, self.message_in),
-            NextValue(self.sender_out, self.sender_in),
-            NextValue(self.round_out, self.round_in),
-            NextValue(self.num_neighbors_out, self.num_neighbors),
-            If(self.barrier_in,
+            NextValue(self.neighbor_out.message, self.neighbor_in.message),
+            NextValue(self.neighbor_out.sender, self.neighbor_in.sender),
+            NextValue(self.neighbor_out.round, self.neighbor_in.round),
+            NextValue(self.neighbor_out.num_neighbors, self.neighbor_in.num_neighbors),
+            If(self.neighbor_in.barrier,
                 NextState("BARRIER")
             ),
-            If(self.valid & (self.num_neighbors != 0),
-                NextValue(next_node_idx, self.start_idx + 1),
-                NextValue(end_node_idx, self.start_idx + self.num_neighbors),
+            If(self.neighbor_in.valid & (self.neighbor_in.num_neighbors != 0),
+                NextValue(next_node_idx, self.neighbor_in.start_idx + 1),
+                NextValue(end_node_idx, self.neighbor_in.start_idx + self.neighbor_in.num_neighbors),
                 NextState("GET_NEIGHBORS")
             )
         )
         fsm.act("GET_NEIGHBORS", # iterate over neighbors
-            self.neighbor_valid.eq(1),
+            self.neighbor_out.valid.eq(1),
             rd_port_val.adr.eq(next_node_idx),
             rd_port_edge.adr.eq(next_node_idx) if config.has_edgedata else [],
-            If(self.neighbor_ack,
+            If(self.neighbor_out.ack,
                 rd_port_val.re.eq(1),
                 rd_port_edge.re.eq(1) if config.has_edgedata else [],
                 If(next_node_idx == end_node_idx,
@@ -85,15 +73,15 @@ class Neighbors(Module):
             )
         )
         fsm.act("BARRIER",
-            self.barrier_out.eq(1),
-            If(self.neighbor_ack,
+            self.neighbor_out.barrier.eq(1),
+            If(self.neighbor_out.ack,
                 NextState("IDLE")
             )
         )
 
         # data path
         self.comb += [
-            self.neighbor.eq(rd_port_val.dat_r),
+            self.neighbor_out.neighbor.eq(rd_port_val.dat_r),
             self.edgedata_out.eq(rd_port_edge.dat_r) if config.has_edgedata else []
         ]
 
@@ -102,8 +90,8 @@ class Neighbors(Module):
         self.num_neighbors_issued = Signal(32)
 
         self.sync += [
-            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            If(self.neighbor_valid & self.neighbor_ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+            If(self.neighbor_in.valid & self.neighbor_in.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
 
 
@@ -116,11 +104,11 @@ class Neighbors(Module):
         num_mem_reads = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.barrier_out):
+            if (yield self.neighbor_out.barrier):
                 level += 1
-            if (yield self.neighbor_valid) and (yield self.neighbor_ack):
+            if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
                 num_mem_reads += 1
-                neighbor = (yield self.neighbor)
+                neighbor = (yield self.neighbor_out.neighbor)
                 logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
                 if tb.config.has_edgedata:
                     logger.debug("Edgedata: " + str((yield self.edgedata_out)))
@@ -131,10 +119,10 @@ class Neighbors(Module):
                         logger.warning("{}: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
                 else:
                     to_be_sent.remove(neighbor)
-            if (yield self.valid) and (yield self.ack):
+            if (yield self.neighbor_in.valid) and (yield self.neighbor_in.ack):
                 if to_be_sent:
                     logger.warning("{}: message for nodes {} was not sent from node {}".format(num_cycles, to_be_sent, curr_sender))
-                curr_sender = (yield self.sender_in)
+                curr_sender = (yield self.neighbor_in.sender)
                 if not curr_sender in graph:
                     logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))
                     to_be_sent = []

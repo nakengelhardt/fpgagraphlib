@@ -12,6 +12,7 @@ _data_layout = [
     ("valid", 2)
 ]
 
+from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 class getAnswer(Module):
     def __init__(self, config, update_rd_port, answer_rd_port):
@@ -65,24 +66,10 @@ class NeighborsHMC(Module):
         edgeidsize = config.addresslayout.edgeidsize
 
         # input
-        self.start_idx = Signal(edgeidsize)
-        self.num_neighbors = Signal(edgeidsize)
-        self.valid = Signal()
-        self.ack = Signal()
-        self.barrier_in = Signal()
-        self.message_in = Signal(config.addresslayout.payloadsize)
-        self.sender_in = Signal(config.addresslayout.nodeidsize)
-        self.round_in = Signal(config.addresslayout.channel_bits)
+        self.neighbor_in = Record(set_layout_parameters(_neighbor_in_layout, **config.addresslayout.get_params()))
 
         # output
-        self.neighbor = Signal(nodeidsize)
-        self.neighbor_valid = Signal()
-        self.neighbor_ack = Signal()
-        self.barrier_out = Signal()
-        self.message_out = Signal(config.addresslayout.payloadsize)
-        self.sender_out = Signal(config.addresslayout.nodeidsize)
-        self.round_out = Signal(config.addresslayout.channel_bits)
-        self.num_neighbors_out = Signal(edgeidsize)
+        self.neighbor_out = Record(set_layout_parameters(_neighbor_out_layout, **config.addresslayout.get_params()))
 
         ###
 
@@ -128,17 +115,17 @@ class NeighborsHMC(Module):
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
-            self.ack.eq(1),
-            NextValue(message, self.message_in),
-            NextValue(sender, self.sender_in),
-            NextValue(roundpar, self.round_in),
-            NextValue(num_neighbors, self.num_neighbors),
-            If(self.barrier_in,
+            self.neighbor_in.ack.eq(1),
+            NextValue(message, self.neighbor_in.message),
+            NextValue(sender, self.neighbor_in.sender),
+            NextValue(roundpar, self.neighbor_in.round),
+            NextValue(num_neighbors, self.neighbor_in.num_neighbors),
+            If(self.neighbor_in.barrier,
                 NextState("BARRIER")
             ),
-            If(self.valid & (self.num_neighbors != 0),
-                NextValue(current_node_idx, self.start_idx),
-                NextValue(end_node_idx, self.start_idx + (self.num_neighbors << 2)),
+            If(self.neighbor_in.valid & (self.neighbor_in.num_neighbors != 0),
+                NextValue(current_node_idx, self.neighbor_in.start_idx),
+                NextValue(end_node_idx, self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << 2)),
                 NextState("GET_NEIGHBORS")
             )
         )
@@ -173,14 +160,14 @@ class NeighborsHMC(Module):
         ]
 
         fsm.act("BARRIER",
-            If(no_tags_inflight & ~self.neighbor_valid,
-                NextValue(self.barrier_out, 1),
+            If(no_tags_inflight & ~self.neighbor_out.valid,
+                NextValue(self.neighbor_out.barrier, 1),
                 NextState("BARRIER_WAIT")
             )
         )
         fsm.act("BARRIER_WAIT",
-            If(self.neighbor_ack,
-                NextValue(self.barrier_out, 0),
+            If(self.neighbor_out.ack,
+                NextValue(self.neighbor_out.barrier, 0),
                 NextState("IDLE")
             )
         )
@@ -224,11 +211,11 @@ class NeighborsHMC(Module):
         last = Signal()
         self.comb += [
             last.eq(mux == (self.get_answer.burst_valid)),
-            self.get_answer.ack_out.eq(last & self.neighbor_ack)
+            self.get_answer.ack_out.eq(last & self.neighbor_out.ack)
         ]
 
         self.sync += [
-            If(self.neighbor_valid & self.neighbor_ack,
+            If(self.neighbor_out.valid & self.neighbor_out.ack,
                 If(last,
                     mux.eq(0)
                 ).Else(
@@ -239,22 +226,22 @@ class NeighborsHMC(Module):
 
         cases = {}
         for i in range(4):
-            cases[i] = self.neighbor.eq(self.answer_rd_port.dat_r[i*32:(i+1)*32])
+            cases[i] = self.neighbor_out.neighbor.eq(self.answer_rd_port.dat_r[i*32:(i+1)*32])
         self.comb += Case(mux, cases).makedefault()
 
         # output
         self.comb += [
-            self.neighbor_valid.eq(self.get_answer.valid_out),
-            If(self.barrier_out,
-                self.message_out.eq(message),
-                self.sender_out.eq(sender),
-                self.round_out.eq(roundpar),
-                self.num_neighbors_out.eq(num_neighbors)
+            self.neighbor_out.valid.eq(self.get_answer.valid_out),
+            If(self.neighbor_out.barrier,
+                self.neighbor_out.message.eq(message),
+                self.neighbor_out.sender.eq(sender),
+                self.neighbor_out.round.eq(roundpar),
+                self.neighbor_out.num_neighbors.eq(num_neighbors)
             ).Else(
-                self.message_out.eq(self.get_answer.message_out),
-                self.sender_out.eq(self.get_answer.sender_out),
-                self.round_out.eq(self.get_answer.round_out),
-                self.num_neighbors_out.eq(self.get_answer.num_neighbors_out)
+                self.neighbor_out.message.eq(self.get_answer.message_out),
+                self.neighbor_out.sender.eq(self.get_answer.sender_out),
+                self.neighbor_out.round.eq(self.get_answer.round_out),
+                self.neighbor_out.num_neighbors.eq(self.get_answer.num_neighbors_out)
             )
         ]
 
@@ -270,8 +257,8 @@ class NeighborsHMC(Module):
             If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(self.valid & self.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            If(self.neighbor_valid & self.neighbor_ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+            If(self.neighbor_in.valid & self.neighbor_in.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
 
     def gen_selfcheck(self, tb, graph):
@@ -282,13 +269,13 @@ class NeighborsHMC(Module):
         num_mem_reads = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.barrier_out):
+            if (yield self.neighbor_out.barrier):
                 level += 1
             if (yield self.hmc_port.cmd_valid) and (yield self.hmc_port.cmd_ready):
                 num_mem_reads += 1
-            if (yield self.neighbor_valid) and (yield self.neighbor_ack):
-                neighbor = (yield self.neighbor)
-                curr_sender = (yield self.sender_out)
+            if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
+                neighbor = (yield self.neighbor_out.neighbor)
+                curr_sender = (yield self.neighbor_out.sender)
                 logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
                 if tb.config.has_edgedata:
                     logger.debug("Edgedata: " + str((yield self.edgedata_out)))
@@ -299,8 +286,8 @@ class NeighborsHMC(Module):
                         logger.warning("{}: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
                 else:
                     to_be_sent[curr_sender].remove(neighbor)
-            if (yield self.valid) and (yield self.ack):
-                curr_sender = (yield self.sender_in)
+            if (yield self.neighbor_in.valid) and (yield self.neighbor_in.ack):
+                curr_sender = (yield self.neighbor_in.sender)
                 logger.debug("get_neighbor: request for neighbors of node {}".format(curr_sender))
                 if not curr_sender in graph:
                     logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))

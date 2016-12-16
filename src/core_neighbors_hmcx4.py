@@ -8,6 +8,7 @@ from recordfifo import RecordFIFO
 from functools import reduce
 from operator import and_
 
+from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 _data_layout = [
     ("message", "payloadsize"),
@@ -20,8 +21,8 @@ _data_layout = [
 ]
 
 class BurstDownconverter(Module):
-    def __init__(self, update_layout):
-        self.update_in = Record(update_layout)
+    def __init__(self, config):
+        self.update_in = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
         self.burst_in = Signal(128)
         self.valid_in = Signal()
         self.ack_in = Signal()
@@ -31,16 +32,9 @@ class BurstDownconverter(Module):
         payloadsize = len(self.update_in.message)
         channel_bits = len(self.update_in.round)
 
-        self.neighbor = Signal(nodeidsize)
-        self.neighbor_valid = Signal()
-        self.neighbor_ack = Signal()
-        self.message_out = Signal(payloadsize)
-        self.sender_out = Signal(nodeidsize)
-        self.round_out = Signal(channel_bits)
-        self.num_neighbors_out = Signal(edgeidsize)
-        self.barrier_out = Signal()
+        self.out = Record(set_layout_parameters(_neighbor_out_layout, **config.addresslayout.get_params()))
 
-        update_reg = Record(update_layout)
+        update_reg = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
         burst_reg = Signal(128)
         valid_reg = Signal()
         ack = Signal()
@@ -56,11 +50,11 @@ class BurstDownconverter(Module):
         last = Signal()
         self.comb += [
             last.eq(mux == (update_reg.valid-1)),
-            ack.eq( (last & self.neighbor_ack) | ~valid_reg )
+            ack.eq( (last & self.out.ack) | ~valid_reg )
         ]
 
         self.sync += [
-            If(self.neighbor_valid & self.neighbor_ack,
+            If(self.out.valid & self.out.ack,
                 If(last,
                     mux.eq(0)
                 ).Else(
@@ -71,17 +65,17 @@ class BurstDownconverter(Module):
 
         cases = {}
         for i in range(4):
-            cases[i] = self.neighbor.eq(burst_reg[i*32:(i+1)*32])
+            cases[i] = self.out.neighbor.eq(burst_reg[i*32:(i+1)*32])
         self.comb += Case(mux, cases).makedefault()
 
         # output
         self.comb += [
-            self.neighbor_valid.eq(valid_reg & ~update_reg.barrier),
-            self.message_out.eq(update_reg.message),
-            self.sender_out.eq(update_reg.sender),
-            self.round_out.eq(update_reg.round),
-            self.num_neighbors_out.eq(update_reg.num_neighbors),
-            self.barrier_out.eq(valid_reg & update_reg.barrier)
+            self.out.valid.eq(valid_reg & ~update_reg.barrier),
+            self.out.message.eq(update_reg.message),
+            self.out.sender.eq(update_reg.sender),
+            self.out.round.eq(update_reg.round),
+            self.out.num_neighbors.eq(update_reg.num_neighbors),
+            self.out.barrier.eq(valid_reg & update_reg.barrier)
         ]
 
 
@@ -91,55 +85,38 @@ class Neighborsx4(Module):
         edgeidsize = config.addresslayout.edgeidsize
         payloadsize = config.addresslayout.payloadsize
 
-        update_layout = set_layout_parameters(_data_layout,  **config.addresslayout.get_params())
+        update_layout = set_layout_parameters(_data_layout, **config.addresslayout.get_params())
 
         # input
-        self.start_idx = [Signal(edgeidsize) for _ in range(4)]
-        self.num_neighbors = [Signal(edgeidsize) for _ in range(4)]
-        self.valid = [Signal() for _ in range(4)]
-        self.ack = [Signal() for _ in range(4)]
-        self.barrier_in = [Signal() for _ in range(4)]
-        self.message_in = [Signal(payloadsize) for _ in range(4)]
-        self.sender_in = [Signal(nodeidsize) for _ in range(4)]
-        self.round_in = [Signal(config.addresslayout.channel_bits) for _ in range(4)]
+        self.neighbor_in = [Record(set_layout_parameters(_neighbor_in_layout, **config.addresslayout.get_params())) for _ in range(4)]
 
         # output
-        self.neighbor = [Signal(nodeidsize) for _ in range(4)]
-        self.neighbor_valid = [Signal() for _ in range(4)]
-        self.neighbor_ack = [Signal() for _ in range(4)]
-        self.barrier_out = [Signal() for _ in range(4)]
-        self.message_out = [Signal(payloadsize) for _ in range(4)]
-        self.sender_out = [Signal(nodeidsize) for _ in range(4)]
-        self.round_out = [Signal(config.addresslayout.channel_bits) for _ in range(4)]
-        self.num_neighbors_out = [Signal(edgeidsize) for _ in range(4)]
+        self.neighbor_out = [Record(set_layout_parameters(_neighbor_out_layout, **config.addresslayout.get_params())) for _ in range(4)]
+
 
         ###
 
         assert(edgeidsize == 32)
 
         #input
+        _neighbor_in_layout_payload = [x for x in _neighbor_in_layout if x[0]!="valid" and x[0]!="ack"]
 
-        self.fifos = [SyncFIFO(len(Cat(self.start_idx[0], self.num_neighbors[0], self.sender_in[0], self.message_in[0], self.barrier_in[0], self.round_in[0])), 8) for _ in range(4)]
+        self.fifos = [RecordFIFO(layout=set_layout_parameters(_neighbor_in_layout_payload, **config.addresslayout.get_params()), depth=8) for _ in range(4)]
         self.submodules += self.fifos
 
         for i in range(4):
             self.comb += [
-                self.fifos[i].we.eq(self.valid[i] | self.barrier_in[i]),
-                self.ack[i].eq(self.fifos[i].writable),
-                self.fifos[i].din.eq(Cat(self.start_idx[i], self.num_neighbors[i], self.sender_in[i], self.message_in[i], self.barrier_in[i], self.round_in[i]))
+                self.fifos[i].we.eq(self.neighbor_in[i].valid | self.neighbor_in[i].barrier),
+                self.neighbor_in[i].ack.eq(self.fifos[i].writable),
+                self.neighbor_in[i].connect(self.fifos[i].din, leave_out={"valid", "ack"})
             ]
 
-        array_data = Array(fifo.dout for fifo in self.fifos)
+        array_data = Array(fifo.dout.raw_bits() for fifo in self.fifos)
         array_re = Array(fifo.re for fifo in self.fifos)
         array_readable = Array(fifo.readable for fifo in self.fifos)
 
 
-        chosen_start_idx = Signal(edgeidsize)
-        chosen_num_neighbors = Signal(edgeidsize)
-        chosen_sender_in = Signal(nodeidsize)
-        chosen_message_in = Signal(payloadsize)
-        chosen_barrier_in = Signal()
-        chosen_round_in = Signal(config.addresslayout.channel_bits)
+        chosen = Record(set_layout_parameters(_neighbor_in_layout_payload, **config.addresslayout.get_params()))
         chosen_valid = Signal()
         chosen_ack = Signal()
         chosen_from_pe = Signal(2)
@@ -148,10 +125,9 @@ class Neighborsx4(Module):
         self.submodules.roundrobin = RoundRobin(4, switch_policy=SP_CE)
 
         self.comb += [
-            Cat(chosen_start_idx, chosen_num_neighbors, chosen_sender_in, chosen_message_in, tmp_barrier, chosen_round_in).eq(array_data[self.roundrobin.grant]),
-            chosen_valid.eq(array_readable[self.roundrobin.grant] & ~tmp_barrier),
-            chosen_from_pe.eq(self.roundrobin.grant),
-            chosen_barrier_in.eq(tmp_barrier & array_readable[self.roundrobin.grant])
+            chosen.raw_bits().eq(array_data[self.roundrobin.grant]),
+            chosen_valid.eq(array_readable[self.roundrobin.grant] & ~chosen.barrier),
+            chosen_from_pe.eq(self.roundrobin.grant)
         ]
         self.comb += [
             array_re[self.roundrobin.grant].eq(chosen_ack),
@@ -209,9 +185,7 @@ class Neighborsx4(Module):
             If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            [If(self.valid[i] & self.ack[i], self.num_reqs[i].eq(self.num_reqs[i] + 1)) for i in range(4)],
-            [If(self.neighbor_valid[i] & self.barrier_out[i], self.wrongs[i].eq(self.wrongs[i] + 1)) for i in range(4)],
+            If(chosen_valid & chosen_ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1))
         ]
 
         hmc_req_layout = [
@@ -245,17 +219,17 @@ class Neighborsx4(Module):
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
             chosen_ack.eq(1),
-            NextValue(message, chosen_message_in),
-            NextValue(sender, chosen_sender_in),
-            NextValue(roundpar, chosen_round_in),
-            NextValue(num_neighbors, chosen_num_neighbors),
+            NextValue(message, chosen.message),
+            NextValue(sender, chosen.sender),
+            NextValue(roundpar, chosen.round),
+            NextValue(num_neighbors, chosen.num_neighbors),
             NextValue(from_pe, chosen_from_pe),
-            If(chosen_barrier_in,
+            If(chosen.barrier & array_readable[self.roundrobin.grant],
                 NextState("BARRIER")
             ),
-            If(chosen_valid & (chosen_num_neighbors != 0),
-                NextValue(next_node_idx, chosen_start_idx),
-                NextValue(end_node_idx, chosen_start_idx + (chosen_num_neighbors << 2)),
+            If(chosen_valid & (chosen.num_neighbors != 0),
+                NextValue(next_node_idx, chosen.start_idx),
+                NextValue(end_node_idx, chosen.start_idx + (chosen.num_neighbors << 2)),
                 NextState("GET_NEIGHBORS")
             )
         )
@@ -363,7 +337,7 @@ class Neighborsx4(Module):
 
         # distribute to correct scatter
 
-        downconverter = [BurstDownconverter(update_layout) for _ in range(4)]
+        downconverter = [BurstDownconverter(config) for _ in range(4)]
         self.submodules += downconverter
         dc_valid_array = Array(downconverter[i].valid_in for i in range(4))
         dc_ack_array = Array(downconverter[i].ack_in for i in range(4))
@@ -375,13 +349,4 @@ class Neighborsx4(Module):
             ack1.eq(dc_ack_array[update1.from_pe])
         ]
 
-        self.comb += [
-            [self.neighbor[i].eq(downconverter[i].neighbor) for i in range(4)],
-            [self.neighbor_valid[i].eq(downconverter[i].neighbor_valid) for i in range(4)],
-            [self.message_out[i].eq(downconverter[i].message_out) for i in range(4)],
-            [self.sender_out[i].eq(downconverter[i].sender_out) for i in range(4)],
-            [self.round_out[i].eq(downconverter[i].round_out) for i in range(4)],
-            [self.num_neighbors_out[i].eq(downconverter[i].num_neighbors_out) for i in range(4)],
-            [self.barrier_out[i].eq(downconverter[i].barrier_out) for i in range(4)],
-            [downconverter[i].neighbor_ack.eq(self.neighbor_ack[i]) for i in range(4)]
-        ]
+        self.comb += [downconverter[i].out.connect(self.neighbor_out[i]) for i in range(4)]

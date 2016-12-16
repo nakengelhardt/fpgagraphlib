@@ -88,14 +88,14 @@ class Scatter(Module):
         # ask get_neighbors submodule for all neighbors of input node
         # upstream_ack will only go up again when all neighbors done
         self.comb +=[
-            self.get_neighbors.start_idx.eq(rd_port_idx.dat_r[:edgeidsize]),
-            self.get_neighbors.num_neighbors.eq(rd_port_idx.dat_r[edgeidsize:]),
-            self.get_neighbors.valid.eq(scatter_msg_valid1),
-            self.get_neighbors.barrier_in.eq(scatter_barrier1),
-            self.get_neighbors.message_in.eq(scatter_msg1),
-            self.get_neighbors.sender_in.eq(scatter_sender1),
-            self.get_neighbors.round_in.eq(scatter_round1),
-            upstream_ack.eq(self.get_neighbors.ack)
+            self.get_neighbors.neighbor_in.start_idx.eq(rd_port_idx.dat_r[:edgeidsize]),
+            self.get_neighbors.neighbor_in.num_neighbors.eq(rd_port_idx.dat_r[edgeidsize:]),
+            self.get_neighbors.neighbor_in.valid.eq(scatter_msg_valid1),
+            self.get_neighbors.neighbor_in.barrier.eq(scatter_barrier1),
+            self.get_neighbors.neighbor_in.message.eq(scatter_msg1),
+            self.get_neighbors.neighbor_in.sender.eq(scatter_sender1),
+            self.get_neighbors.neighbor_in.round.eq(scatter_round1),
+            upstream_ack.eq(self.get_neighbors.neighbor_in.ack)
         ]
 
 
@@ -106,14 +106,14 @@ class Scatter(Module):
         self.submodules.scatterkernel = config.scatterkernel(config.addresslayout)
 
         self.comb += [
-            self.scatterkernel.update_in.raw_bits().eq(self.get_neighbors.message_out),
-            self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.num_neighbors_out),
-            self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor),
-            self.scatterkernel.sender_in.eq(self.get_neighbors.sender_out),
-            self.scatterkernel.round_in.eq(self.get_neighbors.round_out),
-            self.scatterkernel.barrier_in.eq(self.get_neighbors.barrier_out),
-            self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_valid),
-            self.get_neighbors.neighbor_ack.eq(self.scatterkernel.ready)
+            self.scatterkernel.update_in.raw_bits().eq(self.get_neighbors.neighbor_out.message),
+            self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.neighbor_out.num_neighbors),
+            self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor_out.neighbor),
+            self.scatterkernel.sender_in.eq(self.get_neighbors.neighbor_out.sender),
+            self.scatterkernel.round_in.eq(self.get_neighbors.neighbor_out.round),
+            self.scatterkernel.barrier_in.eq(self.get_neighbors.neighbor_out.barrier),
+            self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_out.valid),
+            self.get_neighbors.neighbor_out.ack.eq(self.scatterkernel.ready)
         ]
 
         if config.has_edgedata:

@@ -55,23 +55,8 @@ class Core(Module):
                         n = j*4 + i
                         if n < num_pe:
                             self.comb += [
-                                self.neighbors_hmc[i].start_idx[j].eq(self.scatter[n].get_neighbors.start_idx),
-                                self.neighbors_hmc[i].num_neighbors[j].eq(self.scatter[n].get_neighbors.num_neighbors),
-                                self.neighbors_hmc[i].barrier_in[j].eq(self.scatter[n].get_neighbors.barrier_in),
-                                self.neighbors_hmc[i].message_in[j].eq(self.scatter[n].get_neighbors.message_in),
-                                self.neighbors_hmc[i].sender_in[j].eq(self.scatter[n].get_neighbors.sender_in),
-                                self.neighbors_hmc[i].round_in[j].eq(self.scatter[n].get_neighbors.round_in),
-                                self.neighbors_hmc[i].valid[j].eq(self.scatter[n].get_neighbors.valid),
-                                self.scatter[n].get_neighbors.ack.eq(self.neighbors_hmc[i].ack[j]),
-
-                                self.scatter[n].get_neighbors.neighbor.eq(self.neighbors_hmc[i].neighbor[j]),
-                                self.scatter[n].get_neighbors.barrier_out.eq(self.neighbors_hmc[i].barrier_out[j]),
-                                self.scatter[n].get_neighbors.message_out.eq(self.neighbors_hmc[i].message_out[j]),
-                                self.scatter[n].get_neighbors.sender_out.eq(self.neighbors_hmc[i].sender_out[j]),
-                                self.scatter[n].get_neighbors.round_out.eq(self.neighbors_hmc[i].round_out[j]),
-                                self.scatter[n].get_neighbors.num_neighbors_out.eq(self.neighbors_hmc[i].num_neighbors_out[j]),
-                                self.scatter[n].get_neighbors.neighbor_valid.eq(self.neighbors_hmc[i].neighbor_valid[j]),
-                                self.neighbors_hmc[i].neighbor_ack[j].eq(self.scatter[n].get_neighbors.neighbor_ack)
+                                self.scatter[n].get_neighbors.neighbor_in.connect(self.neighbors_hmc[i].neighbor_in[j]),
+                                self.neighbors_hmc[i].neighbor_out[j].connect(self.scatter[n].get_neighbors.neighbor_out)
                             ]
         else:
             self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]

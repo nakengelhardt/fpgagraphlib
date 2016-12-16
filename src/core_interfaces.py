@@ -45,6 +45,29 @@ class ScatterInterface(Record):
     def __init__(self, name=None, **kwargs):
         Record.__init__(self, set_layout_parameters(_scatter_layout, **kwargs), name=name)
 
+_neighbor_in_layout = [
+    ("start_idx", "edgeidsize", DIR_M_TO_S),
+    ("num_neighbors", "edgeidsize", DIR_M_TO_S),
+    ("sender", "nodeidsize", DIR_M_TO_S),
+    ("message", "payloadsize", DIR_M_TO_S),
+    ("round", "channel_bits", DIR_M_TO_S),
+    ("barrier", 1, DIR_M_TO_S),
+    ("valid", 1, DIR_M_TO_S),
+    ("ack", 1, DIR_S_TO_M)
+]
+
+_neighbor_out_layout = [
+    ("neighbor", "nodeidsize", DIR_M_TO_S),
+    ("num_neighbors", "nodeidsize", DIR_M_TO_S),
+    ("sender", "nodeidsize", DIR_M_TO_S),
+    ("message", "payloadsize", DIR_M_TO_S),
+    ("round", "channel_bits", DIR_M_TO_S),
+    ("barrier", 1, DIR_M_TO_S),
+    ("valid", 1, DIR_M_TO_S),
+    ("ack", 1, DIR_S_TO_M)
+]
+
+
 ## interface between scatter / network
 
 _network_layout = [
