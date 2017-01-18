@@ -25,6 +25,8 @@ class Top(Module):
         self.config = config
         num_pe = config.addresslayout.num_pe
 
+        self.submodules += config.platform
+
         self.clock_domains.cd_sys = ClockDomain()
         sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
         # extra_clk = config.platform.getExtraClk()
@@ -169,7 +171,7 @@ class Top(Module):
 
 
 def export(config, filename='StreamLoopback128_migen.v'):
-    config.platform = PicoPlatform(bus_width=32, stream_width=128)
+    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
     m = Top(config)
 
@@ -186,12 +188,13 @@ def export(config, filename='StreamLoopback128_migen.v'):
                 f.write(struct.pack('=I', x))
 
 def sim(config):
-    config.platform = PicoPlatform(bus_width=32, stream_width=128)
+    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
     tb = Core(config)
+    tb.submodules += config.platform
     generators = []
 
     if config.use_hmc:
-        generators.extend([port.gen_responses(config.adj_val) for port in config.platform.HMCports])
+        generators.extend(config.platform.getSimGenerators(config.adj_val))
 
     generators.extend([tb.gen_input()])
     generators.extend([tb.gen_barrier_monitor()])

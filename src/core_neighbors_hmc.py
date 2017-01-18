@@ -84,15 +84,16 @@ class NeighborsHMC(Module):
             hmc_port = config.platform.getHMCPort(0)
 
         self.hmc_port = hmc_port
+        effective_max_tag_size = self.hmc_port.effective_max_tag_size
 
         update_dat_w = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
 
-        self.submodules.tags = SyncFIFO(6, 2**6)
-        self.submodules.answers = SyncFIFO(6, 2**6)
-        self.specials.answerbuffer = Memory(128, 2**6)
+        self.submodules.tags = SyncFIFO(6, 2**effective_max_tag_size)
+        self.submodules.answers = SyncFIFO(6, 2**effective_max_tag_size)
+        self.specials.answerbuffer = Memory(128, 2**effective_max_tag_size)
         self.specials.answer_rd_port = self.answerbuffer.get_port(has_re=True)
         self.specials.answer_wr_port = self.answerbuffer.get_port(write_capable=True)
-        self.specials.updatebuffer = Memory(len(update_dat_w), 2**6)
+        self.specials.updatebuffer = Memory(len(update_dat_w), 2**effective_max_tag_size)
         self.specials.update_rd_port = self.updatebuffer.get_port(has_re=True)
         self.specials.update_wr_port = self.updatebuffer.get_port(write_capable=True)
 
@@ -178,7 +179,7 @@ class NeighborsHMC(Module):
         )
         self.comb += [
             no_tags_inflight.eq(self.tags.level == num_injected),
-            inject.eq(~num_injected[6]),
+            inject.eq(~num_injected[effective_max_tag_size]),
             If(inject, current_tag.eq(num_injected)).Else(current_tag.eq(self.tags.dout))
         ]
 

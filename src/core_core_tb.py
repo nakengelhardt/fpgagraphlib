@@ -43,7 +43,6 @@ class Core(Module):
 
         if config.use_hmc:
             if not config.share_mem_port:
-                assert(num_pe <= 9)
                 self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
             else:
                 assert(num_pe <= 36)
@@ -148,9 +147,9 @@ class Core(Module):
                         logger.debug(str(num_cycles) + ": Barrier enters Scatter on PE " + str(i))
                     # else:
                     #     logger.debug(str(num_cycles) + ": Scatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
-                if ((yield self.scatter[i].network_interface.valid)
-                    and (yield self.scatter[i].network_interface.ack)):
-                    if (yield self.scatter[i].network_interface.msg.barrier):
+                if ((yield self.scatter[i].barrierdistributor.network_interface_in.valid)
+                    and (yield self.scatter[i].barrierdistributor.network_interface_in.ack)):
+                    if (yield self.scatter[i].barrierdistributor.network_interface_in.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(i))
                     # else:
                     #     logger.debug(str(num_cycles) + ": Message for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
