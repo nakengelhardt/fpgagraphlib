@@ -262,8 +262,9 @@ class NeighborsHMC(Module):
             If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
 
-    def gen_selfcheck(self, tb, graph):
+    def gen_selfcheck(self, tb):
         logger = logging.getLogger("simulation.get_neighbors" + str(self.pe_id))
+        graph = tb.config.adj_dict
         to_be_sent = dict()
         level = 0
         num_cycles = 0

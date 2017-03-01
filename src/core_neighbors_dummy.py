@@ -18,11 +18,12 @@ class NeighborsDummy(Module):
         # output
         self.neighbor_out = Record(set_layout_parameters(_neighbor_out_layout, **config.addresslayout.get_params()))
 
-    def gen_selfcheck(self, tb, graph, quiet=True):
+    def gen_selfcheck(self, tb, quiet=True):
         to_be_sent = [dict() for _ in range(tb.config.addresslayout.num_channels)]
         logger = logging.getLogger('simulation.get_neighbors')
         level = 0
         num_cycles = 0
+        graph = tb.config.adj_dict
         while not (yield tb.global_inactive):
             num_cycles += 1
             if (yield self.neighbor_out.barrier):

@@ -95,8 +95,9 @@ class Neighbors(Module):
         ]
 
 
-    def gen_selfcheck(self, tb, graph):
+    def gen_selfcheck(self, tb):
         logger = logging.getLogger('simulation.get_neighbors' + str(self.pe_id))
+        graph = tb.config.adj_dict
         curr_sender = 0
         to_be_sent = []
         level = 0

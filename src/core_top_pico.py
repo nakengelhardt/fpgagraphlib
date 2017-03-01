@@ -187,6 +187,15 @@ def export(config, filename='StreamLoopback128_migen.v'):
             for x in config.adj_val:
                 f.write(struct.pack('=I', x))
 
+def get_simulators(module, name, *args, **kwargs):
+    simulators = []
+    if hasattr(module, name):
+        simulators.append(getattr(module, name)(*args, **kwargs))
+    for _, submodule in module._submodules:
+            for simulator in get_simulators(submodule, name, *args, **kwargs):
+                    simulators.append(simulator)
+    return simulators
+
 def sim(config):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
     tb = Core(config)
@@ -198,10 +207,8 @@ def sim(config):
 
     generators.extend([tb.gen_input()])
     generators.extend([tb.gen_barrier_monitor()])
-    generators.extend([s.get_neighbors.gen_selfcheck(tb, config.adj_dict) for s in tb.scatter])
-    generators.extend([a.gen_selfcheck(tb) for a in tb.network.arbiter])
-    generators.extend([a.applykernel.gen_selfcheck(tb) for a in tb.apply])
-    # generators.extend([a.scatterkernel.gen_selfcheck(tb) for a in tb.scatter])
+    generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
+    generators.extend(get_simulators(tb, 'gen_simulation', tb))
 
     # generators.extend([a.gen_stats(tb) for a in tb.apply])
     # generators.extend([tb.gen_network_stats()])
