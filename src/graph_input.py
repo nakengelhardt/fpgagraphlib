@@ -28,8 +28,8 @@ def read_graph(f, digraph=False, connected=True):
             d[source].add(sink)
             if not digraph:
                 d[sink].add(source)
-        if connected:
-            make_connected(d)
+    if connected:
+        make_connected(d)
     print("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
     return d
 
@@ -71,11 +71,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('graphfile', help='filename containing graph')
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
-    parser.add_argument('-u', '--unconnected', action="store_true", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
+    parser.add_argument('-u', '--unconnected', action="store_false", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
     args = parser.parse_args()
 
     with open(args.graphfile) as f:
-        d = read_graph(f, digraph=args.digraph)
+        d = read_graph(f, digraph=args.digraph, connected=args.unconnected)
 
 if __name__ == "__main__":
     main()
