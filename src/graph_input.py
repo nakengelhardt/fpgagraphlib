@@ -1,8 +1,7 @@
 import re
 import argparse
 
-def read_graph(f, digraph=False):
-    # print("Loading input graph...")
+def read_graph(f, digraph=False, connected=True):
     d = {}
     numbers = {}
     next_number = 1
@@ -29,9 +28,27 @@ def read_graph(f, digraph=False):
             d[source].add(sink)
             if not digraph:
                 d[sink].add(source)
-    # print(d)
-    # print("...done.")
+        if connected:
+            make_connected(d)
+    print("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
     return d
+
+def make_connected(d, init=1, digraph=False):
+    visited = set()
+    to_visit = [init]
+    while to_visit:
+        node = to_visit.pop()
+        if node not in visited:
+            to_visit.extend(d[node])
+        visited.add(node)
+    not_visited = set()
+    for node in d:
+        if node not in visited:
+            not_visited.add(node)
+    for node in not_visited:
+        d[init].add(node)
+        if not digraph:
+            d[node].add(init)
 
 def check_connected(d, init=1):
     visited = set()
@@ -54,11 +71,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('graphfile', help='filename containing graph')
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
+    parser.add_argument('-u', '--unconnected', action="store_true", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
     args = parser.parse_args()
 
     with open(args.graphfile) as f:
         d = read_graph(f, digraph=args.digraph)
-        check_connected(d)
 
 if __name__ == "__main__":
     main()
