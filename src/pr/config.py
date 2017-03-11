@@ -41,7 +41,8 @@ class Config:
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 
-        self.init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, self.addresslayout.num_pe*self.addresslayout.num_nodes_per_pe)]
+        # self.init_nodedata = [0] + [len(self.adj_dict[node]) for node in range(1, num_nodes+1)] + [0 for _ in range(num_nodes+1, self.addresslayout.num_pe*self.addresslayout.num_nodes_per_pe)]
+        self.init_nodedata = [len(self.adj_dict[node]) if node in self.adj_dict else 0 for node in range(self.addresslayout.num_pe*self.addresslayout.num_nodes_per_pe)]
 
         self.has_edgedata = False
 

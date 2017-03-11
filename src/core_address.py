@@ -40,9 +40,20 @@ class AddressLayout:
     def global_adr(self, pe_adr, local_adr):
         return (pe_adr << log2_int(self.num_nodes_per_pe)) | local_adr
 
+    def max_per_pe(self, adj_dict):
+        max_node = [0 for _ in range(self.num_pe)]
+        for node in adj_dict:
+            pe = node//self.num_nodes_per_pe
+            localnode = node % self.num_nodes_per_pe
+            if max_node[pe] < localnode:
+                max_node[pe] = localnode
+        return max_node
+
     def generate_partition(self, adj_dict):
         logger = logging.getLogger('config')
-        adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
+        max_node = self.max_per_pe(adj_dict)
+        adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
+        # adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
         adj_val = [[] for _ in range(self.num_pe)]
 
         for node, neighbors in adj_dict.items():
@@ -53,14 +64,16 @@ class AddressLayout:
             adj_idx[pe][localnode] = (idx, n)
             adj_val[pe].extend(neighbors)
 
-        for i in range(len(adj_val)):
-            if len(adj_val[i]) > self.max_edges_per_pe:
-                logger.warning("Adjacency list for PE {} exceeds storage. Extend max_edges_per_pe to more than {}.".format(i, len(adj_val[i])))
-                adj_val[i] = adj_val[i][0:self.max_edges_per_pe]
-            else:
-                adj_val[i].extend([0 for _ in range(len(adj_val[i]), self.max_edges_per_pe)])
-            assert len(adj_val[i]) == self.max_edges_per_pe
-            assert len(adj_idx[i]) == self.num_nodes_per_pe
+        print("Edges per PE: {}".format([(pe, len(adj_val[pe])) for pe in range(self.num_pe)]))
+
+        # for i in range(self.num_pe):
+            # if len(adj_val[i]) > self.max_edges_per_pe:
+            #     logger.warning("Adjacency list for PE {} exceeds storage. Extend max_edges_per_pe to more than {}.".format(i, len(adj_val[i])))
+            #     adj_val[i] = adj_val[i][0:self.max_edges_per_pe]
+            # else:
+            #     adj_val[i].extend([0 for _ in range(len(adj_val[i]), self.max_edges_per_pe)])
+            # assert len(adj_val[i]) == self.max_edges_per_pe
+            # assert len(adj_idx[i]) == self.num_nodes_per_pe
 
         return adj_idx, adj_val
 

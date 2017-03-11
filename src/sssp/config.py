@@ -42,5 +42,9 @@ class Config:
 
         self.init_edgedata = [[random.randrange(1,10) for _ in range(self.addresslayout.max_edges_per_pe)] for _ in range(self.addresslayout.num_pe)]
 
+        init_root = 0
+        while not init_root in adj_dict:
+            init_root += 1
+
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
-        self.init_messages[0].append({'dest_id':1, 'sender':1, 'payload':0})
+        self.init_messages[0].append({'dest_id':init_root, 'sender':init_root, 'payload':0})

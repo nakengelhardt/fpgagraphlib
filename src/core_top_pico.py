@@ -18,8 +18,6 @@ from recordfifo import RecordFIFO
 from core_core_tb import Core
 from core_interfaces import Message
 
-from pr.config import Config
-
 class Top(Module):
     def __init__(self, config):
         self.config = config

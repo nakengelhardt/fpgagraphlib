@@ -1,5 +1,6 @@
 import re
 import argparse
+from migen import *
 
 def read_graph(f, digraph=False, connected=True):
     d = {}
@@ -16,6 +17,45 @@ def read_graph(f, digraph=False, connected=True):
             if sink_txt not in numbers:
                 numbers[sink_txt] = next_number
                 next_number += 1
+            source = numbers[source_txt]
+            sink = numbers[sink_txt]
+            if source == sink:
+                print("Node", source_txt, "linking to itself!")
+                continue
+            if source not in d:
+                d[source] = set()
+            if sink not in d:
+                d[sink] =  set()
+            d[source].add(sink)
+            if not digraph:
+                d[sink].add(source)
+    if connected:
+        make_connected(d)
+    print("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
+    return d
+
+def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=True):
+    d = {}
+    numbers = {}
+    next_number = 0
+    next_pe = 1
+    for line in f:
+        match = re.match("(\w+)\s(\w+)", line)
+        if match:
+            source_txt = match.group(1)
+            sink_txt = match.group(2)
+            if source_txt not in numbers:
+                numbers[source_txt] = next_pe << log2_int(num_nodes_per_pe) | next_number
+                next_pe += 1
+                if next_pe == num_pe:
+                    next_pe = 0
+                    next_number += 1
+            if sink_txt not in numbers:
+                numbers[sink_txt] = next_pe << log2_int(num_nodes_per_pe) | next_number
+                next_pe += 1
+                if next_pe == num_pe:
+                    next_pe = 0
+                    next_number += 1
             source = numbers[source_txt]
             sink = numbers[sink_txt]
             if source == sink:

@@ -44,23 +44,23 @@ class Apply(Module):
         # local node data storage
         if init_nodedata == None:
             init_nodedata = [0 for i in range(num_nodes_per_pe)]
-        self.specials.mem = Memory(addresslayout.node_storage_layout_len, num_nodes_per_pe, init=init_nodedata)
+        self.specials.mem = Memory(addresslayout.node_storage_layout_len, len(init_nodedata), init=init_nodedata)
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
         # multiplex read port
-        # during computation, update locally; after computation, controller sends contents back to host
-        self.extern_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=len(rd_port.adr), datasize=len(rd_port.dat_r)))
+        # TODO: during computation, update locally; after computation, controller sends contents back to host
+        # self.extern_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=len(rd_port.adr), datasize=len(rd_port.dat_r)))
         local_rd_port = Record(set_layout_parameters(_memory_port_layout, adrsize=len(rd_port.adr), datasize=len(rd_port.dat_r)))
         self.comb += [
-            If(self.extern_rd_port.enable,
-                rd_port.adr.eq(self.extern_rd_port.adr),
-                rd_port.re.eq(self.extern_rd_port.re)
-            ).Else(
-                rd_port.adr.eq(local_rd_port.adr),
-                rd_port.re.eq(local_rd_port.re)
-            ),
-            self.extern_rd_port.dat_r.eq(rd_port.dat_r),
+            # If(self.extern_rd_port.enable,
+            #     rd_port.adr.eq(self.extern_rd_port.adr),
+            #     rd_port.re.eq(self.extern_rd_port.re)
+            # ).Else(
+            rd_port.adr.eq(local_rd_port.adr),
+            rd_port.re.eq(local_rd_port.re),
+            # ),
+            # self.extern_rd_port.dat_r.eq(rd_port.dat_r),
             local_rd_port.dat_r.eq(rd_port.dat_r)
         ]
 
@@ -233,8 +233,8 @@ class Apply(Module):
             self.scatter_interface.valid.eq(valid4)
         ]
 
-        # send from fifo when receiver ready and no external request (has priority)
-        self.comb += self.outfifo.re.eq(self.scatter_interface.ack & ~self.extern_rd_port.re)
+        # send from fifo when receiver ready
+        self.comb += self.outfifo.re.eq(self.scatter_interface.ack)
 
     def gen_stats(self, tb):
         num_cycles = 0

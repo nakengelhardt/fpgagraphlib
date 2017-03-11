@@ -6,7 +6,7 @@ import configparser
 
 from migen import log2_int, bits_for
 
-from graph_input import read_graph
+from graph_input import read_graph, read_graph_balance_pe
 from graph_generate import generate_graph, export_graph
 
 from importlib import import_module
@@ -79,7 +79,10 @@ def init_parse():
     if args.graphfile:
         logger.info("Reading graph from file {}".format(args.graphfile))
         graphfile = open(args.graphfile)
-        adj_dict = read_graph(graphfile)
+        if 'num_pe' in config['arch']:
+            adj_dict = read_graph_balance_pe(graphfile, eval(config['arch'].get('num_pe')), eval(config['arch'].get('num_nodes_per_pe')))
+        else:
+            adj_dict = read_graph(graphfile)
     elif args.nodes:
         num_nodes = args.nodes
         if args.edges:
@@ -94,7 +97,10 @@ def init_parse():
         adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
     elif 'graphfile' in config['graph']:
         graphfile = open(config['graph'].get('graphfile'))
-        adj_dict = read_graph(graphfile)
+        if 'num_pe' in config['arch']:
+            adj_dict = read_graph_balance_pe(graphfile, eval(config['arch'].get('num_pe')), eval(config['arch'].get('num_nodes_per_pe')))
+        else:
+            adj_dict = read_graph(graphfile)
     elif 'nodes' in config['graph']:
         num_nodes = eval(config['graph'].get('nodes'))
         if 'edges' in config['graph']:
@@ -136,6 +142,5 @@ def init_parse():
     logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
     logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
     logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
-    logger.info("inter_pe_delay =" + str(algo_config.addresslayout.inter_pe_delay))
 
     return args, algo_config
