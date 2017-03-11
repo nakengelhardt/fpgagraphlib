@@ -7,7 +7,7 @@ from migen.genlib.record import *
 
 _msg_layout = [
     ( "barrier", 1, DIR_M_TO_S ),
-    ( "halt", 1, DIR_M_TO_S),
+    # ( "halt", 1, DIR_M_TO_S),
     ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "dest_id", "nodeidsize", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),

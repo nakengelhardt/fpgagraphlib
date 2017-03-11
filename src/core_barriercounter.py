@@ -39,7 +39,7 @@ class Barriercounter(Module):
         ]
 
         change_rounds = Signal()
-        halt = Signal()
+        # halt = Signal()
 
         self.sync += \
             If(change_rounds,
@@ -55,17 +55,17 @@ class Barriercounter(Module):
         self.fsm.act("DEFAULT",
             If(self.apply_interface_out.ack,
                 apply_interface_in_fifo.dout.ack.eq(1),
-                [NextValue(getattr(self.apply_interface_out.msg, attr[0]), getattr(apply_interface_in_fifo.dout.msg, attr[0])) for attr in self.apply_interface_out.msg.layout if attr[0] != "halt"],
-                NextValue(self.apply_interface_out.msg.halt, 0),
-                # NextValue(self.apply_interface_out.msg.raw_bits(), apply_interface_in_fifo.dout.msg.raw_bits()),
+                # [NextValue(getattr(self.apply_interface_out.msg, attr[0]), getattr(apply_interface_in_fifo.dout.msg, attr[0])) for attr in self.apply_interface_out.msg.layout if attr[0] != "halt"],
+                # NextValue(self.apply_interface_out.msg.halt, 0),
+                NextValue(self.apply_interface_out.msg.raw_bits(), apply_interface_in_fifo.dout.msg.raw_bits()),
                 NextValue(self.apply_interface_out.valid, apply_interface_in_fifo.dout.valid & ~apply_interface_in_fifo.dout.msg.barrier),
                 If(apply_interface_in_fifo.dout.valid,
                     If(apply_interface_in_fifo.dout.msg.barrier,
                         NextValue(self.barrier_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], 1),
                         NextValue(self.num_expected_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], apply_interface_in_fifo.dout.msg.dest_id),
-                        If(~apply_interface_in_fifo.dout.msg.halt,
-                            NextValue(halt, 0)
-                        ),
+                        # If(~apply_interface_in_fifo.dout.msg.halt,
+                        #     NextValue(halt, 0)
+                        # ),
                         NextState("CHK_BARRIER")
                     ).Else(
                         NextValue(self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)] + 1)
@@ -89,8 +89,8 @@ class Barriercounter(Module):
             If(self.apply_interface_out.ack,
                 If(self.all_messages_recvd,
                     change_rounds.eq(1),
-                    NextValue(halt, 1),
-                    NextValue(self.apply_interface_out.msg.halt, halt),
+                    # NextValue(halt, 1),
+                    # NextValue(self.apply_interface_out.msg.halt, halt),
                     NextValue(self.apply_interface_out.msg.barrier, 1),
                     NextValue(self.apply_interface_out.valid, 1),
                     [NextValue(self.barrier_from_pe[i], 0) for i in range(num_pe)],
