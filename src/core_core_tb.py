@@ -38,7 +38,7 @@ class Core(Module):
             init_edgedata = [None for _ in range(num_pe)]
 
         self.submodules.network = Network(config)
-        self.submodules.apply = [Apply(config, i, config.init_nodedata[num_nodes_per_pe*i:num_nodes_per_pe*(i+1)] if config.init_nodedata else None)  for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
 
 
         if config.use_hmc:

@@ -38,7 +38,7 @@ class Scatter(Module):
 
         # CSR edge storage: (idx, val) tuple of arrays
         # idx: array of (start_adr, num_neighbors)
-        self.specials.mem_idx = Memory(edgeidsize*2, num_nodes_per_pe, init=_pack_adj_idx(adj_idx))
+        self.specials.mem_idx = Memory(edgeidsize*2, max(2, len(adj_idx)), init=_pack_adj_idx(adj_idx), name="edge_csr_idx")
         self.specials.rd_port_idx = rd_port_idx = self.mem_idx.get_port(has_re=True)
         self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
 

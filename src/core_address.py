@@ -53,7 +53,6 @@ class AddressLayout:
         logger = logging.getLogger('config')
         max_node = self.max_per_pe(adj_dict)
         adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
-        # adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
         adj_val = [[] for _ in range(self.num_pe)]
 
         for node, neighbors in adj_dict.items():
@@ -64,21 +63,13 @@ class AddressLayout:
             adj_idx[pe][localnode] = (idx, n)
             adj_val[pe].extend(neighbors)
 
-        print("Edges per PE: {}".format([(pe, len(adj_val[pe])) for pe in range(self.num_pe)]))
-
-        # for i in range(self.num_pe):
-            # if len(adj_val[i]) > self.max_edges_per_pe:
-            #     logger.warning("Adjacency list for PE {} exceeds storage. Extend max_edges_per_pe to more than {}.".format(i, len(adj_val[i])))
-            #     adj_val[i] = adj_val[i][0:self.max_edges_per_pe]
-            # else:
-            #     adj_val[i].extend([0 for _ in range(len(adj_val[i]), self.max_edges_per_pe)])
-            # assert len(adj_val[i]) == self.max_edges_per_pe
-            # assert len(adj_idx[i]) == self.num_nodes_per_pe
+        logger.INFO("Edges per PE: {}".format([(pe, len(adj_val[pe])) for pe in range(self.num_pe)]))
 
         return adj_idx, adj_val
 
     def generate_partition_flat(self, adj_dict):
-        adj_idx = [[(0,0) for _ in range(self.num_nodes_per_pe)] for _ in range(self.num_pe)]
+        max_node = self.max_per_pe(adj_dict)
+        adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
         adj_val = []
 
         for node, neighbors in adj_dict.items():

@@ -56,6 +56,9 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
                 if next_pe == num_pe:
                     next_pe = 0
                     next_number += 1
+            if next_number >= num_nodes_per_pe:
+                print("Graph too big for PE configuration!")
+                raise ValueError
             source = numbers[source_txt]
             sink = numbers[sink_txt]
             if source == sink:

@@ -207,7 +207,7 @@ class ApplyKernel(Module):
                 state_level += 1
                 logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, state_level))
                 if state_level < 30:
-                    for node in range(num_nodes_per_pe):
+                    for node in range(tb.apply[pe_id].mem.depth):
                         data = (yield tb.apply[pe_id].mem[node])
                         s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
                         if s['nrecvd'] != 0:

@@ -73,7 +73,7 @@ class NeighborsHMC(Module):
 
         ###
 
-        assert(edgeidsize == 32)
+        assert(edgeidsize <= 32)
 
         num_injected = Signal(7)
         inject = Signal()
@@ -101,6 +101,20 @@ class NeighborsHMC(Module):
             self.update_wr_port.dat_w.eq(update_dat_w.raw_bits())
         ]
 
+        neighbor_in_p = Record(set_layout_parameters(_neighbor_in_layout, **config.addresslayout.get_params()))
+        end_node_idx_p = Signal(edgeidsize)
+
+        self.sync += [
+            If(self.neighbor_in.ack,
+                self.neighbor_in.connect(neighbor_in_p, leave_out="ack"),
+                end_node_idx_p.eq(self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << 2))
+            )
+        ]
+
+        self.comb += [
+            self.neighbor_in.ack.eq(neighbor_in_p.ack)
+        ]
+
         current_node_idx = Signal(edgeidsize)
         end_node_idx = Signal(edgeidsize)
         last_neighbor = Signal()
@@ -116,17 +130,17 @@ class NeighborsHMC(Module):
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
-            self.neighbor_in.ack.eq(1),
-            NextValue(message, self.neighbor_in.message),
-            NextValue(sender, self.neighbor_in.sender),
-            NextValue(roundpar, self.neighbor_in.round),
-            NextValue(num_neighbors, self.neighbor_in.num_neighbors),
-            If(self.neighbor_in.barrier,
+            neighbor_in_p.ack.eq(1),
+            NextValue(message, neighbor_in_p.message),
+            NextValue(sender, neighbor_in_p.sender),
+            NextValue(roundpar, neighbor_in_p.round),
+            NextValue(num_neighbors, neighbor_in_p.num_neighbors),
+            If(neighbor_in_p.barrier,
                 NextState("BARRIER")
             ),
-            If(self.neighbor_in.valid & (self.neighbor_in.num_neighbors != 0),
-                NextValue(current_node_idx, self.neighbor_in.start_idx),
-                NextValue(end_node_idx, self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << 2)),
+            If(neighbor_in_p.valid & (neighbor_in_p.num_neighbors != 0),
+                NextValue(current_node_idx, neighbor_in_p.start_idx),
+                NextValue(end_node_idx, end_node_idx_p),
                 NextState("GET_NEIGHBORS")
             )
         )
@@ -258,7 +272,7 @@ class NeighborsHMC(Module):
             If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(self.neighbor_in.valid & self.neighbor_in.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
+            If(neighbor_in_p.valid & neighbor_in_p.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
             If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
 
@@ -290,7 +304,7 @@ class NeighborsHMC(Module):
                     to_be_sent[curr_sender].remove(neighbor)
             if (yield self.neighbor_in.valid) and (yield self.neighbor_in.ack):
                 curr_sender = (yield self.neighbor_in.sender)
-                logger.debug("get_neighbor: request for neighbors of node {}".format(curr_sender))
+                logger.debug("request for neighbors of node {}".format(curr_sender))
                 if not curr_sender in graph:
                     logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))
                 else:

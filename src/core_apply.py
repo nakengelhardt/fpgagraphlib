@@ -44,7 +44,7 @@ class Apply(Module):
         # local node data storage
         if init_nodedata == None:
             init_nodedata = [0 for i in range(num_nodes_per_pe)]
-        self.specials.mem = Memory(addresslayout.node_storage_layout_len, len(init_nodedata), init=init_nodedata)
+        self.specials.mem = Memory(addresslayout.node_storage_layout_len, max(2, len(init_nodedata)), init=init_nodedata, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
@@ -197,7 +197,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*addresslayout.num_nodes_per_pe)
+        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*len(init_nodedata))
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)
