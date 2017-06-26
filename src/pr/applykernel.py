@@ -8,6 +8,8 @@ from fmul import FMul
 
 import logging
 
+total_pr_rounds = 10
+
 class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
@@ -87,7 +89,7 @@ class ApplyKernel(Module):
             i_round[0].eq(self.level_in[0:addresslayout.channel_bits]),
             i_nodeid[0].eq(self.nodeid_in),
             i_init[0].eq(self.level_in == 0),
-            i_notend[0].eq(self.level_in < 30)
+            i_notend[0].eq(self.level_in < total_pr_rounds)
         ] + [
             i_nrecvd[i].eq(i_nrecvd[i-1]) for i in range(1,3)
         ] + [
@@ -206,8 +208,8 @@ class ApplyKernel(Module):
                 assert(not (yield self.state_valid))
                 state_level += 1
                 logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, state_level))
-                if state_level < 30:
-                    for node in range(tb.apply[pe_id].mem.depth):
+                if state_level < total_pr_rounds:
+                    for node in range(num_nodes_per_pe):
                         data = (yield tb.apply[pe_id].mem[node])
                         s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
                         if s['nrecvd'] != 0:
@@ -219,7 +221,7 @@ class ApplyKernel(Module):
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 logger.debug("{}: Node {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
-                if out_level >= 30:
+                if out_level >= total_pr_rounds:
                     logger.warning("{}: message sent after inactivity level reached".format(num_cycles))
             if (yield self.barrier_in) and (yield self.ready):
                 in_level += 1

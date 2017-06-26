@@ -47,6 +47,7 @@ class ApplyKernel(Module):
             ),
             self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
+            self.update_out.dummy.eq(0),
             self.update_sender.eq(self.nodeid_in),
             self.update_round.eq(self.level_in[0:addresslayout.channel_bits]),
             self.update_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.sender_in != 0)),
