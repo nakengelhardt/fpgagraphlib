@@ -1,0 +1,17 @@
+Simulator for GraVF using verilator-generated C++ for user kernels
+
+If using migen kernels:
+> cd sim
+> python3 ../src/sim_export_apply_scatter_kernels.py #(uses config.ini in current directory)
+
+Otherwise, name kernel files ${APP}_apply.v and ${APP}_scatter.v and move to folder "sim".
+
+Verilate:
+> verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc ${APP}_apply.v
+> verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc ${APP}_scatter.v
+
+(creates folder "obj_dir")
+
+> cd obj_dir
+> make -f ../Makefile
+> ./sim_main
