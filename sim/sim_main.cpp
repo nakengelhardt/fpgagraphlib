@@ -1,6 +1,6 @@
 #include "pe.h"
 #include "graph.h"
-#include "arbiter.h"
+#include "network.h"
 
 #include "verilated.h"
 
@@ -51,15 +51,14 @@ int main(int argc, char **argv, char **env) {
     }
 
     PE** pe = new PE*[num_pe];
-    Arbiter** arbiter = new Arbiter*[num_pe];
 
     for (int p = 0; p < num_pe; p++) {
         Apply* apply = new Apply(&init_data[p*max_vertices_per_pe], max_vertices_per_pe);
         Scatter* scatter = new Scatter(graph);
         pe[p] = new PE(apply, scatter);
-        arbiter[p] = new Arbiter(p);
     }
 
+    Network* network = new Network();
 
     int sent[num_pe];
     for (int i = 0; i < num_pe; i++){
@@ -89,13 +88,9 @@ int main(int argc, char **argv, char **env) {
     int received = 0;
     int cycles = 0;
     int supersteps = 0;
-    int msgs_sent[num_pe][num_pe];
     int barrier[num_pe];
-    for (size_t i = 0; i < num_pe; i++) {
+    for (int i = 0; i < num_pe; i++) {
         barrier[i] = 0;
-        for (size_t j = 0; j < num_pe; j++) {
-            msgs_sent[i][j] = 0;
-        }
     }
     while (supersteps < 5){
         for(int i = 0; i < num_pe; i++){
@@ -103,20 +98,9 @@ int main(int argc, char **argv, char **env) {
             message = pe[i]->getSentMessage();
             if(message){
                 if(message->barrier){
-                    std::cout << "Distributing barrier from PE " << i << " (round " << supersteps << ")" << std::endl;
-                    for(int j = 0; j < num_pe; j++){
-                        Message* bm = new Message();
-                        bm->roundpar = message->roundpar;
-                        bm->barrier = true;
-                        bm->dest_id = msgs_sent[i][j];
-                        bm->sender = i << PEID_SHIFT;
-                        arbiter[j]->putMessage(bm);
-                        msgs_sent[i][j] = 0;
-                    }
-                    delete message;
                     barrier[i]++;
                     int all_barriers = 1;
-                    for (size_t j = 0; j < num_pe; j++) {
+                    for (int j = 0; j < num_pe; j++) {
                         if(!barrier[j]){
                             all_barriers = 0;
                             break;
@@ -124,25 +108,16 @@ int main(int argc, char **argv, char **env) {
                     }
                     if(all_barriers){
                         supersteps++;
-                        for (size_t j = 0; j < num_pe; j++) {
+                        for (int j = 0; j < num_pe; j++) {
                             barrier[j] = 0;
                         }
                     }
-                } else {
-                    int dest_pe = graph->partition->pe_id(message->dest_id);
-                    msgs_sent[i][dest_pe]++;
-                    // std::cout << "msgs_sent[" << i << "][" << dest_pe << "] = " << msgs_sent[i][dest_pe] << std::endl;
-                    arbiter[dest_pe]->putMessage(message);
                 }
+                network->putMessageAt(i, message);
             }
-            message = arbiter[i]->getMessage();
+            message = network->getMessageAt(i);
             if(message){
                 pe[i]->putMessageToReceive(message);
-                int dest_pe = graph->partition->pe_id(message->dest_id);
-                if(message->barrier){
-                    std::cout << "Barrier (round " << supersteps << ") for PE " << dest_pe << " from PE " << i << std::endl;
-                }
-
             }
         }
         cycles++;
