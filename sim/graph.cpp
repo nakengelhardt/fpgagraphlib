@@ -128,9 +128,11 @@ void Graph::gather_edges (const packed_edge * IJ, int64_t nedge) {
         }
     }
 
+    ne = 0;
     int64_t v;
     for (v = 0; v < nv; ++v) {
         pack_vtx_edges (v);
+        ne += num_neighbors(v);
     }
 }
 

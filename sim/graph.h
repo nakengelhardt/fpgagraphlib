@@ -23,6 +23,7 @@ public:
     ~Graph();
     GraphPartition* partition;
     vertexid_t nv;
+    vertexid_t ne;
     vertexid_t num_neighbors(vertexid_t vertex);
     edge_t get_neighbor(vertexid_t vertex, vertexid_t index);
 };

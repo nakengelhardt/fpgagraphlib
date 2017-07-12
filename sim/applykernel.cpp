@@ -105,9 +105,9 @@ Update* ApplyKernel::tick() {
     top->sys_clk = 1;
     top->eval();
 
-    if(top->state_barrier) {
-        printState();
-    }
+    // if(top->state_barrier) {
+    //     printState();
+    // }
 
     if (top->state_valid) {
         VertexData* vertex = getDataRef(top->nodeid_out);
@@ -131,11 +131,11 @@ Update* ApplyKernel::tick() {
         update->barrier = top->barrier_out;
         update->payload.weight = *((float*) &top->update_out_weight);
 
-        if (!top->barrier_out){
-            std::cout << "Update vertex " << update->sender
-            << ", weight=" << update->payload.weight
-            << std::endl;
-        }
+        // if (!top->barrier_out){
+        //     std::cout << "Update vertex " << update->sender
+        //     << ", weight=" << update->payload.weight
+        //     << std::endl;
+        // }
     }
 
 

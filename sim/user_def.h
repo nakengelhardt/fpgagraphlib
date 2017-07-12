@@ -28,5 +28,6 @@ const int max_latency = 300;
 const int NODEID_MASK = 0xFF;
 const int PEID_SHIFT = 8;
 const int num_pe = 4;
+const int num_fpga = 2;
 
 #endif

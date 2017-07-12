@@ -39,7 +39,7 @@ Update* Apply::receiveMessage(Message* message) {
         if (message->barrier){
             applykernel->queueInput(message, NULL, level);
             level++;
-            std::cout << "Increasing level to " << level << std::endl;
+            // std::cout << "Increasing level to " << level << std::endl;
         } else {
             applykernel->queueInput(message, applykernel->getDataRef(message->dest_id), level);
         }

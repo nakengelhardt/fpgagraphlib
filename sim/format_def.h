@@ -7,6 +7,8 @@
 struct Message {
     vertexid_t sender;
     vertexid_t dest_id;
+    int dest_pe;
+    int dest_fpga;
     int roundpar;
     bool barrier;
     MessagePayload payload;

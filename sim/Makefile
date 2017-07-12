@@ -21,4 +21,4 @@ sim_main: $(OBJECTS) $(VK_GLOBAL_OBJS) $(VM_PREFIX)__ALL.a
 	$(LINK) $(LDFLAGS) -g $^ $(LOADLIBES) $(LDLIBS) -o $@ $(LIBS) 2>&1 | c++filt
 
 clean:
-	rm -rf $(OBJECTS) sim_main
+	rm -rf *.o sim_main

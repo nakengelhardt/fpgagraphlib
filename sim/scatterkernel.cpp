@@ -62,6 +62,7 @@ Message* ScatterKernel::tick() {
         Message* message = new Message();
         message->payload.weight = top->message_out_weight;
         message->dest_id = top->neighbor_out;
+        message->dest_pe = message->dest_id >> PEID_SHIFT;
         message->sender = top->sender_out;
         message->roundpar = top->round_out;
         message->barrier = top->barrier_out;

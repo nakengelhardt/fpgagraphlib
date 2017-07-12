@@ -18,7 +18,7 @@ int main(int argc, char **argv, char **env) {
 
     graph->partition = new GraphPartition();
 
-    std::cout << "Graph has " << graph->nv << " vertices." << std::endl;
+    std::cout << "Graph has " << graph->nv << " vertices and " << graph->ne << " edges." << std::endl;
 
     vertexid_t max_vertices_per_pe = 0;
     for(int i = 0; i < graph->nv; i++){
@@ -69,10 +69,12 @@ int main(int argc, char **argv, char **env) {
         message = new Message();
         message->sender = 0;
         message->dest_id = graph->partition->placement(i);
+        int pe_id = graph->partition->pe_id(graph->partition->placement(i));
+        message->dest_pe = pe_id;
+        message->dest_fpga = 0;
         message->roundpar = 3;
         message->barrier = false;
         message->payload.weight = 0.15/graph->nv;
-        int pe_id = graph->partition->pe_id(graph->partition->placement(i));
         pe[pe_id]->putMessageToReceive(message);
         sent[pe_id]++;
     }
@@ -80,19 +82,20 @@ int main(int argc, char **argv, char **env) {
         message = new Message();
         message->sender = i;
         message->dest_id = sent[i];
+        message->dest_pe = i;
         message->roundpar = 3;
         message->barrier = true;
         pe[i]->putMessageToReceive(message);
     }
 
-    int received = 0;
+    int num_messages = 0;
     int cycles = 0;
     int supersteps = 0;
     int barrier[num_pe];
     for (int i = 0; i < num_pe; i++) {
         barrier[i] = 0;
     }
-    while (supersteps < 5){
+    while (supersteps < 31){
         for(int i = 0; i < num_pe; i++){
             pe[i]->tick();
             message = pe[i]->getSentMessage();
@@ -108,10 +111,14 @@ int main(int argc, char **argv, char **env) {
                     }
                     if(all_barriers){
                         supersteps++;
+                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages (not counting barriers)." << std::endl;
+                        num_messages = 0;
                         for (int j = 0; j < num_pe; j++) {
                             barrier[j] = 0;
                         }
                     }
+                } else {
+                    num_messages++;
                 }
                 network->putMessageAt(i, message);
             }
@@ -122,6 +129,9 @@ int main(int argc, char **argv, char **env) {
         }
         cycles++;
     }
+
+    std::cout << "Messages transported between FPGAs: " << network->interFPGAtransports
+    << " out of " << network->numMessagesSent << std::endl;
 
     exit(0);
 }
