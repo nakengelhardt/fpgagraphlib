@@ -21,4 +21,8 @@ struct Update {
     UpdatePayload payload;
 };
 
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define AT __FILE__ ":" TOSTRING(__LINE__) " : "
+
 #endif

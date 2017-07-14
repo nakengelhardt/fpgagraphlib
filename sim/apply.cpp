@@ -6,11 +6,13 @@
 
 Apply::Apply(int num_vertices) {
     level = 0;
+    update_level = 0;
     applykernel = new ApplyKernel(num_vertices);
 }
 
 Apply::Apply(VertexData * init_data, int num_vertices) {
     level = 0;
+    update_level = 0;
     applykernel = new ApplyKernel(init_data, num_vertices);
 }
 
@@ -45,9 +47,18 @@ Update* Apply::receiveMessage(Message* message) {
         }
     }
     Update* update = applykernel->tick();
-    // if(update && update->barrier){
-    //     std::cout << "State after round " << update->roundpar << ":" << endl;
-    //     applykernel->printState();
-    // }
+    if(update){
+        if(update->barrier){
+            update_level++;
+            if (level != update_level){
+                throw std::runtime_error(AT "Too many barriers");
+            }
+
+        } else {
+            if(update->roundpar != update_level % num_channels) {
+                throw std::runtime_error(AT "Superstep order not respected");
+            }
+        }
+    }
     return update;
 }

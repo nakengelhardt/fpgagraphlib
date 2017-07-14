@@ -4,6 +4,8 @@
 Scatter::Scatter(Graph* g){
     graph = g;
     scatterkernel = new ScatterKernel();
+    in_level = 0;
+    out_level = 0;
 }
 
 Scatter::~Scatter() {
@@ -16,6 +18,7 @@ Message* Scatter::receiveUpdate(Update* update) {
             edge_t edge;
             edge.dest_id = 0;
             scatterkernel->queue(update, edge, 0, true);
+            in_level++;
         } else {
             vertexid_t gname = graph->partition->origin(update->sender);
             vertexid_t num_neighbors = graph->num_neighbors(gname);
@@ -27,5 +30,16 @@ Message* Scatter::receiveUpdate(Update* update) {
             }
         }
     }
-    return scatterkernel->tick();
+    Message* message = scatterkernel->tick();
+    if(message){
+        if(message->barrier){
+            out_level++;
+            if(out_level != in_level){
+                throw std::runtime_error(AT "Too many barriers");
+            }
+        } else if(message->roundpar != out_level % num_channels) {
+            throw std::runtime_error(AT "Superstep order not respected");
+        }
+    }
+    return message;
 }

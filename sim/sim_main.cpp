@@ -6,9 +6,7 @@
 
 #include <iostream>
 #include <stdexcept>
-#define STRINGIFY(x) #x
-#define TOSTRING(x) STRINGIFY(x)
-#define AT __FILE__ ":" TOSTRING(__LINE__) " : "
+
 
 
 int main(int argc, char **argv, char **env) {
@@ -111,7 +109,7 @@ int main(int argc, char **argv, char **env) {
                     }
                     if(all_barriers){
                         supersteps++;
-                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages (not counting barriers)." << std::endl;
+                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages (not counting barriers)" << std::endl;
                         num_messages = 0;
                         for (int j = 0; j < num_pe; j++) {
                             barrier[j] = 0;

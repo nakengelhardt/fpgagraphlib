@@ -4,6 +4,8 @@
 class Scatter {
     ScatterKernel* scatterkernel;
     Graph* graph;
+    int in_level;
+    int out_level;
 public:
     Scatter(Graph* graph);
     ~Scatter();

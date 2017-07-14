@@ -4,6 +4,7 @@
 
 class Apply {
     int level;
+    int update_level;
     ApplyKernel* applykernel;
     void verifyIncomingMessage(Message* message);
 public:
