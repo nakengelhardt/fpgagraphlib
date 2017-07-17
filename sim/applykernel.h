@@ -15,11 +15,14 @@ class ApplyKernel {
 public:
     int num_vertices;
     std::queue<ApplyKernelInput> inputQ;
+    std::queue<Update*> outputQ;
     ApplyKernel(int num_vertices);
     ApplyKernel(VertexData* init_data, int num_vertices);
     ~ApplyKernel();
     VertexData* getDataRef(vertexid_t vertex);
     void queueInput(Message* message, VertexData* vertex, int level);
-    Update* tick();
+    Update* getUpdate();
+    void tick();
+    void barrier(Message* bm);
     void printState();
 };

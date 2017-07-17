@@ -38,15 +38,22 @@ int main(int argc, char **argv, char **env) {
 
     VertexData* init_data = new VertexData[num_pe*max_vertices_per_pe];
 
+    for(int i = 0; i < num_pe*max_vertices_per_pe; i++){
+        init_data[i].id = 0;
+        init_data[i].in_use = false;
+        init_data[i].active = false;
+    }
+
     for(int i = 0; i < graph->nv; i++){
         vertexid_t ii = graph->partition->placement(i);
         vertexid_t local_id = graph->partition->local_id(ii);
         int pe_id = graph->partition->pe_id(ii);
+        init_data[pe_id*max_vertices_per_pe+local_id].id = ii;
         init_data[pe_id*max_vertices_per_pe+local_id].nneighbors = graph->num_neighbors(i);
         init_data[pe_id*max_vertices_per_pe+local_id].nrecvd = 0;
         init_data[pe_id*max_vertices_per_pe+local_id].sum = 0.0;
-        init_data[pe_id*max_vertices_per_pe+local_id].in_use = false;
     }
+
 
     PE** pe = new PE*[num_pe];
 

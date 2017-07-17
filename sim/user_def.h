@@ -9,10 +9,12 @@ struct edge_t {
 };
 
 struct VertexData {
+    int id;
     vertexid_t nneighbors;
     vertexid_t nrecvd;
     float sum;
     bool in_use;
+    bool active;
 };
 
 struct MessagePayload {
@@ -24,7 +26,6 @@ struct UpdatePayload {
 };
 
 const int num_channels = 4;
-const int max_latency = 300;
 const int NODEID_MASK = 0xFF;
 const int PEID_SHIFT = 8;
 const int num_pe = 4;
