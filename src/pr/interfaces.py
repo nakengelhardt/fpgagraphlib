@@ -13,5 +13,6 @@ payload_layout = [
 node_storage_layout = [
     ("nneighbors", "nodeidsize"),
     ("nrecvd", "nodeidsize"),
-    ("sum", "floatsize")
+    ("sum", "floatsize"),
+    ("active", 1)
 ]

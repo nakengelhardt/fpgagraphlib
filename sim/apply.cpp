@@ -46,7 +46,6 @@ Update* Apply::receiveMessage(Message* message) {
             applykernel->queueInput(message, applykernel->getDataRef(message->dest_id), level);
         }
     }
-    applykernel->tick();
     Update* update = applykernel->getUpdate();
     if(update){
         if(update->barrier){

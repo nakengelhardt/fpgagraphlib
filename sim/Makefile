@@ -1,24 +1,21 @@
-default: sim_main
+default: obj_dir
 
-# user application name (expecting GraVF/migen file naming convention, see next lines)
+.PHONY: obj_dir clean export
+
 APP ?= pr
 
-include V$(APP)_apply.mk
-include V$(APP)_scatter.mk
+VERILOG = $(APP)_gather.v $(APP)_apply.v $(APP)_scatter.v
+VERILATED = $(patsubst %.v,obj_dir/V%.cpp,$(VERILOG))
 
-#######################################################################
-# Compile flags
+$(VERILATED): obj_dir/V%.cpp : %.v
+	verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc $<
 
-CPPFLAGS += -DVL_DEBUG=1 -g -O0 -Wall
-
-#######################################################################
-# Linking final exe
-
-SOURCES = $(wildcard ../*.cpp)
-OBJECTS := $(patsubst ../%.cpp, %.o, $(SOURCES))
-
-sim_main: $(OBJECTS) $(VK_GLOBAL_OBJS) $(VM_PREFIX)__ALL.a
-	$(LINK) $(LDFLAGS) -g $^ $(LOADLIBES) $(LDLIBS) -o $@ $(LIBS) 2>&1 | c++filt
+obj_dir: $(VERILATED)
+	make -C obj_dir -f ../sim_cc.mk
 
 clean:
-	rm -rf *.o sim_main
+	make -C obj_dir -f ../sim_cc.mk clean
+	rm -rf $(VERILATED)
+
+export:
+	python3 ../src/sim_export_apply_scatter_kernels.py export

@@ -12,7 +12,7 @@
 int main(int argc, char **argv, char **env) {
     // Verilated::commandArgs(argc, argv);
 
-    Graph* graph = new Graph("../../data/4x4", 64);
+    Graph* graph = new Graph("../data/4x4", 64);
 
     graph->partition = new GraphPartition();
 

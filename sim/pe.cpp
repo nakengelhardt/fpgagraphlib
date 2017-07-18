@@ -1,5 +1,7 @@
 #include "pe.h"
 
+#include <iostream>
+
 PE::PE(Apply* apply, Scatter* scatter) : apply(apply), scatter(scatter) {
 }
 
@@ -10,6 +12,13 @@ void PE::tick() {
         inputQ.pop();
     }
     Update* update = apply->receiveMessage(message);
+    if(update){
+        if(update->barrier){
+            // std::cout << "Update barrier" << std::endl;
+        } else {
+            // std::cout << "Update from vertex " << update->sender << std::endl;
+        }
+    }
 
     message = scatter->receiveUpdate(update);
     if (message) {

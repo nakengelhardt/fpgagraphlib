@@ -5,6 +5,7 @@ from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float, conver
 
 from core_address import AddressLayout
 from pr.interfaces import payload_layout, node_storage_layout
+from pr.gatherkernel import GatherKernel
 from pr.applykernel import ApplyKernel
 from pr.scatterkernel import ScatterKernel
 
@@ -30,6 +31,7 @@ class Config:
         num_nodes = len(adj_dict)
         self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
 
+        self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
