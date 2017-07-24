@@ -1,3 +1,4 @@
+from migen import *
 from migen.fhdl import verilog
 from core_init import init_parse
 
@@ -5,8 +6,11 @@ def main():
     args, config = init_parse()
 
     gatherkernel = config.gatherkernel(config.addresslayout)
+    gatherkernel.clock_domains.cd_sys = ClockDomain()
 
     ios = {
+        gatherkernel.cd_sys.clk,
+        gatherkernel.cd_sys.rst,
         gatherkernel.level_in,
         gatherkernel.nodeid_in,
         gatherkernel.sender_in,
@@ -27,8 +31,11 @@ def main():
                     ).write(config.name + "_gather.v")
 
     applykernel = config.applykernel(config.addresslayout)
+    applykernel.clock_domains.cd_sys = ClockDomain()
 
     ios = {
+        applykernel.cd_sys.clk,
+        applykernel.cd_sys.rst,
         applykernel.nodeid_in,
         applykernel.valid_in,
         applykernel.barrier_in,
@@ -54,8 +61,11 @@ def main():
                     ).write(config.name + "_apply.v")
 
     scatterkernel = config.scatterkernel(config.addresslayout)
+    scatterkernel.clock_domains.cd_sys = ClockDomain()
 
     ios = {
+        scatterkernel.cd_sys.clk,
+        scatterkernel.cd_sys.rst,
         scatterkernel.num_neighbors_in,
         scatterkernel.neighbor_in,
         scatterkernel.sender_in,
@@ -73,6 +83,9 @@ def main():
 
     ios |= set(getattr(scatterkernel.update_in, s[0]) for s in scatterkernel.update_in.layout)
     ios |= set(getattr(scatterkernel.message_out, s[0]) for s in scatterkernel.message_out.layout)
+
+    if(config.has_edgedata):
+        ios |= set(getattr(scatterkernel.edgedata_in, s[0]) for s in scatterkernel.edgedata_in.layout)
 
     verilog.convert(scatterkernel,
                     name=config.name + "_scatter",

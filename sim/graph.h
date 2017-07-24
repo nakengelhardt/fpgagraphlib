@@ -18,6 +18,7 @@ class Graph {
     void scatter_edge (const vertexid_t i, const vertexid_t j);
     void pack_vtx_edges (const vertexid_t i);
     void gather_edges (const packed_edge * IJ, int64_t nedge);
+    void populate_edgedata();
 public:
     Graph(const char* dumpname, int64_t nedge);
     ~Graph();

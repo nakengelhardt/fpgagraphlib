@@ -1,5 +1,5 @@
 #include "format_def.h"
-#include "Vpr_scatter.h"
+#include "Vsssp_scatter.h"
 #include <queue>
 
 struct ScatterKernelInput{
@@ -10,7 +10,7 @@ struct ScatterKernelInput{
 };
 
 class ScatterKernel {
-    Vpr_scatter* top;
+    Vsssp_scatter* top;
     std::queue<ScatterKernelInput> inputQ;
 public:
     ScatterKernel();

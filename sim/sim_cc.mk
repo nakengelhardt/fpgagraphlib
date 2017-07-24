@@ -1,8 +1,5 @@
 default: sim_main
 
-# user application name (expecting GraVF/migen file naming convention, see next lines)
-APP ?= pr
-
 include V$(APP)_gather.mk
 include V$(APP)_apply.mk
 include V$(APP)_scatter.mk
@@ -10,7 +7,7 @@ include V$(APP)_scatter.mk
 #######################################################################
 # Compile flags
 
-CPPFLAGS += -DVL_DEBUG=1 -g -O0 -Wall
+CPPFLAGS += -DVL_DEBUG=1 -g -O0 -Wall -DDEBUG_PRINT
 
 #######################################################################
 # Linking final exe

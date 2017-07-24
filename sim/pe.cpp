@@ -12,14 +12,15 @@ void PE::tick() {
         inputQ.pop();
     }
     Update* update = apply->receiveMessage(message);
+#ifdef DEBUG_PRINT
     if(update){
         if(update->barrier){
-            // std::cout << "Update barrier" << std::endl;
+            std::cout << "Update barrier" << std::endl;
         } else {
-            // std::cout << "Update from vertex " << update->sender << std::endl;
+            std::cout << "Update from vertex " << update->sender << std::endl;
         }
     }
-
+#endif
     message = scatter->receiveUpdate(update);
     if (message) {
         outputQ.push(message);

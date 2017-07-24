@@ -63,7 +63,7 @@ class AddressLayout:
             adj_idx[pe][localnode] = (idx, n)
             adj_val[pe].extend(neighbors)
 
-        logger.INFO("Edges per PE: {}".format([(pe, len(adj_val[pe])) for pe in range(self.num_pe)]))
+        logger.info("Edges per PE: {}".format([(pe, len(adj_val[pe])) for pe in range(self.num_pe)]))
 
         return adj_idx, adj_val
 

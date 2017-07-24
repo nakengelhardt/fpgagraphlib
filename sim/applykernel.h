@@ -1,6 +1,6 @@
 #include "format_def.h"
-#include "Vpr_gather.h"
-#include "Vpr_apply.h"
+#include "Vsssp_gather.h"
+#include "Vsssp_apply.h"
 #include <queue>
 
 struct ApplyKernelInput{
@@ -11,8 +11,8 @@ struct ApplyKernelInput{
 
 class ApplyKernel {
     VertexData * vertex_data;
-    Vpr_gather* gather_hw;
-    Vpr_apply* apply_hw;
+    Vsssp_gather* gather_hw;
+    Vsssp_apply* apply_hw;
     void do_init();
     int num_in_use_gather;
     int num_in_use_apply;

@@ -32,8 +32,8 @@ ApplyKernel::~ApplyKernel() {
 }
 
 void ApplyKernel::do_init(){
-    gather_hw = new Vpr_gather;
-    apply_hw = new Vpr_apply;
+    gather_hw = new Vsssp_gather;
+    apply_hw = new Vsssp_apply;
     num_in_use_gather = 0;
     num_in_use_apply = 0;
 
@@ -87,21 +87,17 @@ void ApplyKernel::apply_tick() {
 
     if (apply_hw->state_valid) {
         VertexData* vertex = getDataRef(apply_hw->nodeid_out);
-        if(apply_hw->state_out_nneighbors != vertex->nneighbors
-          || apply_hw->state_out_nrecvd != 0
-          || apply_hw->state_out_sum != 0
+        if(apply_hw->state_out_dist != vertex->dist
+          || apply_hw->state_out_parent != vertex->parent
           || apply_hw->state_out_active != 0) {
             std::cout << "Apply not resetting state properly:" << std::endl;
-            std::cout << "apply_hw->state_out_nneighbors = " << apply_hw->state_out_nneighbors
-            << " (" << vertex->nneighbors << ")"
-            << ", apply_hw->state_out_nrecvd = " << apply_hw->state_out_nrecvd
-            << ", apply_hw->state_out_sum = " << apply_hw->state_out_sum
+            std::cout << "apply_hw->state_out_dist = " << apply_hw->state_out_dist
+            << " (" << vertex->dist << ")"
+            << ", apply_hw->state_out_parent = " << apply_hw->state_out_parent
             << ", apply_hw->state_out_active = " << apply_hw->state_out_active
             << std::endl;
 
         }
-        vertex->sum = 0;
-        vertex->nrecvd = 0;
         vertex->active = 0;
         num_in_use_apply--;
     }
@@ -111,17 +107,22 @@ void ApplyKernel::apply_tick() {
         update->sender = apply_hw->update_sender;
         update->roundpar = apply_hw->update_round;
         update->barrier = apply_hw->barrier_out;
-        update->payload.weight = *((float*) &apply_hw->update_out_weight);
+        update->payload.dist = apply_hw->update_out_dist;
         outputQ.push(update);
     }
 
 }
 
 void ApplyKernel::barrier(Message* bm) {
-    // std::cout << "Barrier received, emptying queue" << std::endl;
+#ifdef DEBUG_PRINT
+    std::cout << "Barrier received, emptying queue" << std::endl;
+#endif
     while (!inputQ.empty() || num_in_use_gather > 0) {
         gather_tick();
     }
+#ifdef DEBUG_PRINT
+    printState();
+#endif
 
     int i = 0;
     while (i < num_vertices) {
@@ -130,14 +131,10 @@ void ApplyKernel::barrier(Message* bm) {
             if(vertex->in_use) {
                 std::cout << "Vertex " << vertex->id << " still marked in use." << std::endl;
             }
-            if(vertex->nrecvd != vertex->nneighbors) {
-                std::cout << "Vertex " << vertex->id << " has not received all messages." << std::endl;
-            }
 
             apply_hw->nodeid_in = vertex->id;
-            apply_hw->state_in_nneighbors = vertex->nneighbors;
-            apply_hw->state_in_nrecvd = vertex->nrecvd;
-            *((float*) &apply_hw->state_in_sum) = vertex->sum;
+            apply_hw->state_in_dist = vertex->dist;
+            apply_hw->state_in_parent = vertex->parent;
             apply_hw->state_in_active = vertex->active;
             apply_hw->round_in = (bm->roundpar + 1) % num_channels;
             apply_hw->valid_in = 1;
@@ -146,7 +143,9 @@ void ApplyKernel::barrier(Message* bm) {
             if (apply_hw->ready && apply_hw->valid_in) {
                 i++;
                 num_in_use_apply++;
-                // std::cout << "Apply in vertex "<< vertex->id << std::endl;
+#ifdef DEBUG_PRINT
+                std::cout << "Apply in vertex "<< vertex->id << std::endl;
+#endif
             }
 
             apply_tick();
@@ -156,9 +155,8 @@ void ApplyKernel::barrier(Message* bm) {
     }
 
     apply_hw->nodeid_in = 0;
-    apply_hw->state_in_nneighbors = 0;
-    apply_hw->state_in_nrecvd = 0;
-    apply_hw->state_in_sum = 0;
+    apply_hw->state_in_dist = 0;
+    apply_hw->state_in_parent = 0;
     apply_hw->state_in_active = 0;
     apply_hw->round_in = (bm->roundpar + 1) % num_channels;
     apply_hw->valid_in = 0;
@@ -166,10 +164,8 @@ void ApplyKernel::barrier(Message* bm) {
 
     bool accepted = apply_hw->ready;
     while (true) {
-        apply_hw->sys_clk = 0;
-        apply_hw->eval();
-        apply_hw->sys_clk = 1;
-        apply_hw->eval();
+        apply_tick();
+
         if(accepted) break;
         accepted = apply_hw->ready;
     }
@@ -195,26 +191,26 @@ void ApplyKernel::gather_tick() {
         bool busy_stall = vertex->in_use;
 
         gather_hw->level_in = input.level;
-        gather_hw->state_in_nneighbors = vertex->nneighbors;
-        gather_hw->state_in_nrecvd = vertex->nrecvd;
-        *((float*) &gather_hw->state_in_sum) = vertex->sum;
+        gather_hw->state_in_dist = vertex->dist;
+        gather_hw->state_in_parent = vertex->parent;
         gather_hw->state_in_active = vertex->active;
         gather_hw->nodeid_in = message->dest_id;
         gather_hw->sender_in = message->sender;
-        *((float*) &gather_hw->message_in_weight) = message->payload.weight;
+        gather_hw->message_in_dist = message->payload.dist;
         gather_hw->valid_in = !busy_stall;
     }
 
     if (gather_hw->ready && gather_hw->valid_in) {
         inputQ.front().vertex->in_use = true;
         num_in_use_gather++;
-        // std::cout << "Checkout vertex " << gather_hw->nodeid_in
-        // << ": nneighbors=" << gather_hw->state_in_nneighbors
-        // << ", nrecvd=" << gather_hw->state_in_nrecvd
-        // << ", sum=" << *((float*) &gather_hw->state_out_sum)
-        // << ", message add " << *((float*) &gather_hw->message_in_weight)
-        // << ", now in use: " << num_in_use_gather
-        // << std::endl;
+#ifdef DEBUG_PRINT
+        std::cout << "Checkout vertex " << static_cast<int>(gather_hw->nodeid_in)
+        << ": dist=" << static_cast<int>(gather_hw->state_in_dist)
+        << ", parent=" << static_cast<int>(gather_hw->state_in_parent)
+        << ", message " << static_cast<int>(gather_hw->message_in_dist)
+        << ", now in use: " << num_in_use_gather
+        << std::endl;
+#endif
         delete inputQ.front().message;
         inputQ.pop();
     }
@@ -228,15 +224,15 @@ void ApplyKernel::gather_tick() {
         VertexData* vertex = getDataRef(gather_hw->nodeid_out);
         if (vertex->in_use) {
             num_in_use_gather--;
-            // std::cout << "Writeback vertex " << gather_hw->nodeid_out
-            // << ": " << "nneighbors " << vertex->nneighbors << " -> " << gather_hw->state_out_nneighbors
-            // << ", nrecvd " << vertex->nrecvd << " -> " << gather_hw->state_out_nrecvd
-            // << ", sum " << vertex->sum << " -> " << *((float*) &gather_hw->state_out_sum)
-            // << ", remaining in use: " << num_in_use_gather
-            // << std::endl;
-            vertex->nneighbors = gather_hw->state_out_nneighbors;
-            vertex->nrecvd = gather_hw->state_out_nrecvd;
-            vertex->sum = *((float*) &gather_hw->state_out_sum);
+#ifdef DEBUG_PRINT
+            std::cout << "Writeback vertex " << static_cast<int>(gather_hw->nodeid_out)
+            << ": " << "dist " << vertex->dist << " -> " << static_cast<int>(gather_hw->state_out_dist)
+            << ", parent " << vertex->parent << " -> " << static_cast<int>(gather_hw->state_out_parent)
+            << ", remaining in use: " << num_in_use_gather
+            << std::endl;
+#endif
+            vertex->dist = gather_hw->state_out_dist;
+            vertex->parent = gather_hw->state_out_parent;
             vertex->active = gather_hw->state_out_active;
             vertex->in_use = false;
         }
@@ -247,12 +243,12 @@ void ApplyKernel::gather_tick() {
 void ApplyKernel::printState(){
     for(int i = 0; i < num_vertices; i++){
         std::cout << i ;
-        if(vertex_data[i].in_use){
+        if(vertex_data[i].active){
             std::cout << "*";
         } else {
             std::cout << " ";
         }
-        std::cout << "{" << vertex_data[i].nrecvd << "/" << vertex_data[i].nneighbors
-        << ", " << vertex_data[i].sum << "}" << std::endl;
+        std::cout << "{" << vertex_data[i].dist << " via "
+        << vertex_data[i].parent << "}" << std::endl;
     }
 }

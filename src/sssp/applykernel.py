@@ -1,18 +1,16 @@
 from migen import *
 from migen.genlib.record import *
 
-from sssp.interfaces import message_layout, update_layout, node_storage_layout
+from sssp.interfaces import update_layout, node_storage_layout
 
 class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
 
-        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
-        self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(message_layout, **addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
         self.valid_in = Signal()
+        self.round_in = Signal(addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.ready = Signal()
 
@@ -31,20 +29,15 @@ class ApplyKernel(Module):
         ###
 
         self.comb+= [
-            If(self.state_in.dist > self.message_in.dist,
-                self.state_out.dist.eq(self.message_in.dist),
-                self.state_out.parent.eq(self.sender_in),
-                self.update_valid.eq(self.valid_in)
-            ).Else(
-                self.state_out.dist.eq(self.state_in.dist),
-                self.state_out.parent.eq(self.state_in.parent),
-                self.update_valid.eq(0)
-            ),
-            self.update_out.dist.eq(self.message_in.dist),
+            self.state_out.dist.eq(self.state_in.dist),
+            self.state_out.parent.eq(self.state_in.parent),
+            self.state_out.active.eq(0),
+            self.update_out.dist.eq(self.state_in.dist),
             self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
             self.update_sender.eq(self.nodeid_in),
-            self.update_round.eq(self.level_in[0:addresslayout.channel_bits]),
+            self.update_round.eq(self.round_in),
+            self.update_valid.eq(self.valid_in),
             self.barrier_out.eq(self.barrier_in),
             self.state_barrier.eq(self.barrier_in),
             self.ready.eq(self.update_ack)

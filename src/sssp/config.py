@@ -2,6 +2,7 @@ from migen import *
 
 from core_address import AddressLayout
 from sssp.interfaces import node_storage_layout
+from sssp.gatherkernel import GatherKernel
 from sssp.applykernel import ApplyKernel
 from sssp.scatterkernel import ScatterKernel
 
@@ -33,6 +34,7 @@ class Config:
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 
+        self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 

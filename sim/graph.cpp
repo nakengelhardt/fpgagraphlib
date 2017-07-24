@@ -7,6 +7,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <random>
+
+std::random_device rd;     // only used once to initialise (seed) engine
+std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
+std::uniform_int_distribution<int> uni(1,10); // guaranteed unbiased
+
 Graph::Graph(const char* dumpname, int64_t nedge) {
     packed_edge* IJ = new packed_edge[nedge];
 
@@ -29,6 +35,10 @@ Graph::Graph(const char* dumpname, int64_t nedge) {
     xoff = new vertexid_t[2*nv+2];
     setup_deg_off (IJ, nedge);
     gather_edges (IJ, nedge);
+    if (has_edgedata){
+        populate_edgedata();
+    }
+
     delete IJ;
 }
 
@@ -136,9 +146,19 @@ void Graph::gather_edges (const packed_edge * IJ, int64_t nedge) {
     }
 }
 
+void Graph::populate_edgedata(){
+    for (int i = 0; i < nv; i++) {
+        int n = num_neighbors(i);
+        for (int j = 0; j < n; j++) {
+            xadj[XOFF(i) + j].dist = uni(rng);
+        }
+    }
+}
+
 vertexid_t Graph::num_neighbors(vertexid_t vertex){
     return XENDOFF(vertex)-XOFF(vertex);
 }
+
 edge_t Graph::get_neighbor(vertexid_t vertex, vertexid_t index){
     if((XOFF(vertex) + index < XOFF(vertex)) || (XOFF(vertex) + index > XENDOFF(vertex))){
         throw std::runtime_error("edge index out of bounds");

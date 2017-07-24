@@ -49,9 +49,8 @@ int main(int argc, char **argv, char **env) {
         vertexid_t local_id = graph->partition->local_id(ii);
         int pe_id = graph->partition->pe_id(ii);
         init_data[pe_id*max_vertices_per_pe+local_id].id = ii;
-        init_data[pe_id*max_vertices_per_pe+local_id].nneighbors = graph->num_neighbors(i);
-        init_data[pe_id*max_vertices_per_pe+local_id].nrecvd = 0;
-        init_data[pe_id*max_vertices_per_pe+local_id].sum = 0.0;
+        init_data[pe_id*max_vertices_per_pe+local_id].dist = 255;
+        init_data[pe_id*max_vertices_per_pe+local_id].parent = 0;
     }
 
 
@@ -70,19 +69,18 @@ int main(int argc, char **argv, char **env) {
         sent[i] = 0;
     }
     Message* message;
-    for(int i = 0; i < graph->nv; i++){
-        message = new Message();
-        message->sender = 0;
-        message->dest_id = graph->partition->placement(i);
-        int pe_id = graph->partition->pe_id(graph->partition->placement(i));
-        message->dest_pe = pe_id;
-        message->dest_fpga = 0;
-        message->roundpar = 3;
-        message->barrier = false;
-        message->payload.weight = 0.15/graph->nv;
-        pe[pe_id]->putMessageToReceive(message);
-        sent[pe_id]++;
-    }
+    message = new Message();
+    message->dest_id = graph->partition->placement(1);
+    message->sender = message->dest_id;
+    int pe_id = graph->partition->pe_id(graph->partition->placement(1));
+    message->dest_pe = pe_id;
+    message->dest_fpga = pe_id % num_fpga;
+    message->roundpar = 3;
+    message->barrier = false;
+    message->payload.dist = 0;
+    pe[pe_id]->putMessageToReceive(message);
+    sent[pe_id]++;
+
     for(int i = 0; i < num_pe; i++){
         message = new Message();
         message->sender = i;
@@ -100,7 +98,8 @@ int main(int argc, char **argv, char **env) {
     for (int i = 0; i < num_pe; i++) {
         barrier[i] = 0;
     }
-    while (supersteps < 31){
+    bool inactive = false;
+    while (!inactive){
         for(int i = 0; i < num_pe; i++){
             pe[i]->tick();
             message = pe[i]->getSentMessage();
@@ -117,6 +116,9 @@ int main(int argc, char **argv, char **env) {
                     if(all_barriers){
                         supersteps++;
                         std::cout << "Superstep " << supersteps << ": " << num_messages << " messages (not counting barriers)" << std::endl;
+                        if(num_messages == 0){
+                            inactive = true;
+                        }
                         num_messages = 0;
                         for (int j = 0; j < num_pe; j++) {
                             barrier[j] = 0;
