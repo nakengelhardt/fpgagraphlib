@@ -12,7 +12,7 @@
 int main(int argc, char **argv, char **env) {
     // Verilated::commandArgs(argc, argv);
 
-    Graph* graph = new Graph("../data/4x4", 64);
+    Graph* graph = new Graph("../data/s11e16", 32584);
 
     graph->partition = new GraphPartition();
 
@@ -25,11 +25,11 @@ int main(int argc, char **argv, char **env) {
         if(local_id > max_vertices_per_pe){
             max_vertices_per_pe = local_id;
         }
-        std::cout << "Vertex " << vname << " has " << graph->num_neighbors(i) << " neighbors: ";
-        for(int j = 0; j < graph->num_neighbors(i); j++){
-            std::cout << graph->partition->placement(graph->get_neighbor(i,j).dest_id) << " ";
-        }
-        std::cout << std::endl;
+        // std::cout << "Vertex " << vname << " has " << graph->num_neighbors(i) << " neighbors: ";
+        // for(int j = 0; j < graph->num_neighbors(i); j++){
+        //     std::cout << graph->partition->placement(graph->get_neighbor(i,j).dest_id) << " ";
+        // }
+        // std::cout << std::endl;
     }
 
     // add 1 for bound

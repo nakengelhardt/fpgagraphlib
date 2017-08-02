@@ -27,9 +27,9 @@ Graph::Graph(const char* dumpname, int64_t nedge) {
     }
     close (fd);
 
-    for(int i = 0; i < nedge; i++){
-        std::cout << IJ[i].v0 << " -- " << IJ[i].v1 << std::endl;
-    }
+    // for(int i = 0; i < nedge; i++){
+    //     std::cout << IJ[i].v0 << " -- " << IJ[i].v1 << std::endl;
+    // }
 
     find_nv(IJ, nedge);
     xoff = new vertexid_t[2*nv+2];
@@ -39,7 +39,7 @@ Graph::Graph(const char* dumpname, int64_t nedge) {
         populate_edgedata();
     }
 
-    delete IJ;
+    delete[] IJ;
 }
 
 Graph::~Graph(){

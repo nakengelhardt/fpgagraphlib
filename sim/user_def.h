@@ -26,8 +26,8 @@ struct UpdatePayload {
 };
 
 const int num_channels = 4;
-const int NODEID_MASK = 0xFF;
-const int PEID_SHIFT = 8;
+const int NODEID_MASK = 0xFFFF;
+const int PEID_SHIFT = 16;
 const int num_pe = 4;
 const int num_fpga = 2;
 
