@@ -126,12 +126,6 @@ class ApplyKernel(Module):
                 assert(not (yield self.state_valid))
                 state_level += 1
                 logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, state_level))
-                if state_level < total_pr_rounds:
-                    for node in range(num_nodes_per_pe):
-                        data = (yield tb.apply[pe_id].mem[node])
-                        s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
-                        if s['nrecvd'] != 0:
-                            logger.warning("{}: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
             if (yield self.barrier_out) and (yield self.update_ack):
                 out_level += 1
                 if (yield self.update_valid):
@@ -144,13 +138,16 @@ class ApplyKernel(Module):
             if (yield self.barrier_in) and (yield self.ready):
                 in_level += 1
             if (yield self.valid_in) and (yield self.ready):
-                num_messages_in += 1
                 if (yield self.barrier_in):
+                    num_messages_in += num_pe
                     logger.warning("{}: valid and barrier raised simultaneously on applykernel input on PE {}".format(num_cycles, pe_id))
-                if in_level == 0:
-                    logger.debug("{}: Init message for node {}".format(num_cycles, (yield self.nodeid_in)))
                 else:
-                    logger.debug("{}: Message {} of {} for node {} from node {}".format(num_cycles, (yield self.state_in.nrecvd)+1, (yield self.state_in.nneighbors), (yield self.nodeid_in), (yield self.sender_in)))
+                    node = tb.addresslayout.local_adr((yield self.nodeid_in))
+                    data = (yield tb.apply[pe_id].mem[node])
+                    s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
+                    num_messages_in += s['nrecvd']
+                    if s['nrecvd'] != s['nneighbors']:
+                        logger.warning("{}: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))
             yield
         logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, state_level, num_messages_in, num_messages_out))
         logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

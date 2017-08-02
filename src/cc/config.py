@@ -15,7 +15,7 @@ class Config:
         payloadsize = kwargs['nodeidsize']
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
-        self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.use_hmc = use_hmc
         self.share_mem_port = share_mem_port
@@ -34,7 +34,8 @@ class Config:
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        self.init_nodedata = [-1 for _ in range(self.addresslayout.num_pe*self.addresslayout.num_nodes_per_pe)]
+        max_node = self.addresslayout.max_per_pe(adj_dict)
+        self.init_nodedata = [[-1 for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
 
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         for node in self.adj_dict:

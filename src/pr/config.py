@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 
-from tbsupport import convert_float_to_32b_int, convert_32b_int_to_float, convert_int_to_record
+from tbsupport import *
 
 from core_address import AddressLayout
 from pr.interfaces import payload_layout, node_storage_layout
@@ -26,7 +26,7 @@ class Config:
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
         self.addresslayout.floatsize = floatsize
 
-        self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         num_nodes = len(adj_dict)
         self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
@@ -44,7 +44,7 @@ class Config:
         self.adj_val = adj_val
 
         max_node = self.addresslayout.max_per_pe(adj_dict)
-        self.init_nodedata = [[len(self.adj_dict[self.addresslayout.global_adr(pe_adr=pe, local_adr=node)]) if self.addresslayout.global_adr(pe_adr=pe, local_adr=node) in self.adj_dict else 0 for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        self.init_nodedata = [[convert_record_tuple_to_int(((len(self.adj_dict[self.addresslayout.global_adr(pe_adr=pe, local_adr=node)]) if self.addresslayout.global_adr(pe_adr=pe, local_adr=node) in self.adj_dict else 0), 0, 0, 0), self.addresslayout.node_storage_layout)  for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
         print("Nodes per PE: {}".format([(pe, len(self.init_nodedata[pe])) for pe in range(self.addresslayout.num_pe)]))
 
         self.has_edgedata = False

@@ -39,3 +39,9 @@ def convert_record_tuple_to_int(t, record):
     for i in reversed(range(len(data))):
         ret = (ret << record[i][1]) | data[i]
     return ret
+
+def ones(bits):
+    ret = 0
+    for i in range(bits):
+        ret = (ret << 1) | 1 
+    return ret

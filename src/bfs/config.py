@@ -15,7 +15,7 @@ class Config:
         payloadsize = kwargs['nodeidsize']
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
-        self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.use_hmc = use_hmc
         self.share_mem_port = share_mem_port
