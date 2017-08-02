@@ -2,6 +2,7 @@ from migen import *
 
 from core_address import AddressLayout
 from bfs.interfaces import node_storage_layout
+from bfs.gatherkernel import GatherKernel
 from bfs.applykernel import ApplyKernel
 from bfs.scatterkernel import ScatterKernel
 
@@ -30,6 +31,7 @@ class Config:
 
         self.has_edgedata = False
 
+        self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 

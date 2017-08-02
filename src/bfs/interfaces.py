@@ -13,5 +13,6 @@ payload_layout = [
 ### Memory Interfaces ###
 
 node_storage_layout = [
-    ("parent", "nodeidsize")
+    ("parent", "nodeidsize"),
+    ("active", 1)
 ]
