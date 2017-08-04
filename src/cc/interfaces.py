@@ -13,5 +13,6 @@ payload_layout = [
 ### Memory Interfaces ###
 
 node_storage_layout = [
-    ("color", "nodeidsize")
+    ("color", "nodeidsize"),
+    ("active", 1)
 ]
