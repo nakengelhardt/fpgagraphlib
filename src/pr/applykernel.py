@@ -8,7 +8,7 @@ from fmul import FMul
 
 import logging
 
-total_pr_rounds = 10
+total_pr_rounds = 30
 
 class ApplyKernel(Module):
     def __init__(self, addresslayout):

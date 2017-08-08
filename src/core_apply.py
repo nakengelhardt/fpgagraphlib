@@ -197,7 +197,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=2*len(init_nodedata))
+        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=4*len(init_nodedata))
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)

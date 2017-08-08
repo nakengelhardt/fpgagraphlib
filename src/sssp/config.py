@@ -36,7 +36,8 @@ class Config:
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        self.init_nodedata = [-1 for _ in range(self.addresslayout.num_pe*self.addresslayout.num_nodes_per_pe)]
+        self.init_nodedata = max_node = self.addresslayout.max_per_pe(adj_dict)
+        self.init_nodedata = [[-1 for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
 
         self.has_edgedata = True
 
