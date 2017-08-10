@@ -19,7 +19,8 @@ update_layout = [
 
 node_storage_layout = [
     ("dist", "edgedatasize"),
-    ("parent", "nodeidsize")
+    ("parent", "nodeidsize"),
+    ("active", 1)
 ]
 
 edge_storage_layout = [

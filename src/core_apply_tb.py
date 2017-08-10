@@ -4,37 +4,27 @@ from migen import *
 from tbsupport import *
 
 from core_apply import Apply
-from core_address import AddressLayout
-from pr.config import config
-from graph_generate import generate_graph
-from random import random, shuffle, choice, seed
+from random import *
+from core_init import init_parse
 
 
 class ApplyCase(SimCase, unittest.TestCase):
     class TestBench(Module):
         def __init__(self):
-            self.addresslayout = config()
+            _, self.config = init_parse(['sim', '-c', 'apply_tb.ini'])
 
-            num_nodes = self.addresslayout.num_nodes_per_pe - 1
-
-            self.addresslayout.const_base = convert_float_to_32b_int(0.15/num_nodes)
-
-            self.graph = generate_graph(num_nodes=num_nodes, num_edges=2*num_nodes)
-
-            init_nodedata = [0] + [len(self.graph[node]) for node in range(1, num_nodes+1)]
-
-            self.submodules.dut = Apply(self.addresslayout, init_nodedata=init_nodedata)
+            self.submodules.dut = Apply(config=self.config, pe_id=0, init_nodedata=self.config.init_nodedata[0])
 
 
     def test_apply(self):
-        num_nodes = len(self.tb.graph)
+        num_nodes = len(self.tb.config.adj_dict)
 
-        msg = [(i, convert_float_to_32b_int(random())) for i in range(1, num_nodes+1) for _ in range(len(self.tb.graph[i]))] #(dest_id, weight)
+        msg = [(i, j, convert_float_to_32b_int(random())) for i in range(1, num_nodes+1) for j in range(len(self.tb.config.adj_dict[i]))] #(dest_id, weight)
 
         # print("Input messages: " + str(msg))
 
         expected = [0.0 for i in range(num_nodes + 1)]
-        for node, weight in msg:
+        for node, _, weight in msg:
             expected[node] += convert_32b_int_to_float(weight)
 
         # print("Expected output: ")
@@ -77,15 +67,17 @@ class ApplyCase(SimCase, unittest.TestCase):
                 scatter = []
                 while msgs_sent < len(msg):
                     # input
-                    a, b = msg[msgs_sent]
-                    yield self.tb.dut.apply_interface.msg.dest_id.eq(a)
-                    yield self.tb.dut.apply_interface.msg.payload.eq(b)
+                    dest_id, sender, payload = msg[msgs_sent]
+                    yield self.tb.dut.apply_interface.msg.dest_id.eq(dest_id)
+                    yield self.tb.dut.apply_interface.msg.sender.eq(sender)
+                    yield self.tb.dut.apply_interface.msg.payload.eq(payload)
                     yield self.tb.dut.apply_interface.msg.barrier.eq(0)
                     yield self.tb.dut.apply_interface.valid.eq(1)
                     yield
 
                     # check for input success
                     if (yield self.tb.dut.apply_interface.ack):
+                        print(msg[msgs_sent])
                         msgs_sent += 1
                         if test==0:
                             yield self.tb.dut.apply_interface.valid.eq(0)
@@ -100,7 +92,7 @@ class ApplyCase(SimCase, unittest.TestCase):
 
                 # done sending
                 yield self.tb.dut.apply_interface.valid.eq(0)
-                
+
 
         def gen_output():
             num_barrier = 0
@@ -113,6 +105,7 @@ class ApplyCase(SimCase, unittest.TestCase):
                 yield
                 if (yield self.tb.dut.scatter_interface.valid) & (yield self.tb.dut.scatter_interface.ack):
                     if (yield self.tb.dut.scatter_interface.barrier):
+                        print(recvd_since_last_barrier)
                         recvd_since_last_barrier = []
                         # print("Barrier")
                         num_barrier += 1
@@ -121,7 +114,7 @@ class ApplyCase(SimCase, unittest.TestCase):
                     else:
                         sender = (yield self.tb.dut.scatter_interface.sender)
                         self.assertNotIn(sender, recvd_since_last_barrier)
-                        weight = convert_32b_int_to_float((yield self.tb.dut.scatter_interface.msg))
+                        weight = convert_32b_int_to_float((yield self.tb.dut.scatter_interface.payload))
                         # self.assertAlmostEqual(weight, expected[sender], delta=1E-6)
                         recvd_since_last_barrier.append(sender)
 
@@ -129,10 +122,10 @@ class ApplyCase(SimCase, unittest.TestCase):
             for _ in range(100):
                 yield
                 self.assertFalse((yield self.tb.dut.scatter_interface.valid) and not (yield self.tb.dut.scatter_interface.barrier))
-        
-                    
 
-        self.run_with([gen_input(), gen_output()], vcd_name="tb.vcd")
+
+
+        self.run_with([gen_input(), gen_output()], vcd_name="apply_tb.vcd")
 
 
 if __name__ == "__main__":

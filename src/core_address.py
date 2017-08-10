@@ -35,7 +35,10 @@ class AddressLayout:
             return nodeid >> log2_int(self.num_nodes_per_pe)
 
     def local_adr(self, nodeid):
-        return nodeid[:log2_int(self.num_nodes_per_pe)]
+        if isinstance(nodeid, Signal):
+            return nodeid[:log2_int(self.num_nodes_per_pe)]
+        else:
+            return nodeid % self.num_nodes_per_pe
 
     def global_adr(self, pe_adr, local_adr):
         return (pe_adr << log2_int(self.num_nodes_per_pe)) | local_adr

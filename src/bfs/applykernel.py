@@ -9,12 +9,10 @@ class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
 
-        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
-        self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
         self.valid_in = Signal()
+        self.round_in = Signal(addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.ready = Signal()
 
@@ -36,23 +34,19 @@ class ApplyKernel(Module):
         # assumes 0 is not a valid nodeID
         # if we read 0, node did not have a parent yet, and we want to write one now.
         # some sanity checks for sending & receiving node not being 0
-        visited = Signal()
-        self.comb += visited.eq(self.state_in.parent != 0)
-
         self.comb+= [
-            If(visited,
-                self.state_out.parent.eq(self.state_in.parent)
-            ).Else(
-                self.state_out.parent.eq(self.sender_in)
-            ),
-            self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
+            self.state_out.parent.eq(self.state_in.parent),
+            self.state_out.active.eq(0),
+            self.state_valid.eq(self.valid_in),
+            self.state_barrier.eq(self.barrier_in),
+
             self.update_out.dummy.eq(0),
             self.update_sender.eq(self.nodeid_in),
-            self.update_round.eq(self.level_in[0:addresslayout.channel_bits]),
-            self.update_valid.eq(self.valid_in & ~visited & (self.nodeid_in != 0) & (self.sender_in != 0)),
+            self.update_round.eq(self.round_in),
+            self.update_valid.eq(self.valid_in & self.state_in.active),
             self.barrier_out.eq(self.barrier_in),
-            self.state_barrier.eq(self.barrier_in),
+
             self.ready.eq(self.update_ack)
         ]
 

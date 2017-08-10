@@ -19,10 +19,10 @@ class Arbiter(Module):
         self.pe_id = pe_id
 
         # input (n channels)
-        self.apply_interface_in = ApplyInterface(**addresslayout.get_params())
+        self.apply_interface_in = ApplyInterface(name="arbiter_in", **addresslayout.get_params())
 
         # output
-        self.apply_interface_out = ApplyInterface(**addresslayout.get_params())
+        self.apply_interface_out = ApplyInterface(name="arbiter_out", **addresslayout.get_params())
 
         # input override for injecting the message starting the computation
         self.start_message = ApplyInterface(name="start_message", **addresslayout.get_params())

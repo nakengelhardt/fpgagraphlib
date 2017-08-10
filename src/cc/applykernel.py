@@ -9,12 +9,10 @@ class ApplyKernel(Module):
     def __init__(self, addresslayout):
         nodeidsize = addresslayout.nodeidsize
 
-        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
-        self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
         self.valid_in = Signal()
+        self.round_in = Signal(addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.ready = Signal()
 
@@ -25,28 +23,26 @@ class ApplyKernel(Module):
 
         self.update_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
-        self.update_valid = Signal()
         self.update_round = Signal(addresslayout.channel_bits)
         self.barrier_out = Signal()
+        self.update_valid = Signal()
         self.update_ack = Signal()
 
         ###
 
         self.comb+= [
-            If(self.state_in.color > self.message_in.color,
-                self.state_out.color.eq(self.message_in.color),
-                self.update_valid.eq(self.valid_in)
-            ).Else(
-                self.state_out.color.eq(self.state_in.color),
-                self.update_valid.eq(0)
-            ),
-            self.update_out.color.eq(self.message_in.color),
-            self.state_valid.eq(self.valid_in),
             self.nodeid_out.eq(self.nodeid_in),
-            self.update_sender.eq(self.nodeid_in),
-            self.update_round.eq(self.level_in[0:addresslayout.channel_bits]),
-            self.barrier_out.eq(self.barrier_in),
+            self.state_out.color.eq(self.state_in.color),
+            self.state_out.active.eq(0),
+            self.state_valid.eq(self.valid_in),
             self.state_barrier.eq(self.barrier_in),
+
+            self.update_out.color.eq(self.state_in.color),
+            self.update_sender.eq(self.nodeid_in),
+            self.update_round.eq(self.round_in),
+            self.barrier_out.eq(self.barrier_in),
+            self.update_valid.eq(self.valid_in),
+
             self.ready.eq(self.update_ack)
         ]
 
@@ -67,7 +63,7 @@ class ApplyKernel(Module):
                     logger.warning("Warning: Simultaneous valid / barrier!")
                 num_messages_in += 1
                 if not quiet:
-                    logger.debug("State in: {} / Message in: {} / {}update".format((yield self.state_in.color), (yield self.message_in.color), "" if (yield self.update_valid) else "no "))
+                    logger.debug("Vertex {} : update to {}".format((yield self.nodeid_in), (yield self.state_in.color)))
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 if not quiet:

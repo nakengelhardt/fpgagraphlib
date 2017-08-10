@@ -55,7 +55,7 @@ void Network::tick() {
 void Network::putMessageAt(int i, Message* message) {
     numMessagesSent++;
     if(message->barrier){
-        // std::cout << "Distributing barrier from PE " << i << std::endl;
+        std::cout << "Distributing barrier from PE " << i << std::endl;
         for(int j = 0; j < num_pe; j++){
             Message* bm = new Message();
             bm->roundpar = message->roundpar;

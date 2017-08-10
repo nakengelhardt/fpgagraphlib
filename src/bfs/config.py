@@ -2,6 +2,7 @@ from migen import *
 
 from core_address import AddressLayout
 from bfs.interfaces import node_storage_layout
+from bfs.gatherkernel import GatherKernel
 from bfs.applykernel import ApplyKernel
 from bfs.scatterkernel import ScatterKernel
 
@@ -15,7 +16,7 @@ class Config:
         payloadsize = kwargs['nodeidsize']
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
-        self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.use_hmc = use_hmc
         self.share_mem_port = share_mem_port
@@ -30,6 +31,7 @@ class Config:
 
         self.has_edgedata = False
 
+        self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 

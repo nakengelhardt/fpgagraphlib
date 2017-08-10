@@ -168,7 +168,7 @@ class Top(Module):
         ]
 
 
-def export(config, filename='StreamLoopback128_migen.v'):
+def export(config, filename='top.v'):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
     m = Top(config)

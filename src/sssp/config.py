@@ -1,7 +1,9 @@
 from migen import *
+from tbsupport import *
 
 from core_address import AddressLayout
 from sssp.interfaces import node_storage_layout
+from sssp.gatherkernel import GatherKernel
 from sssp.applykernel import ApplyKernel
 from sssp.scatterkernel import ScatterKernel
 
@@ -18,7 +20,7 @@ class Config:
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
         self.addresslayout.edgedatasize = 8
-        self.addresslayout.node_storage_layout_len = layout_len(set_layout_parameters(node_storage_layout, **self.addresslayout.get_params()))
+        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         #edgedata not supported yet on HMC
         assert(use_hmc==False)
@@ -33,11 +35,12 @@ class Config:
         self.adj_idx = adj_idx
         self.adj_val = adj_val
 
+        self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        self.init_nodedata = max_node = self.addresslayout.max_per_pe(adj_dict)
-        self.init_nodedata = [[-1 for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        max_node = self.addresslayout.max_per_pe(adj_dict)
+        self.init_nodedata = [[convert_record_tuple_to_int((ones(self.addresslayout.nodeidsize), 0, 0), self.addresslayout.node_storage_layout) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
 
         self.has_edgedata = True
 

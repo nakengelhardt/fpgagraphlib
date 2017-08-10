@@ -2,7 +2,7 @@
 #include <iostream>
 
 ScatterKernel::ScatterKernel() {
-    top = new Vpr_scatter;
+    top = new Vsssp_scatter;
 
     top->valid_in = 0;
     top->barrier_in = 0;
@@ -36,13 +36,16 @@ Message* ScatterKernel::tick() {
     top->barrier_in = 0;
     if(!inputQ.empty()){
         ScatterKernelInput input = inputQ.front();
-        top->update_in_weight = input.update->payload.weight;
+        top->update_in_dist = input.update->payload.dist;
         top->num_neighbors_in = input.num_neighbors;
     	top->neighbor_in = input.edge.dest_id;
     	top->sender_in = input.update->sender;
         top->round_in = input.update->roundpar;
         top->barrier_in = input.update->barrier;
     	top->valid_in = !input.update->barrier;
+        if(has_edgedata){
+            top->edgedata_in_dist = input.edge.dist;
+        }
     }
 
     if (top->ready && (top->valid_in || top->barrier_in)) {
@@ -60,7 +63,7 @@ Message* ScatterKernel::tick() {
 
     if(top->valid_out || top->barrier_out){
         Message* message = new Message();
-        message->payload.weight = top->message_out_weight;
+        message->payload.dist = top->message_out_dist;
         message->dest_id = top->neighbor_out;
         message->dest_pe = message->dest_id >> PEID_SHIFT;
         message->sender = top->sender_out;

@@ -32,13 +32,17 @@ void Arbiter::putMessage(Message* m) {
         barrier[src_pe] = 1;
         num_expected_from_pe[src_pe] = m->dest_id;
         delete m;
-        // std::cout << "PE " << pe_id << ": "
-        // << "Received barrier from PE " << src_pe
-        // << ". Expected messages: " << num_expected_from_pe[src_pe]
-        // << ". Received messages: " << num_received_from_pe[src_pe]
-        // << std::endl;
+#ifdef DEBUG_PRINT
+        std::cout << "PE " << pe_id << ": "
+        << "Received barrier from PE " << src_pe
+        << ". Expected messages: " << num_expected_from_pe[src_pe]
+        << ". Received messages: " << num_received_from_pe[src_pe]
+        << std::endl;
+#endif
     } else {
-        // std::cout << "Message " << m->sender << " -> " << m->dest_id << std::endl;
+#ifdef DEBUG_PRINT
+        std::cout << "Message " << m->sender << " -> " << m->dest_id << std::endl;
+#endif
         num_received_from_pe[src_pe]++;
         outputQ.push(m);
     }
