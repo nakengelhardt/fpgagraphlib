@@ -1,5 +1,4 @@
-#ifndef _FORMAT_DEF_H_
-#define _FORMAT_DEF_H_
+#pragma once
 
 #include "user_def.h"
 #include <cstddef>
@@ -24,5 +23,3 @@ struct Update {
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
 #define AT __FILE__ ":" TOSTRING(__LINE__) " : "
-
-#endif

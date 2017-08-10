@@ -1,3 +1,5 @@
+#pragma once
+
 #include "scatterkernel.h"
 #include "graph.h"
 

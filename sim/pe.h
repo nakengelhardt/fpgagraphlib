@@ -1,3 +1,5 @@
+#pragma once
+
 #include "apply.h"
 #include "scatter.h"
 

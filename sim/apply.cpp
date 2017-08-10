@@ -3,13 +3,6 @@
 #include <stdexcept>
 #include <iostream>
 
-
-Apply::Apply(int num_vertices) {
-    level = 0;
-    update_level = 0;
-    applykernel = new ApplyKernel(num_vertices);
-}
-
 Apply::Apply(VertexData * init_data, int num_vertices) {
     level = 0;
     update_level = 0;

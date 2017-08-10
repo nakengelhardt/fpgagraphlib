@@ -1,5 +1,5 @@
-#ifndef _USER_DEF_H_
-#define _USER_DEF_H_
+#pragma once
+
 #include <inttypes.h>
 
 typedef int64_t vertexid_t;
@@ -32,5 +32,3 @@ const int num_pe = 4;
 const int num_fpga = 2;
 
 const bool has_edgedata = true;
-
-#endif

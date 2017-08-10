@@ -1,5 +1,4 @@
-#ifndef __GRAPH_H__
-#define __GRAPH_H__
+#pragma once
 
 #include "format_def.h"
 #include "graph_partition.h"
@@ -28,5 +27,3 @@ public:
     vertexid_t num_neighbors(vertexid_t vertex);
     edge_t get_neighbor(vertexid_t vertex, vertexid_t index);
 };
-
-#endif
