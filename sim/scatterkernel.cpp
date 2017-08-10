@@ -2,23 +2,23 @@
 #include <iostream>
 
 ScatterKernel::ScatterKernel() {
-    top = new Vsssp_scatter;
+    scatter_hw = new SCATTER_HW;
 
-    top->valid_in = 0;
-    top->barrier_in = 0;
-    top->message_ack = 1;
+    scatter_hw->valid_in = 0;
+    scatter_hw->barrier_in = 0;
+    scatter_hw->message_ack = 1;
 
-    top->sys_rst = 1;
-    top->sys_clk = 0;
-    top->eval();
-    top->sys_clk = 1;
-    top->eval();
+    scatter_hw->sys_rst = 1;
+    scatter_hw->sys_clk = 0;
+    scatter_hw->eval();
+    scatter_hw->sys_clk = 1;
+    scatter_hw->eval();
 
-    top->sys_rst = 0;
+    scatter_hw->sys_rst = 0;
 }
 
 ScatterKernel::~ScatterKernel() {
-    delete top;
+    delete scatter_hw;
 }
 
 void ScatterKernel::queue(Update* update, edge_t edge, vertexid_t num_neighbors, bool last){
@@ -31,24 +31,19 @@ void ScatterKernel::queue(Update* update, edge_t edge, vertexid_t num_neighbors,
 }
 
 Message* ScatterKernel::tick() {
-    top->message_ack = 1;
-    top->valid_in = 0;
-    top->barrier_in = 0;
+    scatter_hw->message_ack = 1;
+    scatter_hw->valid_in = 0;
+    scatter_hw->barrier_in = 0;
     if(!inputQ.empty()){
         ScatterKernelInput input = inputQ.front();
-        top->update_in_dist = input.update->payload.dist;
-        top->num_neighbors_in = input.num_neighbors;
-    	top->neighbor_in = input.edge.dest_id;
-    	top->sender_in = input.update->sender;
-        top->round_in = input.update->roundpar;
-        top->barrier_in = input.update->barrier;
-    	top->valid_in = !input.update->barrier;
-        if(has_edgedata){
-            top->edgedata_in_dist = input.edge.dist;
-        }
+        setInput(input);
+    	scatter_hw->sender_in = input.update->sender;
+        scatter_hw->round_in = input.update->roundpar;
+        scatter_hw->barrier_in = input.update->barrier;
+    	scatter_hw->valid_in = !input.update->barrier;
     }
 
-    if (top->ready && (top->valid_in || top->barrier_in)) {
+    if (scatter_hw->ready && (scatter_hw->valid_in || scatter_hw->barrier_in)) {
         // valid_in also ensures inputQ not empty, so update pointer is valid
         if(inputQ.front().last) {
             delete inputQ.front().update;
@@ -56,19 +51,19 @@ Message* ScatterKernel::tick() {
         inputQ.pop();
     }
 
-    top->sys_clk = 0;
-    top->eval();
-    top->sys_clk = 1;
-    top->eval();
+    scatter_hw->sys_clk = 0;
+    scatter_hw->eval();
+    scatter_hw->sys_clk = 1;
+    scatter_hw->eval();
 
-    if(top->valid_out || top->barrier_out){
+    if(scatter_hw->valid_out || scatter_hw->barrier_out){
         Message* message = new Message();
-        message->payload.dist = top->message_out_dist;
-        message->dest_id = top->neighbor_out;
+        getOutput(message);
+        message->dest_id = scatter_hw->neighbor_out;
         message->dest_pe = message->dest_id >> PEID_SHIFT;
-        message->sender = top->sender_out;
-        message->roundpar = top->round_out;
-        message->barrier = top->barrier_out;
+        message->sender = scatter_hw->sender_out;
+        message->roundpar = scatter_hw->round_out;
+        message->barrier = scatter_hw->barrier_out;
         return message;
     }
 

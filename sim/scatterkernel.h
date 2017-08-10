@@ -1,5 +1,7 @@
+#pragma once
+
 #include "format_def.h"
-#include "Vsssp_scatter.h"
+#include "sssp_scatterkernel.h"
 #include <queue>
 
 struct ScatterKernelInput{
@@ -10,8 +12,10 @@ struct ScatterKernelInput{
 };
 
 class ScatterKernel {
-    Vsssp_scatter* top;
+    SCATTER_HW* scatter_hw;
     std::queue<ScatterKernelInput> inputQ;
+    void setInput(ScatterKernelInput input);
+    void getOutput(Message* message);
 public:
     ScatterKernel();
     ~ScatterKernel();
