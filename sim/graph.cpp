@@ -7,12 +7,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include <random>
-
-std::random_device rd;     // only used once to initialise (seed) engine
-std::mt19937 rng(rd());    // random-number engine used (Mersenne-Twister in this case)
-std::uniform_int_distribution<int> uni(1,10); // guaranteed unbiased
-
 Graph::Graph(const char* dumpname, int64_t nedge) {
     packed_edge* IJ = new packed_edge[nedge];
 
@@ -62,8 +56,7 @@ void Graph::find_nv (const packed_edge* IJ, const int64_t nedge) {
     nv = 1+maxvtx;
 }
 
-#define XOFF(k) (xoff[2*(k)])
-#define XENDOFF(k) (xoff[1+2*(k)])
+
 
 void Graph::setup_deg_off (const packed_edge* IJ, int64_t nedge) {
     vertexid_t k, accum;
@@ -143,15 +136,6 @@ void Graph::gather_edges (const packed_edge * IJ, int64_t nedge) {
     for (v = 0; v < nv; ++v) {
         pack_vtx_edges (v);
         ne += num_neighbors(v);
-    }
-}
-
-void Graph::populate_edgedata(){
-    for (int i = 0; i < nv; i++) {
-        int n = num_neighbors(i);
-        for (int j = 0; j < n; j++) {
-            xadj[XOFF(i) + j].dist = uni(rng);
-        }
     }
 }
 

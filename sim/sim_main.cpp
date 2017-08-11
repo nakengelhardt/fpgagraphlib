@@ -7,7 +7,8 @@
 #include <iostream>
 #include <stdexcept>
 
-
+void initVertexData(VertexData* init_data, int i, Graph* graph);
+void sendInitMessages(Graph* graph, PE** pe, int* sent);
 
 int main(int argc, char **argv, char **env) {
     // Verilated::commandArgs(argc, argv);
@@ -49,8 +50,7 @@ int main(int argc, char **argv, char **env) {
         vertexid_t local_id = graph->partition->local_id(ii);
         int pe_id = graph->partition->pe_id(ii);
         init_data[pe_id*max_vertices_per_pe+local_id].id = ii;
-        init_data[pe_id*max_vertices_per_pe+local_id].dist = 255;
-        init_data[pe_id*max_vertices_per_pe+local_id].parent = 0;
+        initVertexData(init_data, pe_id*max_vertices_per_pe+local_id, graph);
     }
 
 
@@ -68,19 +68,9 @@ int main(int argc, char **argv, char **env) {
     for (int i = 0; i < num_pe; i++){
         sent[i] = 0;
     }
-    Message* message;
-    message = new Message();
-    message->dest_id = graph->partition->placement(1);
-    message->sender = message->dest_id;
-    int pe_id = graph->partition->pe_id(graph->partition->placement(1));
-    message->dest_pe = pe_id;
-    message->dest_fpga = pe_id % num_fpga;
-    message->roundpar = 3;
-    message->barrier = false;
-    message->payload.dist = 0;
-    pe[pe_id]->putMessageToReceive(message);
-    sent[pe_id]++;
+    sendInitMessages(graph, pe, sent);
 
+    Message* message;
     for(int i = 0; i < num_pe; i++){
         message = new Message();
         message->sender = i;

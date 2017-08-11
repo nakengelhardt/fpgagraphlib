@@ -2,7 +2,7 @@ default: obj_dir
 
 .PHONY: obj_dir clean export
 
-APP ?= sssp
+APP ?= pr
 
 VERILOG = $(APP)_gather.v $(APP)_apply.v $(APP)_scatter.v
 VERILATED = $(patsubst %.v,obj_dir/V%.cpp,$(VERILOG))

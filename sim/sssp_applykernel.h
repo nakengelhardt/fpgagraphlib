@@ -1,7 +1,5 @@
 #pragma once
 
-#define SSSP
-
 #include "Vsssp_gather.h"
 #include "Vsssp_apply.h"
 

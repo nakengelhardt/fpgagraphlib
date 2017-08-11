@@ -1,7 +1,7 @@
 #pragma once
 
 #include "format_def.h"
-#include "sssp_scatterkernel.h"
+#include "pr_scatterkernel.h"
 #include <queue>
 
 struct ScatterKernelInput{

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "format_def.h"
-#include "sssp_applykernel.h"
+#include "pr_applykernel.h"
 #include <queue>
 
 struct ApplyKernelInput{

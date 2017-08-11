@@ -36,11 +36,13 @@ Message* ScatterKernel::tick() {
     scatter_hw->barrier_in = 0;
     if(!inputQ.empty()){
         ScatterKernelInput input = inputQ.front();
-        setInput(input);
+        scatter_hw->num_neighbors_in = input.num_neighbors;
+        scatter_hw->neighbor_in = input.edge.dest_id;
     	scatter_hw->sender_in = input.update->sender;
         scatter_hw->round_in = input.update->roundpar;
         scatter_hw->barrier_in = input.update->barrier;
     	scatter_hw->valid_in = !input.update->barrier;
+        setInput(input);
     }
 
     if (scatter_hw->ready && (scatter_hw->valid_in || scatter_hw->barrier_in)) {

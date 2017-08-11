@@ -27,3 +27,7 @@ public:
     vertexid_t num_neighbors(vertexid_t vertex);
     edge_t get_neighbor(vertexid_t vertex, vertexid_t index);
 };
+
+
+#define XOFF(k) (xoff[2*(k)])
+#define XENDOFF(k) (xoff[1+2*(k)])
