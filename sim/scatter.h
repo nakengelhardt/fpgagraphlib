@@ -9,7 +9,7 @@ class Scatter {
     int in_level;
     int out_level;
 public:
-    Scatter(Graph* graph);
+    Scatter(Graph* graph, int num_vertices);
     ~Scatter();
     std::queue<Update*> updateQ;
     Message* receiveUpdate(Update* update);

@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 
-void initVertexData(VertexData* init_data, int i, Graph* graph);
+void initVertexData(VertexData* init_data, vertexid_t vertex, int index, Graph* graph);
 void sendInitMessages(Graph* graph, PE** pe, int* sent);
 
 int main(int argc, char **argv, char **env) {
@@ -50,7 +50,7 @@ int main(int argc, char **argv, char **env) {
         vertexid_t local_id = graph->partition->local_id(ii);
         int pe_id = graph->partition->pe_id(ii);
         init_data[pe_id*max_vertices_per_pe+local_id].id = ii;
-        initVertexData(init_data, pe_id*max_vertices_per_pe+local_id, graph);
+        initVertexData(init_data, i, pe_id*max_vertices_per_pe+local_id, graph);
     }
 
 
@@ -58,7 +58,7 @@ int main(int argc, char **argv, char **env) {
 
     for (int p = 0; p < num_pe; p++) {
         Apply* apply = new Apply(&init_data[p*max_vertices_per_pe], max_vertices_per_pe);
-        Scatter* scatter = new Scatter(graph);
+        Scatter* scatter = new Scatter(graph, max_vertices_per_pe);
         pe[p] = new PE(apply, scatter);
     }
 
@@ -78,6 +78,7 @@ int main(int argc, char **argv, char **env) {
         message->dest_pe = i;
         message->roundpar = 3;
         message->barrier = true;
+        message->timestamp = 0;
         pe[i]->putMessageToReceive(message);
     }
 
@@ -129,6 +130,11 @@ int main(int argc, char **argv, char **env) {
 
     std::cout << "Messages transported between FPGAs: " << network->interFPGAtransports
     << " out of " << network->numMessagesSent << std::endl;
+
+    std::cout << "Final time:" << std::endl;
+    for (int i = 0; i < num_pe; i++) {
+        std::cout << "PE " << i << ": " << pe[i]->getTime() << std::endl;
+    }
 
     exit(0);
 }

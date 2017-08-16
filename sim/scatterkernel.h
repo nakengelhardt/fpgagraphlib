@@ -1,7 +1,6 @@
 #pragma once
 
 #include "format_def.h"
-#include "pr_scatterkernel.h"
 #include <queue>
 
 struct ScatterKernelInput{
@@ -12,12 +11,16 @@ struct ScatterKernelInput{
 };
 
 class ScatterKernel {
+    int num_vertices;
     SCATTER_HW* scatter_hw;
     std::queue<ScatterKernelInput> inputQ;
+    int timestamp_in;
+    int* last_input_time;
+    int latency;
     void setInput(ScatterKernelInput input);
     void getOutput(Message* message);
 public:
-    ScatterKernel();
+    ScatterKernel(int num_vertices);
     ~ScatterKernel();
     void queue(Update* update, edge_t edge, vertexid_t num_neighbors, bool last);
     Message* tick();

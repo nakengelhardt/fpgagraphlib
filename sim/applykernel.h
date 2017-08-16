@@ -1,7 +1,6 @@
 #pragma once
 
 #include "format_def.h"
-#include "pr_applykernel.h"
 #include <queue>
 
 struct ApplyKernelInput{
@@ -17,6 +16,10 @@ class ApplyKernel {
     void do_init();
     int num_in_use_gather;
     int num_in_use_apply;
+    int timestamp_in;
+    int timestamp_out;
+    int latency;
+    int* last_input_time;
     void setStateInputGather(VertexData* vertex);
     void setMessageInputGather(Message* message);
     void getStateOutputGather(VertexData* vertex);
@@ -26,6 +29,7 @@ class ApplyKernel {
     void getUpdatePayload(Update* update);
     void vertexCheckoutPrint();
     void vertexWritebackPrint(VertexData* vertex);
+    int getLocalID(vertexid_t vertex);
 public:
     int num_vertices;
     std::queue<ApplyKernelInput> inputQ;

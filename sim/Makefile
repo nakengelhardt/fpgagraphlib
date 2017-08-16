@@ -11,6 +11,7 @@ $(VERILATED): obj_dir/V%.cpp : %.v
 	verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc $<
 
 obj_dir: $(VERILATED)
+	echo "#include \"$(APP)_user_def.h\"" > user_def.h
 	make -C obj_dir -f ../sim_cc.mk APP=$(APP)
 
 clean:

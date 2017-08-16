@@ -11,6 +11,7 @@ Arbiter::Arbiter(int pe_id): pe_id(pe_id) {
         barrier[i] = 0;
         num_received_from_pe[i] = 0;
     }
+    timestamp_out = 0;
 }
 
 Arbiter::~Arbiter() {
@@ -26,6 +27,11 @@ void Arbiter::putMessage(Message* m) {
     if(m->roundpar != current_round){
         deferredQ.push(m);
         return;
+    }
+    if (m->timestamp > timestamp_out){
+        timestamp_out = m->timestamp;
+    } else {
+        m->timestamp = timestamp_out;
     }
     int src_pe = m->sender >> PEID_SHIFT;
     if(m->barrier){
@@ -64,6 +70,7 @@ void Arbiter::putMessage(Message* m) {
     bm->dest_id = 0;
     bm->roundpar = current_round;
     bm->barrier = true;
+    bm->timestamp = timestamp_out;
     outputQ.push(bm);
 
     current_round++;

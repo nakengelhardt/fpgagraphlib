@@ -1,9 +1,9 @@
 #include "scatter.h"
 #include <iostream>
 
-Scatter::Scatter(Graph* g){
+Scatter::Scatter(Graph* g, int num_vertices) {
     graph = g;
-    scatterkernel = new ScatterKernel();
+    scatterkernel = new ScatterKernel(num_vertices);
     in_level = 0;
     out_level = 0;
 }

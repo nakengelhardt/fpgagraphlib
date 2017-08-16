@@ -1,7 +1,11 @@
 #include "scatterkernel.h"
 #include <iostream>
 
-ScatterKernel::ScatterKernel() {
+ScatterKernel::ScatterKernel(int num_vertices) : num_vertices(num_vertices) {
+    last_input_time = new int[num_vertices];
+    timestamp_in = 0;
+    latency = 103;
+
     scatter_hw = new SCATTER_HW;
 
     scatter_hw->valid_in = 0;
@@ -43,6 +47,9 @@ Message* ScatterKernel::tick() {
         scatter_hw->barrier_in = input.update->barrier;
     	scatter_hw->valid_in = !input.update->barrier;
         setInput(input);
+        if(inputQ.front().update->timestamp > timestamp_in){
+            timestamp_in = inputQ.front().update->timestamp;
+        }
     }
 
     if (scatter_hw->ready && (scatter_hw->valid_in || scatter_hw->barrier_in)) {
@@ -59,6 +66,7 @@ Message* ScatterKernel::tick() {
     scatter_hw->eval();
 
     if(scatter_hw->valid_out || scatter_hw->barrier_out){
+        timestamp_in++;
         Message* message = new Message();
         getOutput(message);
         message->dest_id = scatter_hw->neighbor_out;
@@ -66,6 +74,7 @@ Message* ScatterKernel::tick() {
         message->sender = scatter_hw->sender_out;
         message->roundpar = scatter_hw->round_out;
         message->barrier = scatter_hw->barrier_out;
+        message->timestamp = timestamp_in + latency;
         return message;
     }
 

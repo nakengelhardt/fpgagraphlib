@@ -64,6 +64,7 @@ void Network::putMessageAt(int i, Message* message) {
             bm->dest_pe = j;
             bm->dest_fpga = 0;
             bm->sender = i << PEID_SHIFT;
+            bm->timestamp = message->timestamp;
             transportOneHop(i, j, bm);
             msgs_sent[i][j] = 0;
         }

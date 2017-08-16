@@ -10,6 +10,7 @@ struct Message {
     int dest_fpga;
     int roundpar;
     bool barrier;
+    int timestamp;
     MessagePayload payload;
 };
 
@@ -17,6 +18,7 @@ struct Update {
     vertexid_t sender;
     vertexid_t roundpar;
     bool barrier;
+    int timestamp;
     UpdatePayload payload;
 };
 

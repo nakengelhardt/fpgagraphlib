@@ -1,8 +1,8 @@
 #pragma once
 
+#include "pr_applykernel.h"
+#include "pr_scatterkernel.h"
 #include <inttypes.h>
-
-#define PR
 
 typedef int64_t vertexid_t;
 

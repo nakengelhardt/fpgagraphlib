@@ -6,8 +6,8 @@ include V$(APP)_scatter.mk
 
 #######################################################################
 # Compile flags
-
-CPPFLAGS += -DVL_DEBUG=1 -g -O0 -Wall# -DDEBUG_PRINT
+APP_U := $(shell echo $(APP) | tr a-z A-Z)
+CPPFLAGS += -DVL_DEBUG=1 -g -O0 -Wall -D$(APP_U)# -DDEBUG_PRINT
 
 #######################################################################
 # Linking final exe

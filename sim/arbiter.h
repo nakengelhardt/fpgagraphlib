@@ -12,6 +12,7 @@ class Arbiter {
     int* barrier;
     int* num_expected_from_pe;
     int* num_received_from_pe;
+    int timestamp_out;
 public:
     Arbiter(int pe_id);
     ~Arbiter();

@@ -1,30 +1,28 @@
 #pragma once
 
-#include "sssp_applykernel.h"
-#include "sssp_scatterkernel.h"
+#include "cc_applykernel.h"
+#include "cc_scatterkernel.h"
 #include <inttypes.h>
 
 typedef int64_t vertexid_t;
 
 struct edge_t {
     vertexid_t dest_id;
-    int dist;
 };
 
 struct VertexData {
     int id;
-    int dist;
-    vertexid_t parent;
+    vertexid_t color;
     bool in_use;
     bool active;
 };
 
 struct MessagePayload {
-    int dist;
+    vertexid_t color;
 };
 
 struct UpdatePayload {
-    int dist;
+    vertexid_t color;
 };
 
 const int num_channels = 4;
@@ -33,4 +31,4 @@ const int PEID_SHIFT = 16;
 const int num_pe = 4;
 const int num_fpga = 2;
 
-const bool has_edgedata = true;
+const bool has_edgedata = false;

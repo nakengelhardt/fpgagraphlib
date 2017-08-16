@@ -3,17 +3,26 @@
 #include <stdexcept>
 #include <iostream>
 
+int ApplyKernel::getLocalID(vertexid_t vertex) {
+    return vertex & NODEID_MASK;
+}
+
 VertexData* ApplyKernel::getDataRef(vertexid_t vertex){
     if (vertex == 0){
         std::cout << "***Accessing Vertex 0***" << std::endl;
     }
-    int local_id = vertex & NODEID_MASK;
-    return &vertex_data[local_id];
+    return &vertex_data[getLocalID(vertex)];
 }
 
 ApplyKernel::ApplyKernel(VertexData* init_data, int n) {
     num_vertices = n;
     vertex_data = init_data;
+    last_input_time = new int[num_vertices];
+    timestamp_in = 0;
+    timestamp_out = 0;
+    latency = 44;
+    gather_hw = new GATHER_HW;
+    apply_hw = new APPLY_HW;
 
     do_init();
 }
@@ -21,11 +30,10 @@ ApplyKernel::ApplyKernel(VertexData* init_data, int n) {
 ApplyKernel::~ApplyKernel() {
     delete gather_hw;
     delete apply_hw;
+    delete[] last_input_time;
 }
 
 void ApplyKernel::do_init(){
-    gather_hw = new GATHER_HW;
-    apply_hw = new APPLY_HW;
     num_in_use_gather = 0;
     num_in_use_apply = 0;
 
@@ -85,6 +93,12 @@ void ApplyKernel::apply_tick() {
 
     if ((apply_hw->update_valid || apply_hw->barrier_out) && apply_hw->update_ack) {
         Update* update = new Update;
+        if(!apply_hw->barrier_out) {
+            if (timestamp_out < last_input_time[getLocalID(apply_hw->update_sender)] + latency) {
+                timestamp_out = last_input_time[getLocalID(apply_hw->update_sender)] + latency;
+            }
+        }
+        update->timestamp = timestamp_out++;
         update->sender = apply_hw->update_sender;
         update->roundpar = apply_hw->update_round;
         update->barrier = apply_hw->barrier_out;
@@ -118,10 +132,12 @@ void ApplyKernel::barrier(Message* bm) {
             apply_hw->round_in = (bm->roundpar + 1) % num_channels;
             apply_hw->valid_in = 1;
             apply_hw->barrier_in = 0;
+            last_input_time[i] = timestamp_in;
 
             if (apply_hw->ready && apply_hw->valid_in) {
                 i++;
                 num_in_use_apply++;
+                timestamp_in++;
 #ifdef DEBUG_PRINT
                 std::cout << "Apply in vertex "<< vertex->id << std::endl;
 #endif
@@ -157,6 +173,7 @@ void ApplyKernel::barrier(Message* bm) {
 }
 
 void ApplyKernel::gather_tick() {
+    timestamp_in++;
 
     gather_hw->valid_in = 0;
     gather_hw->state_ack = 1;
@@ -173,6 +190,10 @@ void ApplyKernel::gather_tick() {
         gather_hw->sender_in = message->sender;
         setMessageInputGather(message);
         gather_hw->valid_in = !busy_stall;
+
+        if(inputQ.front().message->timestamp > timestamp_in){
+            timestamp_in = inputQ.front().message->timestamp;
+        }
     }
 
     if (gather_hw->ready && gather_hw->valid_in) {
