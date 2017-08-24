@@ -26,6 +26,7 @@ void Network::transportOneHop(int current, int dest_pe, Message* message) {
     /*  Topology: fully connected inside FPGA
         place PEs on FPGAs in round-robin (modulo)
     */
+    message->timestamp++;
     if(current % num_fpga == dest_pe % num_fpga){
         arbiter[dest_pe]->putMessage(message);
     } else {
@@ -55,7 +56,9 @@ void Network::tick() {
 void Network::putMessageAt(int i, Message* message) {
     numMessagesSent++;
     if(message->barrier){
+#ifdef DEBUG_PRINT
         std::cout << "Distributing barrier from PE " << i << std::endl;
+#endif
         for(int j = 0; j < num_pe; j++){
             Message* bm = new Message();
             bm->roundpar = message->roundpar;

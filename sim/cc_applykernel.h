@@ -5,3 +5,5 @@
 
 #define GATHER_HW Vcc_gather
 #define APPLY_HW Vcc_apply
+#define GATHER_LATENCY 0
+#define APPLY_LATENCY 0

@@ -11,7 +11,6 @@ Arbiter::Arbiter(int pe_id): pe_id(pe_id) {
         barrier[i] = 0;
         num_received_from_pe[i] = 0;
     }
-    timestamp_out = 0;
 }
 
 Arbiter::~Arbiter() {
@@ -28,18 +27,13 @@ void Arbiter::putMessage(Message* m) {
         deferredQ.push(m);
         return;
     }
-    if (m->timestamp > timestamp_out){
-        timestamp_out = m->timestamp;
-    } else {
-        m->timestamp = timestamp_out;
-    }
     int src_pe = m->sender >> PEID_SHIFT;
     if(m->barrier){
         barrier[src_pe] = 1;
         num_expected_from_pe[src_pe] = m->dest_id;
         delete m;
 #ifdef DEBUG_PRINT
-        std::cout << "PE " << pe_id << ": "
+        std::cout << m->timestamp << ": PE " << pe_id << ": "
         << "Received barrier from PE " << src_pe
         << ". Expected messages: " << num_expected_from_pe[src_pe]
         << ". Received messages: " << num_received_from_pe[src_pe]
@@ -70,7 +64,7 @@ void Arbiter::putMessage(Message* m) {
     bm->dest_id = 0;
     bm->roundpar = current_round;
     bm->barrier = true;
-    bm->timestamp = timestamp_out;
+    // bm->timestamp = timestamp.getTime();
     outputQ.push(bm);
 
     current_round++;
@@ -107,6 +101,7 @@ Message* Arbiter::getMessage(){
     Message* message = NULL;
     if (!outputQ.empty()) {
         message = outputQ.front();
+        message->timestamp = timestamp.updateTime(message->timestamp);
         outputQ.pop();
     }
     return message;

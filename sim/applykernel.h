@@ -1,5 +1,6 @@
 #pragma once
 
+#include "timestamp.h"
 #include "format_def.h"
 #include <queue>
 
@@ -16,8 +17,8 @@ class ApplyKernel {
     void do_init();
     int num_in_use_gather;
     int num_in_use_apply;
-    int timestamp_in;
-    int timestamp_out;
+    TimeStation timestamp_in;
+    TimeStation timestamp_out;
     int latency;
     int* last_input_time;
     void setStateInputGather(VertexData* vertex);

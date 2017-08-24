@@ -1,5 +1,6 @@
 #pragma once
 
+#include "timestamp.h"
 #include "format_def.h"
 #include <queue>
 
@@ -14,7 +15,7 @@ class ScatterKernel {
     int num_vertices;
     SCATTER_HW* scatter_hw;
     std::queue<ScatterKernelInput> inputQ;
-    int timestamp_in;
+    TimeStation timestamp_in;
     int* last_input_time;
     int latency;
     void setInput(ScatterKernelInput input);
