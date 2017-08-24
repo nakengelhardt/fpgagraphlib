@@ -31,9 +31,8 @@ void ApplyKernel::getStateOutputApply(VertexData* vertex){
     if(apply_hw->state_out_color != vertex->color
       || apply_hw->state_out_active != 0) {
         std::cout << "Apply not resetting state properly:" << std::endl;
-        std::cout << "apply_hw->state_out_dist = " << apply_hw->state_out_dist
-        << " (" << vertex->dist << ")"
-        << ", apply_hw->state_out_parent = " << apply_hw->state_out_parent
+        std::cout << "apply_hw->state_out_color = " << apply_hw->state_out_color
+        << " (" << vertex->color << ")"
         << ", apply_hw->state_out_active = " << apply_hw->state_out_active
         << std::endl;
     }
@@ -48,7 +47,6 @@ void ApplyKernel::getUpdatePayload(Update* update){
 void ApplyKernel::vertexCheckoutPrint(){
     std::cout << "Checkout vertex " << static_cast<int>(gather_hw->nodeid_in)
     << ": color=" << static_cast<int>(gather_hw->state_in_color)
-    << ", parent=" << static_cast<int>(gather_hw->state_in_parent)
     << ", message " << static_cast<int>(gather_hw->message_in_color)
     << ", now in use: " << num_in_use_gather
     << std::endl;

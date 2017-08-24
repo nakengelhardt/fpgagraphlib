@@ -10,18 +10,20 @@ void initVertexData(VertexData* init_data, vertexid_t vertex, int index, Graph* 
 
 void sendInitMessages(Graph* graph, PE** pe, int* sent){
     Message* message;
-    message = new Message();
-    message->dest_id = graph->partition->placement(1);
-    message->sender = message->dest_id;
-    message->color = message->dest_id;
-    int pe_id = graph->partition->pe_id(graph->partition->placement(1));
-    message->dest_pe = pe_id;
-    message->dest_fpga = pe_id % num_fpga;
-    message->roundpar = 3;
-    message->barrier = false;
-    message->timestamp = 0;
-    pe[pe_id]->putMessageToReceive(message);
-    sent[pe_id]++;
+    for(int i = 0; i < graph->nv; i++){
+        message = new Message();
+        message->sender = 0;
+        message->dest_id = graph->partition->placement(i);
+        int pe_id = graph->partition->pe_id(graph->partition->placement(i));
+        message->dest_pe = pe_id;
+        message->dest_fpga = 0;
+        message->roundpar = 3;
+        message->barrier = false;
+        message->payload.color = message->dest_id;
+        message->timestamp = 0;
+        pe[pe_id]->putMessageToReceive(message);
+        sent[pe_id]++;
+    }
 }
 
 #endif
