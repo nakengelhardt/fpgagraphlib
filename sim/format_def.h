@@ -1,6 +1,7 @@
 #pragma once
 
 #include "user_def.h"
+#include "platform_def.h"
 #include <cstddef>
 
 struct Message {

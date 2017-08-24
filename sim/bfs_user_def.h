@@ -23,10 +23,4 @@ struct MessagePayload {
 struct UpdatePayload {
 };
 
-const int num_channels = 4;
-const int NODEID_MASK = 0xFFFF;
-const int PEID_SHIFT = 16;
-const int num_pe = 4;
-const int num_fpga = 2;
-
 const bool has_edgedata = false;
