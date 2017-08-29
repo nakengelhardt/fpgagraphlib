@@ -62,17 +62,9 @@ class Apply(Module):
 
         # detect termination (now done by collating votes to halt in barriercounter - if barrier is passed on with halt bit set, don't propagate)
         self.inactive = Signal()
-        prev_was_barrier = Signal()
-        prev_prev_was_barrier = Signal()
-        self.sync += \
-            If(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.ack,
-                prev_was_barrier.eq(apply_interface_in_fifo.dout.msg.barrier),
-                prev_prev_was_barrier.eq(prev_was_barrier)
-            )
-        self.comb += self.inactive.eq(prev_was_barrier & prev_prev_was_barrier)
-        # self.sync += If(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.ack & apply_interface_in_fifo.dout.msg.barrier & apply_interface_in_fifo.dout.msg.halt,
-        #     self.inactive.eq(1)
-        # )
+        self.sync += If(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.ack & apply_interface_in_fifo.dout.msg.barrier & apply_interface_in_fifo.dout.msg.halt,
+            self.inactive.eq(1)
+        )
 
         # should pipeline advance?
         upstream_ack = Signal()
@@ -96,7 +88,7 @@ class Apply(Module):
             payload.eq(apply_interface_in_fifo.dout.msg.payload),
             roundpar.eq(apply_interface_in_fifo.dout.msg.roundpar),
             valid.eq(apply_interface_in_fifo.dout.valid & ~apply_interface_in_fifo.dout.msg.barrier),
-            barrier.eq(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.msg.barrier), # & ~apply_interface_in_fifo.dout.msg.halt),
+            barrier.eq(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.msg.barrier & ~apply_interface_in_fifo.dout.msg.halt),
         ]
 
         # collision handling (combinatorial)

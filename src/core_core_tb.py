@@ -83,6 +83,7 @@ class Core(Module):
         for i in range(num_pe):
             yield start_message[i].select.eq(1)
             yield start_message[i].valid.eq(0)
+            yield start_message[i].msg.halt.eq(0)
 
         while [x for l in init_messages for x in l]:
             for i in range(num_pe):

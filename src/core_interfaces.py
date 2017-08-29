@@ -6,8 +6,8 @@ from migen.genlib.record import *
 ## noc message format
 
 _msg_layout = [
+    ( "halt", 1, DIR_M_TO_S),
     ( "barrier", 1, DIR_M_TO_S ),
-    # ( "halt", 1, DIR_M_TO_S),
     ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "dest_id", "nodeidsize", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),

@@ -37,7 +37,7 @@ class Barriercounter(Module):
                 if not roundpar == round_accepting:
                     logger.warning("{}: Received message of round {} when only accepting round {}".format(num_cycles, roundpar, round_accepting))
                     in_q.pop(0)
-                    in_q.append((barrier, roundpar, dest_id, sender, payload))
+                    in_q.append((barrier, halt, roundpar, dest_id, sender, payload))
                 from_pe = tb.config.addresslayout.pe_adr(sender)
                 if barrier:
                     barrier_from_pe[from_pe] = 1
