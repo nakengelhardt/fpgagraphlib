@@ -17,8 +17,8 @@ class NeighborCase(SimCase, unittest.TestCase):
             self.graph = generate_graph(num_nodes=15, num_edges=30)
             # print(self.graph)
 
-            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=1, num_pe=1, num_nodes_per_pe=16, max_edges_per_pe=64, pe_groups=1, inter_pe_delay=0, use_hmc=True)
-            self.config.platform = PicoPlatform(bus_width=32, stream_width=128)
+            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=1, num_pe=1, num_nodes_per_pe=16, max_edges_per_pe=64, use_hmc=True, num_channels=4, channel_bits=2)
+            self.config.platform = PicoPlatform(1, bus_width=32, stream_width=128)
 
             self.adj_idx = self.config.adj_idx[0]
             self.submodules.dut = NeighborsHMC(pe_id=0, config=self.config, adj_val=self.config.adj_val[0])
@@ -30,20 +30,20 @@ class NeighborCase(SimCase, unittest.TestCase):
             for node in self.tb.graph:
                 idx, num = self.tb.adj_idx[node]
                 neighbors = []
-                yield self.tb.dut.start_idx.eq(idx)
-                yield self.tb.dut.num_neighbors.eq(num)
-                yield self.tb.dut.sender_in.eq(node)
-                yield self.tb.dut.message_in.eq(node)
-                yield self.tb.dut.valid.eq(1)
+                yield self.tb.dut.neighbor_in.start_idx.eq(idx)
+                yield self.tb.dut.neighbor_in.num_neighbors.eq(num)
+                yield self.tb.dut.neighbor_in.sender.eq(node)
+                yield self.tb.dut.neighbor_in.message.eq(node)
+                yield self.tb.dut.neighbor_in.valid.eq(1)
                 yield
-                while not (yield self.tb.dut.ack):
+                while not (yield self.tb.dut.neighbor_in.ack):
                     yield
-            yield self.tb.dut.valid.eq(0)
-            yield self.tb.dut.barrier_in.eq(1)
+            yield self.tb.dut.neighbor_in.valid.eq(0)
+            yield self.tb.dut.neighbor_in.barrier.eq(1)
             yield
-            while not (yield self.tb.dut.ack):
+            while not (yield self.tb.dut.neighbor_in.ack):
                 yield
-            yield self.tb.dut.barrier_in.eq(0)
+            yield self.tb.dut.neighbor_in.barrier.eq(0)
             yield
 
         def gen_output():
@@ -51,12 +51,12 @@ class NeighborCase(SimCase, unittest.TestCase):
             for k in self.tb.graph:
                 neighbors[k] = self.tb.graph[k].copy()
             while neighbors:
-                yield self.tb.dut.neighbor_ack.eq(random.choice([0,1]))
-                if ((yield self.tb.dut.neighbor_valid) and (yield self.tb.dut.neighbor_ack)):
-                    neighbor = (yield self.tb.dut.neighbor)
-                    sender = (yield self.tb.dut.sender_out)
-                    message = (yield self.tb.dut.message_out)
-                    num_neighbors = (yield self.tb.dut.num_neighbors_out)
+                yield self.tb.dut.neighbor_out.ack.eq(random.choice([0,1]))
+                if ((yield self.tb.dut.neighbor_out.valid) and (yield self.tb.dut.neighbor_out.ack)):
+                    neighbor = (yield self.tb.dut.neighbor_out.neighbor)
+                    sender = (yield self.tb.dut.neighbor_out.sender)
+                    message = (yield self.tb.dut.neighbor_out.message)
+                    num_neighbors = (yield self.tb.dut.neighbor_out.num_neighbors)
                     with self.subTest(node=sender):
                         self.assertEqual(message, sender)
                         self.assertEqual(num_neighbors, len(self.tb.graph[sender]))

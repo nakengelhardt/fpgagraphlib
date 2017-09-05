@@ -115,10 +115,16 @@ def main():
     parser.add_argument('graphfile', help='filename containing graph')
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-u', '--unconnected', action="store_false", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
+    parser.add_argument('-p', '--num-pe', type=int, help="number of PEs to distribute graph nodes over")
+    parser.add_argument('-n', '--num-nodes-per-pe', type=int, help="maximum number of nodes allowed per PE")
     args = parser.parse_args()
 
     with open(args.graphfile) as f:
-        d = read_graph(f, digraph=args.digraph, connected=args.unconnected)
+        if args.num_pe and args.num_nodes_per_pe:
+            d = read_graph_balance_pe(f, args.num_pe, args.num_nodes_per_pe, digraph=args.digraph, connected=args.unconnected)
+        else:
+            d = read_graph(f, digraph=args.digraph, connected=args.unconnected)
+        print(d)
 
 if __name__ == "__main__":
     main()

@@ -158,7 +158,7 @@ class Core(Module):
 
     def gen_network_stats(self):
         num_cycles = 0
-        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
+        with open("{}.net_stats.{}pe.log".format(self.config.name, self.config.addresslayout.num_pe), 'w') as netstatsfile:
             netstatsfile.write("Cycle\tNumber of messages sent\n")
             while not (yield self.global_inactive):
                 num_cycles += 1
