@@ -7,8 +7,8 @@ from operator import and_
 import logging
 import math
 
-from recordfifo import RecordFIFO, RecordFIFOBuffered
-from core_interfaces import _msg_layout, ApplyInterface, NetworkInterface
+from recordfifo import *
+from core_interfaces import *
 from core_barriercounter import Barriercounter
 
 class Arbiter(Module):
@@ -18,7 +18,7 @@ class Arbiter(Module):
         num_pe = addresslayout.num_pe
         self.pe_id = pe_id
 
-        # input (n channels)
+        # input
         self.apply_interface_in = ApplyInterface(name="arbiter_in", **addresslayout.get_params())
 
         # output
@@ -122,24 +122,13 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[RecordFIFOBuffered(layout=set_layout_parameters(_msg_layout, **config.addresslayout.get_params()),
-                                     depth=8) for i in range(num_pe)] for j in range(num_pe)]
+        fifos = [[InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
 
         self.submodules.fifos = fifos
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_pe)]
 
-        fifo_apply_interface_out = [[ApplyInterface(name="mux_apply_interface_in", **config.addresslayout.get_params()) for _ in range(num_pe)] for j in range(num_pe)]
-
-        for source in range(num_pe):
-            for sink in range(num_pe):
-                self.comb += [
-                    fifo_apply_interface_out[sink][source].msg.raw_bits().eq(fifos[sink][source].dout.raw_bits()),
-                    fifo_apply_interface_out[sink][source].valid.eq(fifos[sink][source].readable),
-                    fifos[sink][source].re.eq(fifo_apply_interface_out[sink][source].ack)
-                ]
-
-        self.submodules.muxtree = [MuxTree(config, fifo_apply_interface_out[sink]) for sink in range(num_pe)]
+        self.submodules.muxtree = [MuxTree(config, [fifos[sink][source].dout for source in range(num_pe)]) for sink in range(num_pe)]
         # connect PE incoming ports
         for sink in range(num_pe):
             self.comb += [
@@ -150,9 +139,9 @@ class Network(Module):
 
         # connect PE outgoing ports
         for source in range(num_pe):
-            array_msg = Array(fifo.din.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_we = Array(fifo.we for fifo in [fifos[sink][source] for sink in range(num_pe)])
-            array_writable = Array(fifo.writable for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_msg = Array(fifo.din.msg.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_we = Array(fifo.din.valid for fifo in [fifos[sink][source] for sink in range(num_pe)])
+            array_writable = Array(fifo.din.ack for fifo in [fifos[sink][source] for sink in range(num_pe)])
             sink = Signal(config.addresslayout.peidsize)
 
 

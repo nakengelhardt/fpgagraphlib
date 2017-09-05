@@ -86,20 +86,20 @@ class Network(Module):
                 self.arbiter[i].apply_interface_out.connect(self.apply_interface[i])
             ]
 
-            network_round = Signal(config.addresslayout.channel_bits)
-            next_round = Signal(config.addresslayout.channel_bits)
-            proceed = Signal()
+        network_round = Signal(config.addresslayout.channel_bits)
+        next_round = Signal(config.addresslayout.channel_bits)
+        proceed = Signal()
 
-            self.comb += [
-                proceed.eq(reduce(and_, [a.round_accepting == next_round for a in self.arbiter])),
-                If(network_round < config.addresslayout.num_channels - 1,
-                    next_round.eq(network_round + 1)
-                ).Else(
-                    next_round.eq(0)
-                ),
-                self.arbiter[i].network_round.eq(network_round)
-            ]
+        self.comb += [
+            proceed.eq(reduce(and_, [a.round_accepting == next_round for a in self.arbiter])),
+            If(network_round < config.addresslayout.num_channels - 1,
+                next_round.eq(network_round + 1)
+            ).Else(
+                next_round.eq(0)
+            ),
+            [self.arbiter[i].network_round.eq(network_round) for i in range(num_pe)]
+        ]
 
-            self.sync += If(proceed,
-                network_round.eq(next_round)
-            )
+        self.sync += If(proceed,
+            network_round.eq(next_round)
+        )

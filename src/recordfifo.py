@@ -174,3 +174,24 @@ class InterfaceFIFO(Module):
             self.dout.valid.eq(self.fifo.readable),
             self.fifo.re.eq(self.dout.ack)
         ]
+
+class InterfaceFIFOBuffered(Module):
+    def __init__(self, layout, depth):
+
+        self.din = Record(layout)
+        self.dout = Record(layout)
+
+        datalayout = [field for field in layout if (field != "valid") and (field != "ack")]
+
+        self.width = layout_len(datalayout)
+
+        self.submodules.fifo = RecordFIFOBuffered(datalayout, depth)
+
+        self.comb += [
+            self.din.connect(self.fifo.din, leave_out={"valid", "ack"}),
+            self.din.ack.eq(self.fifo.writable),
+            self.fifo.we.eq(self.din.valid),
+            self.fifo.dout.connect(self.dout),
+            self.dout.valid.eq(self.fifo.readable),
+            self.fifo.re.eq(self.dout.ack)
+        ]

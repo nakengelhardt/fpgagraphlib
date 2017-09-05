@@ -144,7 +144,6 @@ class Scatter(Module):
         # send out messages
         self.comb += [
             self.outfifo.dout.connect(self.barrierdistributor.network_interface_in.msg),
-            self.barrierdistributor.network_interface_in.broadcast.eq(self.outfifo.dout.barrier),
             self.barrierdistributor.network_interface_in.valid.eq(self.outfifo.readable),
             self.barrierdistributor.network_interface_in.dest_pe.eq(neighbor_pe),
             self.outfifo.re.eq(self.barrierdistributor.network_interface_in.ack)

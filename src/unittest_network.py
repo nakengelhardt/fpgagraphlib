@@ -8,7 +8,7 @@ from tbsupport import *
 from bfs.config import Config
 from graph_generate import generate_graph
 
-from ring_network import Network
+from fifo_network import Network
 
 class NetworkCase(SimCase, unittest.TestCase):
     class TestBench(Module):
@@ -50,11 +50,10 @@ class NetworkCase(SimCase, unittest.TestCase):
                     yield (self.tb.dut.network_interface[pe].msg.barrier.eq(msg["barrier"]))
                     yield (self.tb.dut.network_interface[pe].msg.roundpar.eq(roundpar))
                     yield (self.tb.dut.network_interface[pe].dest_pe.eq(msg["dest_pe"]))
-                    yield (self.tb.dut.network_interface[pe].broadcast.eq(msg["barrier"]))
                     yield (self.tb.dut.network_interface[pe].valid.eq(random.choice([0,1])))
                     yield
                     while not ((yield self.tb.dut.network_interface[pe].valid) and (yield self.tb.dut.network_interface[pe].ack)):
-                        yield (self.tb.dut.network_interface[pe].valid.eq(random.choice([0,1])))
+                        yield (self.tb.dut.network_interface[pe].valid.eq(1))
                         yield
             yield (self.tb.dut.network_interface[pe].valid.eq(0))
             yield
@@ -79,7 +78,7 @@ class NetworkCase(SimCase, unittest.TestCase):
                                 messages.remove(msg)
                                 break
                         else:
-                            self.fail("PE {} received message {}".format(pe, msg))
+                            self.fail("PE {} received message it wasn't supposed to: {}".format(pe, msg))
                     yield
                 print("PE {} received all messages of round {}".format(pe, roundpar))
 
@@ -114,4 +113,5 @@ class NetworkCase(SimCase, unittest.TestCase):
         self.run_with([gen_input(i,num_rounds) for i in range(self.tb.config.addresslayout.num_pe)] +[gen_output(i,num_rounds) for i in range(self.tb.config.addresslayout.num_pe)] + [gen_timeout(300*num_rounds)], vcd_name="test_network.vcd")
 
 if __name__ == "__main__":
+    random.seed(42)
     unittest.main()
