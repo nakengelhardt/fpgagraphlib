@@ -128,7 +128,7 @@ def init_parse(args=None):
     for k in config['arch']:
         kwargs[k] = eval(config['arch'].get(k))
 
-    kwargs["num_channels"] = 4
+    kwargs["num_channels"] = 3
     kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
 
     algo_config = algo.Config(adj_dict, **kwargs)

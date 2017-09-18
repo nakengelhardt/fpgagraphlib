@@ -111,9 +111,10 @@ class ApplyKernel(Module):
 
     def gen_selfcheck(self, tb):
         logger = logging.getLogger("simulation.applykernel")
-        num_pe = len(tb.apply)
-        num_nodes_per_pe = tb.addresslayout.num_nodes_per_pe
-        pe_id = [a.applykernel for a in tb.apply].index(self)
+        num_nodes_per_pe = tb.config.addresslayout.num_nodes_per_pe
+        num_pe = tb.config.addresslayout.num_pe
+        pe_id = [a.applykernel for core in tb.cores for a in core.apply].index(self)
+        applys = [a for core in tb.cores for a in core.apply]
         state_level = 0
         out_level = 0
         in_level = 0
@@ -142,9 +143,9 @@ class ApplyKernel(Module):
                     num_messages_in += num_pe
                     logger.warning("{}: valid and barrier raised simultaneously on applykernel input on PE {}".format(num_cycles, pe_id))
                 else:
-                    node = tb.addresslayout.local_adr((yield self.nodeid_in))
-                    data = (yield tb.apply[pe_id].mem[node])
-                    s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.addresslayout.get_params()))
+                    node = tb.config.addresslayout.local_adr((yield self.nodeid_in))
+                    data = (yield applys[pe_id].mem[node])
+                    s = convert_int_to_record(data, set_layout_parameters(node_storage_layout, **tb.config.addresslayout.get_params()))
                     num_messages_in += s['nrecvd']
                     if s['nrecvd'] != s['nneighbors']:
                         logger.warning("{}: node {} did not update correctly in round {}! ({} out of {} messages received) / raw: {}".format(num_cycles, pe_id*num_nodes_per_pe+node, state_level, s['nrecvd'], s['nneighbors'], hex(data)))

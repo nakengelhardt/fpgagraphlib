@@ -13,7 +13,7 @@ class Config:
         self.name = "bfs"
         logger = logging.getLogger('config')
 
-        payloadsize = kwargs['nodeidsize']
+        payloadsize = 1
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())

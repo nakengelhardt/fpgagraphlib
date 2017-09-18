@@ -176,10 +176,10 @@ class InterfaceFIFO(Module):
         ]
 
 class InterfaceFIFOBuffered(Module):
-    def __init__(self, layout, depth):
+    def __init__(self, layout, depth, name=None):
 
-        self.din = Record(layout)
-        self.dout = Record(layout)
+        self.din = Record(layout, name= (name + "_din") if name else None)
+        self.dout = Record(layout, name= (name + "_dout") if name else None)
 
         datalayout = [field for field in layout if (field != "valid") and (field != "ack")]
 

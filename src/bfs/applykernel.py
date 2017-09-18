@@ -52,8 +52,8 @@ class ApplyKernel(Module):
 
     def gen_selfcheck(self, tb):
         logger = logging.getLogger("simulation.applykernel")
-        num_pe = len(tb.apply)
-        pe_id = [a.applykernel for a in tb.apply].index(self)
+        num_pe = tb.config.addresslayout.num_pe
+        pe_id = [a.applykernel for core in tb.cores for a in core.apply].index(self)
         level = 0
         num_cycles = 0
         num_messages_in = 0
@@ -67,7 +67,7 @@ class ApplyKernel(Module):
                 num_messages_in += 1
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
-                logger.debug("Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
+                logger.debug(str(num_cycles) + ": Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
         logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
         logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

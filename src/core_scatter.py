@@ -14,6 +14,7 @@ from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
     def __init__(self, pe_id, config, adj_mat=None, edge_data=None, hmc_port=None):
+        self.pe_id = pe_id
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe

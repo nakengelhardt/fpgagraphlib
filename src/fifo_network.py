@@ -56,7 +56,7 @@ class Arbiter(Module):
                     level += 1
                     logger.debug("{}: Barrier passed to apply".format(num_cycles))
                 else:
-                    if level % 2 == (yield self.apply_interface_out.msg.roundpar):
+                    if (level-1) % tb.config.addresslayout.num_channels != (yield self.apply_interface_out.msg.roundpar):
                         logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply_interface_out.msg.roundpar), level))
             yield
 
