@@ -35,6 +35,8 @@ def read_graph(f, digraph=False, connected=True):
     return d
 
 def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=True):
+    if num_pe == 1:
+        return read_graph(f, digraph=digraph, connected=connected)
     d = {}
     numbers = {}
     next_number = 0
@@ -110,21 +112,63 @@ def check_connected(d, init=1):
     else:
         print("Graph is connected.")
 
+def max_per_pe(adj_dict, num_pe, num_nodes_per_pe):
+    max_node = [0 for _ in range(num_pe)]
+    for node in adj_dict:
+        pe = node//num_nodes_per_pe
+        localnode = node % num_nodes_per_pe
+        if max_node[pe] < localnode:
+            max_node[pe] = localnode
+    return max_node
+
+def print_stats(adj_dict, num_pe, num_nodes_per_pe):
+    from statistics import mean, stdev
+    max_node = max_per_pe(adj_dict, num_pe, num_nodes_per_pe)
+    adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(num_pe)]
+    adj_val = [[] for _ in range(num_pe)]
+
+    for node, neighbors in adj_dict.items():
+        pe = node//num_nodes_per_pe
+        localnode = node % num_nodes_per_pe
+        idx = len(adj_val[pe])
+        n = len(neighbors)
+        adj_idx[pe][localnode] = (idx, n)
+        adj_val[pe].extend(neighbors)
+
+    print("Nodes per PE: {}".format([len(adj_idx[pe]) for pe in range(num_pe)]))
+    edges_pe = [len(adj_val[pe]) for pe in range(num_pe)]
+    print("Edges per PE: {}".format(edges_pe))
+    print("Mean/stdev Edges: {:G} +/- {:G} ({:%})".format(mean(edges_pe), stdev(edges_pe), stdev(edges_pe)/mean(edges_pe)))
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('graphfile', help='filename containing graph')
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-u', '--unconnected', action="store_false", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
-    parser.add_argument('-p', '--num-pe', type=int, help="number of PEs to distribute graph nodes over")
-    parser.add_argument('-n', '--num-nodes-per-pe', type=int, help="maximum number of nodes allowed per PE")
+
+    parser.add_argument('-b', '--balance', action="store_true", help='round-robin PE assignment')
+    parser.add_argument('--pe', nargs=2, type=int, help='num_pe num_nodes_per_pe (for round-robin or stats)')
+    parser.add_argument('-s', '--stats', action='store_true', help='print statistics on distribution of edges')
     args = parser.parse_args()
 
     with open(args.graphfile) as f:
-        if args.num_pe and args.num_nodes_per_pe:
-            d = read_graph_balance_pe(f, args.num_pe, args.num_nodes_per_pe, digraph=args.digraph, connected=args.unconnected)
+        if(args.balance):
+            if not args.pe:
+                print("--balance requires --pe num_pe num_nodes_per_pe argument.")
+                return -1
+            num_pe = args.pe[0]
+            num_nodes_per_pe = args.pe[1]
+            d = read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=args.digraph, connected=args.unconnected)
         else:
             d = read_graph(f, digraph=args.digraph, connected=args.unconnected)
-        print(d)
+        if(args.stats):
+            if not args.pe:
+                print("--stats requires --pe num_pe num_nodes_per_pe argument.")
+                return -1
+            num_pe = args.pe[0]
+            num_nodes_per_pe = args.pe[1]
+            print_stats(d, num_pe, num_nodes_per_pe)
+
 
 if __name__ == "__main__":
     main()

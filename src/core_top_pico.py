@@ -83,25 +83,24 @@ class Top(Module):
             )
         ]
 
-        hmc_perf_counters = [Signal(32) for _ in range(9)]
-        for i in range(9):
-            port = config.platform.getHMCPort(i)
-            self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+        hmc_perf_counters = []
+        if config.use_hmc:
+            hmc_perf_counters = [Signal(32) for _ in range(9)]
+            for i in range(9):
+                port = config.platform.getHMCPort(i)
+                self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+                self.comb += [
+                    port.wr_data.eq(0),
+                    port.wr_data_valid.eq(0)
+                ]
+
+            hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
+            self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
             self.comb += [
-                port.wr_data.eq(0),
-                port.wr_data_valid.eq(0)
+                self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
+                Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
             ]
 
-
-
-        hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
-        self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
-        self.comb += [
-            self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
-            Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
-        ]
-
-        if config.use_hmc:
             if not config.share_mem_port:
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")

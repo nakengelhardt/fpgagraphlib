@@ -62,6 +62,70 @@ class SimTop(Module):
                 ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
             ]
 
+
+    def gen_input(self):
+        logger = logging.getLogger('simulation.input')
+        num_pe = self.config.addresslayout.num_pe
+        num_nodes_per_pe = self.config.addresslayout.num_nodes_per_pe
+
+        init_messages = self.config.init_messages
+
+        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
+
+        for i in range(num_pe):
+            yield start_message[i].select.eq(1)
+            yield start_message[i].valid.eq(0)
+            yield start_message[i].msg.halt.eq(0)
+
+        while [x for l in init_messages for x in l]:
+            for i in range(num_pe):
+                if (yield start_message[i].ack):
+                    if init_messages[i]:
+                        message = init_messages[i].pop()
+                        yield start_message[i].msg.dest_id.eq(message['dest_id'])
+                        yield start_message[i].msg.sender.eq(message['sender'])
+                        yield start_message[i].msg.payload.eq(message['payload'])
+                        yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
+                        yield start_message[i].msg.barrier.eq(0)
+                        yield start_message[i].valid.eq(1)
+                    else:
+                        yield start_message[i].valid.eq(0)
+            yield
+
+        for i in range(num_pe):
+            yield start_message[i].msg.dest_id.eq(0)
+            yield start_message[i].msg.payload.eq(0)
+            yield start_message[i].msg.sender.eq(i<<log2_int(num_nodes_per_pe))
+            yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
+            yield start_message[i].msg.barrier.eq(1)
+            yield start_message[i].valid.eq(1)
+
+        barrier_done = [0 for i in range(num_pe)]
+
+        while 0 in barrier_done:
+            yield
+            for i in range(num_pe):
+                if (yield start_message[i].ack):
+                    yield start_message[i].valid.eq(0)
+                    barrier_done[i] = 1
+
+        for i in range(num_pe):
+            yield start_message[i].select.eq(0)
+
+    def gen_network_stats(self):
+        num_cycles = 0
+        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
+            netstatsfile.write("Cycle\tNumber of messages sent\n")
+            while not (yield self.global_inactive):
+                num_cycles += 1
+                num_msgs = 0
+                for core in self.cores:
+                    for scatter in core.scatter:
+                        if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
+                            num_msgs += 1
+                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
+                yield
+
 class Top(Module):
     def __init__(self, config):
         self.config = config
@@ -170,70 +234,6 @@ class Top(Module):
                 start_pico.eq(1)
             )
         ]
-
-
-    def gen_input(self):
-        logger = logging.getLogger('simulation.input')
-        num_pe = self.config.addresslayout.num_pe
-        num_nodes_per_pe = self.config.addresslayout.num_nodes_per_pe
-
-        init_messages = self.config.init_messages
-
-        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-
-        for i in range(num_pe):
-            yield start_message[i].select.eq(1)
-            yield start_message[i].valid.eq(0)
-            yield start_message[i].msg.halt.eq(0)
-
-        while [x for l in init_messages for x in l]:
-            for i in range(num_pe):
-                if (yield start_message[i].ack):
-                    if init_messages[i]:
-                        message = init_messages[i].pop()
-                        yield start_message[i].msg.dest_id.eq(message['dest_id'])
-                        yield start_message[i].msg.sender.eq(message['sender'])
-                        yield start_message[i].msg.payload.eq(message['payload'])
-                        yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
-                        yield start_message[i].msg.barrier.eq(0)
-                        yield start_message[i].valid.eq(1)
-                    else:
-                        yield start_message[i].valid.eq(0)
-            yield
-
-        for i in range(num_pe):
-            yield start_message[i].msg.dest_id.eq(0)
-            yield start_message[i].msg.payload.eq(0)
-            yield start_message[i].msg.sender.eq(i<<log2_int(num_nodes_per_pe))
-            yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
-            yield start_message[i].msg.barrier.eq(1)
-            yield start_message[i].valid.eq(1)
-
-        barrier_done = [0 for i in range(num_pe)]
-
-        while 0 in barrier_done:
-            yield
-            for i in range(num_pe):
-                if (yield start_message[i].ack):
-                    yield start_message[i].valid.eq(0)
-                    barrier_done[i] = 1
-
-        for i in range(num_pe):
-            yield start_message[i].select.eq(0)
-
-    def gen_network_stats(self):
-        num_cycles = 0
-        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
-            netstatsfile.write("Cycle\tNumber of messages sent\n")
-            while not (yield self.global_inactive):
-                num_cycles += 1
-                num_msgs = 0
-                for core in self.cores:
-                    for scatter in core.scatter:
-                        if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
-                            num_msgs += 1
-                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
-                yield
 
 def get_simulators(module, name, *args, **kwargs):
     simulators = []
