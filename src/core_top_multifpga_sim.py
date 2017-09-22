@@ -207,14 +207,14 @@ class Top(Module):
         ]
 
         start_pico = Signal()
+        start_pico.attr.add("no_retiming")
         self.specials += [
-            NoRetiming(start_pico),
             MultiReg(start_pico, start, odomain="sys")
         ]
 
         done_pico = Signal()
+        self.done.attr.add("no_retiming")
         self.specials += [
-            NoRetiming(self.done),
             MultiReg(self.done, done_pico, odomain="pico")
         ]
 
