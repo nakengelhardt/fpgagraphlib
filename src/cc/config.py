@@ -38,7 +38,7 @@ class Config:
         self.scatterkernel = ScatterKernel
 
         max_node = self.addresslayout.max_per_pe(adj_dict)
-        self.init_nodedata = [[convert_record_tuple_to_int((ones(self.addresslayout.nodeidsize), 0), self.addresslayout.node_storage_layout) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, color=ones(self.addresslayout.nodeidsize), active=0) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
 
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         for node in self.adj_dict:

@@ -14,8 +14,8 @@ class FifoCase(SimCase, unittest.TestCase):
                 ('a', 3, DIR_M_TO_S),
                 ('b', 5, DIR_M_TO_S)
             ]
-            self.init = [(1,2), (3,4), (5,6)]
-            self.submodules.dut = RecordFIFO(layout=self.layout, depth=8, init=[convert_record_tuple_to_int(x, self.layout) for x in self.init], delay=3)
+            self.init = [{a=1, b=2}, {a=3, b=4}, {a=5, b=6}]
+            self.submodules.dut = RecordFIFO(layout=self.layout, depth=8, init=[convert_record_to_int(self.layout, **x) for x in self.init], delay=3)
 
     def test_fifo(self):
         self.send = [(7,8), (2,10)]

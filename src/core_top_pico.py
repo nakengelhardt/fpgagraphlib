@@ -18,10 +18,82 @@ from recordfifo import RecordFIFO
 from core_core_tb import Core
 from core_interfaces import Message
 
-class Top(Module):
+class UnCore(Module):
     def __init__(self, config):
         self.config = config
         num_pe = config.addresslayout.num_pe
+
+        self.submodules.cores = [Core(config, 0, config.addresslayout.num_pe)]
+
+        self.global_inactive = Signal()
+        self.comb += self.global_inactive.eq(self.cores[0].global_inactive)
+
+        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
+        layout = Message(**config.addresslayout.get_params()).layout
+        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
+        for i in initdata:
+            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
+        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
+
+        for i in range(num_pe):
+            initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
+            initfifos[i].re.name_override = "initfifos{}_re".format(i)
+            initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
+
+        self.submodules += initfifos
+
+        self.start = Signal()
+        init = Signal()
+        self.done = Signal()
+        self.cycle_count = Signal(32)
+
+        self.sync += [
+            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
+        ]
+
+        self.comb += [
+            self.done.eq(~init & self.global_inactive)
+        ]
+
+        for i in range(num_pe):
+            self.comb += [
+                start_message[i].select.eq(init),
+                start_message[i].msg.eq(initfifos[i].dout),
+                start_message[i].valid.eq(initfifos[i].readable),
+                initfifos[i].re.eq(start_message[i].ack)
+            ]
+
+        self.sync += [
+            If(reduce(or_, [i.readable for i in initfifos]),
+                self.cycle_count.eq(0)
+            ).Elif(~self.global_inactive,
+                self.cycle_count.eq(self.cycle_count + 1)
+            )
+        ]
+
+    def gen_simulation(self, tb):
+        yield self.start.eq(1)
+        yield
+
+    def gen_network_stats(self):
+        num_cycles = 0
+        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
+            netstatsfile.write("Cycle\tNumber of messages sent\n")
+            while not (yield self.global_inactive):
+                num_cycles += 1
+                num_msgs = 0
+                for core in self.cores:
+                    for scatter in core.scatter:
+                        if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
+                            num_msgs += 1
+                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
+                yield
+
+class Top(Module):
+    def __init__(self, config):
+        num_pe = config.addresslayout.num_pe
+
+        self.submodules.uncore = UnCore(config)
 
         self.submodules += config.platform
 
@@ -37,51 +109,6 @@ class Top(Module):
         self.clock_domains.cd_pico = ClockDomain()
         bus_clk, bus_rst = config.platform.getBusClkRst()
         self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
-
-        self.submodules.core = Core(config, 0, num_pe)
-
-        start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
-        layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_tuple_to_int((0, config.addresslayout.num_channels-1, msg['dest_id'], msg['sender'], msg['payload']), layout) for msg in init_message] for init_message in config.init_messages]
-        for i in initdata:
-            i.append(convert_record_tuple_to_int((1, config.addresslayout.num_channels-1, 0, 0, 0), layout))
-        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
-
-        for i in range(num_pe):
-            initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
-            initfifos[i].re.name_override = "initfifos{}_re".format(i)
-            initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-
-        self.submodules += initfifos
-
-        start = Signal()
-        init = Signal()
-        self.done = Signal()
-        self.cycle_count = Signal(32)
-
-        self.sync += [
-            init.eq(start & reduce(or_, [i.readable for i in initfifos]))
-        ]
-
-        self.comb += [
-            self.done.eq(~init & self.core.global_inactive)
-        ]
-
-        for i in range(num_pe):
-            self.comb += [
-                start_message[i].select.eq(init),
-                start_message[i].msg.eq(initfifos[i].dout),
-                start_message[i].valid.eq(initfifos[i].readable),
-                initfifos[i].re.eq(start_message[i].ack)
-            ]
-
-        self.sync += [
-            If(reduce(or_, [i.readable for i in initfifos]),
-                self.cycle_count.eq(0)
-            ).Elif(~self.core.global_inactive,
-                self.cycle_count.eq(self.cycle_count + 1)
-            )
-        ]
 
         hmc_perf_counters = []
         if config.use_hmc:
@@ -105,45 +132,45 @@ class Top(Module):
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
                 self.comb += [
-                    self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued))),
-                    # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                    self.status_regs_transfer.i.eq(Cat(sr for n in self.uncore.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued))),
+                    # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
                     Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
                 ]
             else:
                 status_regs_pico = [Signal(32) for _ in range(4*9)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
                 self.comb += [
-                    self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued))),
-                    # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                    self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued))),
+                    # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
                     Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
                 ]
         else:
             status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
             self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
             self.comb += [
-                self.status_regs_transfer.i.eq(Cat(sr for n in self.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
-                # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
+                self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
+                # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
                 Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
             ]
 
 
-        cycle_count_pico = Signal(len(self.cycle_count))
-        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.cycle_count), "sys", "pico")
+        cycle_count_pico = Signal(len(self.uncore.cycle_count))
+        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.uncore.cycle_count), "sys", "pico")
         self.comb += [
-            self.cycle_count_transfer.i.eq(self.cycle_count),
+            self.cycle_count_transfer.i.eq(self.uncore.cycle_count),
             cycle_count_pico.eq(self.cycle_count_transfer.o)
         ]
 
         start_pico = Signal()
         start_pico.attr.add("no_retiming")
         self.specials += [
-            MultiReg(start_pico, start, odomain="sys")
+            MultiReg(start_pico, self.uncore.start, odomain="sys")
         ]
 
         done_pico = Signal()
-        self.done.attr.add("no_retiming")
+        self.uncore.done.attr.add("no_retiming")
         self.specials += [
-            MultiReg(self.done, done_pico, odomain="pico")
+            MultiReg(self.uncore.done, done_pico, odomain="pico")
         ]
 
         self.bus = config.platform.getBus()
@@ -165,79 +192,6 @@ class Top(Module):
                 start_pico.eq(1)
             )
         ]
-
-class SimTop(Module):
-    def __init__(self, config):
-        self.config = config
-        self.submodules.cores = [Core(config, 0, config.addresslayout.num_pe)]
-
-        self.global_inactive = Signal()
-        self.comb += self.global_inactive.eq(self.cores[0].global_inactive)
-
-
-    def gen_input(self):
-        logger = logging.getLogger('simulation.input')
-        num_pe = self.config.addresslayout.num_pe
-        num_nodes_per_pe = self.config.addresslayout.num_nodes_per_pe
-
-        init_messages = self.config.init_messages
-
-        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-
-        for i in range(num_pe):
-            yield start_message[i].select.eq(1)
-            yield start_message[i].valid.eq(0)
-            yield start_message[i].msg.halt.eq(0)
-
-        while [x for l in init_messages for x in l]:
-            for i in range(num_pe):
-                if (yield start_message[i].ack):
-                    if init_messages[i]:
-                        message = init_messages[i].pop()
-                        yield start_message[i].msg.dest_id.eq(message['dest_id'])
-                        yield start_message[i].msg.sender.eq(message['sender'])
-                        yield start_message[i].msg.payload.eq(message['payload'])
-                        yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
-                        yield start_message[i].msg.barrier.eq(0)
-                        yield start_message[i].valid.eq(1)
-                    else:
-                        yield start_message[i].valid.eq(0)
-            yield
-
-        for i in range(num_pe):
-            yield start_message[i].msg.dest_id.eq(0)
-            yield start_message[i].msg.payload.eq(0)
-            yield start_message[i].msg.sender.eq(i<<log2_int(num_nodes_per_pe))
-            yield start_message[i].msg.roundpar.eq(self.config.addresslayout.num_channels - 1)
-            yield start_message[i].msg.barrier.eq(1)
-            yield start_message[i].valid.eq(1)
-
-        barrier_done = [0 for i in range(num_pe)]
-
-        while 0 in barrier_done:
-            yield
-            for i in range(num_pe):
-                if (yield start_message[i].ack):
-                    yield start_message[i].valid.eq(0)
-                    barrier_done[i] = 1
-
-        for i in range(num_pe):
-            yield start_message[i].select.eq(0)
-
-    def gen_network_stats(self):
-        num_cycles = 0
-        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
-            netstatsfile.write("Cycle\tNumber of messages sent\n")
-            while not (yield self.global_inactive):
-                num_cycles += 1
-                num_msgs = 0
-                for core in self.cores:
-                    for scatter in core.scatter:
-                        if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
-                            num_msgs += 1
-                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
-                yield
-
 
 def export(config, filename='top.v'):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
@@ -268,14 +222,13 @@ def get_simulators(module, name, *args, **kwargs):
 
 def sim(config):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
-    tb = SimTop(config)
+    tb = UnCore(config)
     tb.submodules += config.platform
     generators = []
 
     if config.use_hmc:
         generators.extend(config.platform.getSimGenerators(config.adj_val))
 
-    generators.extend([tb.gen_input()])
     generators.extend([core.gen_barrier_monitor(tb) for core in tb.cores])
     generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
     generators.extend(get_simulators(tb, 'gen_simulation', tb))

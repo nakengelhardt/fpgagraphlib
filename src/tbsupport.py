@@ -33,15 +33,14 @@ def convert_int_to_record(n, record):
         curr_idx += length
     return res
 
-def convert_record_tuple_to_int(t, record):
+def convert_record_to_int(record, **kwargs):
     ret = 0
-    data = list(t)
-    for i in reversed(range(len(data))):
-        ret = (ret << record[i][1]) | data[i]
+    for field in record[::-1]:
+        ret = (ret << field[1]) | (kwargs[field[0]] if field[0] in kwargs else 0)
     return ret
 
 def ones(bits):
     ret = 0
     for i in range(bits):
-        ret = (ret << 1) | 1 
+        ret = (ret << 1) | 1
     return ret

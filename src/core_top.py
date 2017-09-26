@@ -27,21 +27,21 @@ class Top(Module):
     def __init__(self, config, rx, tx):
         self.config = config
         num_pe = config.addresslayout.num_pe
-        
+
         self.submodules.core = Core(config)
-        
+
         start_message = [self.core.network.arbiter[i].start_message for i in range(num_pe)]
         layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_tuple_to_int((0, 1, msg['dest_id'], msg['sender'], msg['payload']), layout) for msg in init_message] for init_message in config.init_messages]
+        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
         for i in initdata:
-            i.append(convert_record_tuple_to_int((1, 1, 0, 0, 0), layout))
+            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
         initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
-        
+
         for i in range(num_pe):
             initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
             initfifos[i].re.name_override = "initfifos{}_re".format(i)
             initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-            
+
         self.submodules += initfifos
 
         init = Signal()
@@ -166,10 +166,10 @@ def export(config, filename='top.v'):
     m.tx_clk.name_override="chnl_tx_clk"
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     so.update(migen.build.xilinx.common.xilinx_s7_special_overrides)
-    verilog.convert(m, 
-                    name="top", 
-                    ios=( { getattr(combined_interface_rx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} 
-                        | {getattr(combined_interface_tx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]} 
+    verilog.convert(m,
+                    name="top",
+                    ios=( { getattr(combined_interface_rx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]}
+                        | {getattr(combined_interface_tx, name) for name in ["start", "ack", "last", "len", "off", "data", "data_valid", "data_ren"]}
                         | {m.rx_clk, m.tx_clk, m.ext_clk, m.ext_rst}),
                     special_overrides=so
                     ).write(filename)
@@ -182,13 +182,13 @@ def sim(config):
     generators = []
     generators.extend([riffa.gen_channel_write(rx, [1])])
     generators.extend([riffa.gen_channel_read(tx)])
-    
+
     # generators.extend([tb.core.gen_barrier_monitor()])
     generators.extend([s.get_neighbors.gen_selfcheck(tb.core, config.adj_dict, quiet=True) for s in tb.core.scatter])
     # generators.extend([a.gen_selfcheck(tb.core, quiet=True) for a in tb.core.network.arbiter])
     generators.extend([a.applykernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.apply])
     # generators.extend([a.scatterkernel.gen_selfcheck(tb.core, quiet=False) for a in tb.core.scatter])
-    
+
     # generators.extend([a.gen_stats(tb.core) for a in tb.core.apply])
     # generators.extend([tb.core.gen_network_stats()])
     run_simulation(tb, generators)#, vcd_name="tb.vcd")
@@ -218,13 +218,13 @@ def main():
     parser.add_argument('command', help="one of 'sim' or 'export'")
     parser.add_argument('-o', '--output', help="output file name to save verilog exprt (for command 'export')")
     args = parser.parse_args()
-    
+
     if args.seed:
         s = args.seed
     else:
         s = 42
     random.seed(s)
-        
+
     if args.graphfile:
         graphfile = open(args.graphfile)
         adj_dict = read_graph(graphfile)
@@ -256,7 +256,7 @@ def main():
         if args.output:
             filename = args.output
         export(config, filename=filename)
-    
+
 
 if __name__ == '__main__':
     main()
