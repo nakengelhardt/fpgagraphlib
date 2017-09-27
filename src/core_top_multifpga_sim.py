@@ -110,7 +110,7 @@ class UnCore(Module):
 
     def gen_network_stats(self):
         num_cycles = 0
-        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
+        with open("{}.net_stats.{}pe.{}fpga.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.num_fpga), 'w') as netstatsfile:
             netstatsfile.write("Cycle\tNumber of messages sent\n")
             while not (yield self.global_inactive):
                 num_cycles += 1
@@ -211,7 +211,7 @@ def sim(config):
 
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
-def export(config, filename='top_multi.v'):
+def export(config, filename='top.v'):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
     m = Top(config)
@@ -233,7 +233,7 @@ def main():
         logger.info("Starting Simulation")
         sim(config)
     if args.command=='export':
-        filename = "top_multi.v"
+        filename = "top.v"
         if args.output:
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
