@@ -16,7 +16,7 @@ from pico import PicoPlatform
 
 from core_init import init_parse
 
-from recordfifo import RecordFIFO
+from recordfifo import *
 from core_core_tb import Core
 from core_interfaces import Message
 
@@ -43,16 +43,16 @@ class UnCore(Module):
             ext_valid_channel_out = Array(core.network.external_network_interface_out[i].valid for core in self.cores)
             ext_ack_channel_out = Array(core.network.external_network_interface_out[i].ack for core in self.cores)
 
-            fifos = [InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8, name="ext_link_to_{}".format(core)) for core in range(self.cores)]
+            fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out[i].layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
             self.submodules += fifos
 
-            for core in range(self.cores):
-                fifos[core].dout.connect(core.network.external_network_interface_in[i])
+            for core in range(config.addresslayout.num_fpga):
+                fifos[core].dout.connect(self.cores[core].network.external_network_interface_in[i])
 
-            ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in self.cores)
-            ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in self.cores)
-            ext_valid_channel_in = Array(fifos[core].din.valid for core in self.cores)
-            ext_ack_channel_in = Array(fifos[core].din.ack for core in self.cores)
+            ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in range(config.addresslayout.num_fpga))
+            ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
+            ext_valid_channel_in = Array(fifos[core].din.valid for core in range(config.addresslayout.num_fpga))
+            ext_ack_channel_in = Array(fifos[core].din.ack for core in range(config.addresslayout.num_fpga))
 
             self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 
