@@ -43,10 +43,16 @@ class UnCore(Module):
             ext_valid_channel_out = Array(core.network.external_network_interface_out[i].valid for core in self.cores)
             ext_ack_channel_out = Array(core.network.external_network_interface_out[i].ack for core in self.cores)
 
-            ext_msg_channel_in = Array(core.network.external_network_interface_in[i].msg.raw_bits() for core in self.cores)
-            ext_dest_pe_channel_in = Array(core.network.external_network_interface_in[i].dest_pe for core in self.cores)
-            ext_valid_channel_in = Array(core.network.external_network_interface_in[i].valid for core in self.cores)
-            ext_ack_channel_in = Array(core.network.external_network_interface_in[i].ack for core in self.cores)
+            fifos = [InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8, name="ext_link_to_{}".format(core)) for core in range(self.cores)]
+            self.submodules += fifos
+
+            for core in range(self.cores):
+                fifos[core].dout.connect(core.network.external_network_interface_in[i])
+
+            ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in self.cores)
+            ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in self.cores)
+            ext_valid_channel_in = Array(fifos[core].din.valid for core in self.cores)
+            ext_ack_channel_in = Array(fifos[core].din.ack for core in self.cores)
 
             self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 
