@@ -39,7 +39,7 @@ class Apply(Module):
 
         # local node data storage
         if init_nodedata == None:
-            init_nodedata = [0 for _ in config.adj_idx]
+            init_nodedata = [0 for _ in config.adj_idx[pe_id]]
         self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), max(2, len(init_nodedata)+1), init=init_nodedata, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)

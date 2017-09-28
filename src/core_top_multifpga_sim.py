@@ -47,7 +47,7 @@ class UnCore(Module):
             self.submodules += fifos
 
             for core in range(config.addresslayout.num_fpga):
-                fifos[core].dout.connect(self.cores[core].network.external_network_interface_in[i])
+                self.comb += fifos[core].dout.connect(self.cores[core].network.external_network_interface_in[i])
 
             ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in range(config.addresslayout.num_fpga))
             ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
