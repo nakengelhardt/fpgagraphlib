@@ -1,6 +1,4 @@
 from migen.fhdl import verilog
-import migen.build.xilinx.common
-
 from migen import *
 from migen.genlib.roundrobin import *
 from migen.genlib.cdc import *
@@ -12,13 +10,11 @@ from operator import and_
 import logging
 import random
 
-from pico import PicoPlatform
-
 from core_init import init_parse
 
 from recordfifo import *
 from core_interfaces import Message
-from fifo_plus_network import Network
+from one_channel_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
 
@@ -97,36 +93,53 @@ class UnCore(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [core.global_inactive for core in self.cores]))
 
-        for i in range(config.addresslayout.num_channels):
-            ext_msg_channel_out = Array(core.network.external_network_interface_out[i].msg.raw_bits() for core in self.cores)
-            ext_dest_pe_channel_out = Array(core.network.external_network_interface_out[i].dest_pe for core in self.cores)
-            ext_valid_channel_out = Array(core.network.external_network_interface_out[i].valid for core in self.cores)
-            ext_ack_channel_out = Array(core.network.external_network_interface_out[i].ack for core in self.cores)
+        network_round = Signal(config.addresslayout.channel_bits)
+        next_round = Signal(config.addresslayout.channel_bits)
+        proceed = Signal()
 
-            fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out[i].layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
-            self.submodules += fifos
+        self.comb += [
+            proceed.eq(reduce(and_, [core.network.local_network_round == next_round for core in self.cores])),
+            If(network_round < config.addresslayout.num_channels - 1,
+                next_round.eq(network_round + 1)
+            ).Else(
+                next_round.eq(0)
+            ),
+            [core.network.ext_network_current_round.eq(network_round) for core in self.cores]
+        ]
 
-            for core in range(config.addresslayout.num_fpga):
-                self.comb += fifos[core].dout.connect(self.cores[core].network.external_network_interface_in[i])
+        self.sync += If(proceed,
+            network_round.eq(next_round)
+        )
 
-            ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in range(config.addresslayout.num_fpga))
-            ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
-            ext_valid_channel_in = Array(fifos[core].din.valid for core in range(config.addresslayout.num_fpga))
-            ext_ack_channel_in = Array(fifos[core].din.ack for core in range(config.addresslayout.num_fpga))
+        ext_msg_channel_out = Array(core.network.external_network_interface_out.msg.raw_bits() for core in self.cores)
+        ext_dest_pe_channel_out = Array(core.network.external_network_interface_out.dest_pe for core in self.cores)
+        ext_valid_channel_out = Array(core.network.external_network_interface_out.valid for core in self.cores)
+        ext_ack_channel_out = Array(core.network.external_network_interface_out.ack for core in self.cores)
 
-            self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
+        fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out.layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
+        self.submodules += fifos
 
-            self.submodules.adrlook = AddressLookup(config)
+        for core in range(config.addresslayout.num_fpga):
+            self.comb += fifos[core].dout.connect(self.cores[core].network.external_network_interface_in)
 
-            self.comb += [
-                [self.roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
-                self.roundrobin.ce.eq(1),
-                self.adrlook.pe_adr_in.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
-                ext_msg_channel_in[self.adrlook.fpga_out].eq(ext_msg_channel_out[self.roundrobin.grant]),
-                ext_dest_pe_channel_in[self.adrlook.fpga_out].eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
-                ext_valid_channel_in[self.adrlook.fpga_out].eq(ext_valid_channel_out[self.roundrobin.grant]),
-                ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
-            ]
+        ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in range(config.addresslayout.num_fpga))
+        ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
+        ext_valid_channel_in = Array(fifos[core].din.valid for core in range(config.addresslayout.num_fpga))
+        ext_ack_channel_in = Array(fifos[core].din.ack for core in range(config.addresslayout.num_fpga))
+
+        self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
+
+        self.submodules.adrlook = AddressLookup(config)
+
+        self.comb += [
+            [self.roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
+            self.roundrobin.ce.eq(1),
+            self.adrlook.pe_adr_in.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
+            ext_msg_channel_in[self.adrlook.fpga_out].eq(ext_msg_channel_out[self.roundrobin.grant]),
+            ext_dest_pe_channel_in[self.adrlook.fpga_out].eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
+            ext_valid_channel_in[self.adrlook.fpga_out].eq(ext_valid_channel_out[self.roundrobin.grant]),
+            ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
+        ]
 
         start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
         layout = Message(**config.addresslayout.get_params()).layout
@@ -188,74 +201,7 @@ class UnCore(Module):
                 netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
                 yield
 
-class Top(Module):
-    def __init__(self, config):
-        self.config = config
-        num_pe = config.addresslayout.num_pe
-
-        self.submodules += config.platform
-
-        self.clock_domains.cd_sys = ClockDomain()
-        sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
-        # extra_clk = config.platform.getExtraClk()
-        self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
-
-        # self.clock_domains.cd_pcie = ClockDomain()
-        # clk, rst = config.platform.getStreamClkRst()
-        # self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
-
-        self.clock_domains.cd_pico = ClockDomain()
-        bus_clk, bus_rst = config.platform.getBusClkRst()
-        self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
-
-        self.submodules.uncore = UnCore(config)
-
-        status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
-        self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-        self.comb += [
-            self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
-            # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-            Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-        ]
-
-        cycle_count_pico = Signal(len(self.uncore.cycle_count))
-        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.uncore.cycle_count), "sys", "pico")
-        self.comb += [
-            self.cycle_count_transfer.i.eq(self.uncore.cycle_count),
-            cycle_count_pico.eq(self.cycle_count_transfer.o)
-        ]
-
-        start_pico = Signal()
-        start_pico.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(start_pico, self.uncore.start, odomain="sys")
-        ]
-
-        done_pico = Signal()
-        self.uncore.done.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(self.uncore.done, done_pico, odomain="pico")
-        ]
-
-        self.bus = config.platform.getBus()
-
-        self.sync.pico += [
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
-                self.bus.PicoDataOut.eq(cycle_count_pico)
-            ),
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
-                self.bus.PicoDataOut.eq(done_pico)
-            ),
-            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
-                self.bus.PicoDataOut.eq(csr)
-            ) for i, csr in enumerate(status_regs_pico)],
-            If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
-                start_pico.eq(1)
-            )
-        ]
-
 def sim(config):
-
     tb = UnCore(config)
 
     generators = []
@@ -269,16 +215,12 @@ def sim(config):
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
 def export(config, filename='top.v'):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
-    m = Top(config)
+    m = UnCore(config)
 
-    so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     verilog.convert(m,
-                    name="echo",
-                    ios=config.platform.get_ios(),
-                    special_overrides=so,
-                    create_clock_domains=False
+                    name="top",
+                    ios={m.start, m.done, m.cycle_count}
                     ).write(filename)
 
 def main():

@@ -13,6 +13,15 @@ class SimCase:
     def run_with(self, generators, **kwargs):
         run_simulation(self.tb, generators, **kwargs)
 
+def get_simulators(module, name, *args, **kwargs):
+    simulators = []
+    if hasattr(module, name):
+        simulators.append(getattr(module, name)(*args, **kwargs))
+    for _, submodule in module._submodules:
+            for simulator in get_simulators(submodule, name, *args, **kwargs):
+                    simulators.append(simulator)
+    return simulators
+
 def convert_float_to_32b_int(f):
     return struct.unpack("I", struct.pack("f", f))[0]
 
@@ -44,3 +53,4 @@ def ones(bits):
     for i in range(bits):
         ret = (ret << 1) | 1
     return ret
+
