@@ -131,6 +131,12 @@ def init_parse(args=None):
     kwargs["num_channels"] = 3
     kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
 
+    if "num_fpga" not in kwargs:
+        kwargs["num_fpga"] = 1
+
+    if "num_pe_per_fpga" not in kwargs:
+        kwargs["num_pe_per_fpga"] = (kwargs["num_pe"] + kwargs["num_fpga"] - 1)//kwargs["num_fpga"]
+
     algo_config = algo.Config(adj_dict, **kwargs)
 
     logger.info("Algorithm: " + algo_config.name)
