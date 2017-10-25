@@ -106,7 +106,7 @@ class NeighborsHMC(Module):
 
         self.sync += [
             If(self.neighbor_in.ack,
-                self.neighbor_in.connect(neighbor_in_p, leave_out="ack"),
+                self.neighbor_in.connect(neighbor_in_p, omit="ack"),
                 end_node_idx_p.eq(self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << 2))
             )
         ]

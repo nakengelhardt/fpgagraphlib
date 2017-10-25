@@ -54,5 +54,5 @@ class BarrierDistributor(Module):
                 self.network_interface_out.msg.halt.eq(0),
                 self.network_interface_in.ack.eq(self.network_interface_out.ack)
             ),
-            self.network_interface_in.connect(self.network_interface_out, leave_out=["ack", "dest_id", "dest_pe", "halt"])
+            self.network_interface_in.connect(self.network_interface_out, omit=["ack", "dest_id", "dest_pe", "halt"])
         ]

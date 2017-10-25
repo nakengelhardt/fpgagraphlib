@@ -167,7 +167,7 @@ class InterfaceFIFO(Module):
         self.submodules.fifo = RecordFIFO(datalayout, depth)
 
         self.comb += [
-            self.din.connect(self.fifo.din, leave_out={"valid", "ack"}),
+            self.din.connect(self.fifo.din, omit={"valid", "ack"}),
             self.din.ack.eq(self.fifo.writable),
             self.fifo.we.eq(self.din.valid),
             self.fifo.dout.connect(self.dout),
@@ -188,7 +188,7 @@ class InterfaceFIFOBuffered(Module):
         self.submodules.fifo = RecordFIFOBuffered(datalayout, depth)
 
         self.comb += [
-            self.din.connect(self.fifo.din, leave_out={"valid", "ack"}),
+            self.din.connect(self.fifo.din, omit={"valid", "ack"}),
             self.din.ack.eq(self.fifo.writable),
             self.fifo.we.eq(self.din.valid),
             self.fifo.dout.connect(self.dout),
