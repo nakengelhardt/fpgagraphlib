@@ -89,58 +89,36 @@ class InitFIFO(Module, _FIFOInterface):
         ]
 
 class RecordFIFO(Module):
-    def __init__(self, layout, depth, init=None, delay=0):
+    def __init__(self, layout, depth, init=None, name=None):
         self.we = Signal()
         self.writable = Signal()  # not full
         self.re = Signal()
         self.readable = Signal()  # not empty
 
-        self.din = Record(layout)
-        self.dout = Record(layout)
+        self.din = Record(layout, name= (name + "_din") if name else None)
+        self.dout = Record(layout, name= (name + "_dout") if name else None)
         self.width = len(self.din.raw_bits())
 
         self.submodules.fifo = InitFIFO(self.width, depth, init=init)
 
-        if delay > 0:
-            fifolayout = [
-                ("din", len(self.din.raw_bits())),
-                ("we", 1)
-            ]
-            s_in = Record(fifolayout)
-            s_out = Record(fifolayout)
-            self.submodules.delay = Delay(s_in.raw_bits(), delay)
-            self.comb += [
-                s_out.raw_bits().eq(self.delay.s_out),
-                self.delay.ce.eq(self.fifo.writable),
-                s_in.din.eq(self.din.raw_bits()),
-                s_in.we.eq(self.we),
-                self.fifo.din.eq(s_out.din),
-                self.fifo.we.eq(s_out.we),
-                self.writable.eq(self.fifo.writable),
-                self.dout.raw_bits().eq(self.fifo.dout),
-                self.readable.eq(self.fifo.readable),
-                self.fifo.re.eq(self.re)
-            ]
-
-        else:
-            self.comb += [
-                self.fifo.din.eq(self.din.raw_bits()),
-                self.writable.eq(self.fifo.writable),
-                self.fifo.we.eq(self.we),
-                self.dout.raw_bits().eq(self.fifo.dout),
-                self.readable.eq(self.fifo.readable),
-                self.fifo.re.eq(self.re)
-            ]
+        self.comb += [
+            self.fifo.din.eq(self.din.raw_bits()),
+            self.writable.eq(self.fifo.writable),
+            self.fifo.we.eq(self.we),
+            self.dout.raw_bits().eq(self.fifo.dout),
+            self.readable.eq(self.fifo.readable),
+            self.fifo.re.eq(self.re)
+        ]
 
 class RecordFIFOBuffered(Module):
-    def __init__(self, layout, depth):
+    def __init__(self, layout, depth, name=None):
         self.we = Signal()
         self.writable = Signal()  # not full
         self.re = Signal()
         self.readable = Signal()  # not empty
 
-        self.din = Record(layout)
-        self.dout = Record(layout)
+        self.din = Record(layout, name= (name + "_din") if name else None)
+        self.dout = Record(layout, name= (name + "_dout") if name else None)
         self.width = len(self.din.raw_bits())
 
         self.submodules.fifo = SyncFIFOBuffered(self.width, depth)
@@ -155,10 +133,10 @@ class RecordFIFOBuffered(Module):
         ]
 
 class InterfaceFIFO(Module):
-    def __init__(self, layout, depth):
+    def __init__(self, layout, depth, name=None):
 
-        self.din = Record(layout)
-        self.dout = Record(layout)
+        self.din = Record(layout, name= (name + "_din") if name else None)
+        self.dout = Record(layout, name= (name + "_dout") if name else None)
 
         datalayout = [field for field in layout if (field != "valid") and (field != "ack")]
 
