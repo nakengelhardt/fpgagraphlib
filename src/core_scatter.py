@@ -104,7 +104,7 @@ class Scatter(Module):
 
         # user modification based on edge data
 
-        self.submodules.scatterkernel = config.scatterkernel(config.addresslayout)
+        self.submodules.scatterkernel = config.scatterkernel(config)
 
         self.comb += [
             self.scatterkernel.update_in.raw_bits().eq(self.get_neighbors.neighbor_out.message),

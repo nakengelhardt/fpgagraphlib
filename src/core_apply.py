@@ -203,7 +203,7 @@ class Apply(Module):
         valid3 = Signal()
         data3 = Signal(len(rd_port.dat_r))
 
-        self.submodules.applykernel = config.applykernel(config.addresslayout)
+        self.submodules.applykernel = config.applykernel(config)
         state_in = Record(addresslayout.node_storage_layout)
 
         self.sync += [
@@ -234,7 +234,7 @@ class Apply(Module):
         ]
 
         # User code
-        self.submodules.gatherkernel = config.gatherkernel(config.addresslayout)
+        self.submodules.gatherkernel = config.gatherkernel(config)
 
         self.comb += [
             self.gatherkernel.nodeid_in.eq(dest_node_id3),
@@ -274,7 +274,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=4*len(init_nodedata))
+        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=len(init_nodedata))
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)

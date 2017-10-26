@@ -14,6 +14,7 @@ import logging
 class Config:
     def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
         self.name = "pr"
+        self.total_pr_rounds = 10
 
         logger = logging.getLogger('config')
 

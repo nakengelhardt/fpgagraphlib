@@ -8,29 +8,27 @@ from fmul import FMul
 
 import logging
 
-total_pr_rounds = 30
-
 class ApplyKernel(Module):
-    def __init__(self, addresslayout):
-        nodeidsize = addresslayout.nodeidsize
-        floatsize = addresslayout.floatsize
+    def __init__(self, config):
+        nodeidsize = config.addresslayout.nodeidsize
+        floatsize = config.addresslayout.floatsize
 
         self.nodeid_in = Signal(nodeidsize)
-        self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.valid_in = Signal()
-        self.round_in = Signal(addresslayout.channel_bits)
+        self.round_in = Signal(config.addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.ready = Signal()
 
         self.nodeid_out = Signal(nodeidsize)
-        self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.state_out = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_valid = Signal()
         self.state_barrier = Signal()
 
-        self.update_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
-        self.update_round = Signal(addresslayout.channel_bits)
+        self.update_round = Signal(config.addresslayout.channel_bits)
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
@@ -40,7 +38,7 @@ class ApplyKernel(Module):
 
         # float constants
         const_base = Signal(floatsize)
-        self.comb += const_base.eq(addresslayout.const_base) # init to 0.15/num_nodes
+        self.comb += const_base.eq(config.addresslayout.const_base) # init to 0.15/num_nodes
         const_0_85 = Signal(floatsize)
         self.comb += const_0_85.eq(0x3f59999a)
 
@@ -89,7 +87,7 @@ class ApplyKernel(Module):
 
         m_sender = [Signal(nodeidsize) for _ in range(10)]
         m_barrier = [Signal() for _ in range(10)]
-        m_round = [Signal(addresslayout.channel_bits) for _ in range(10)]
+        m_round = [Signal(config.addresslayout.channel_bits) for _ in range(10)]
 
         self.sync += If(p2_ce, [
             m_sender[0].eq(self.nodeid_in),
@@ -134,7 +132,7 @@ class ApplyKernel(Module):
             if (yield self.update_valid) and (yield self.update_ack):
                 num_messages_out += 1
                 logger.debug("{}: Node {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
-                if out_level >= total_pr_rounds:
+                if out_level >= tb.config.total_pr_rounds:
                     logger.warning("{}: message sent after inactivity level reached".format(num_cycles))
             if (yield self.barrier_in) and (yield self.ready):
                 in_level += 1

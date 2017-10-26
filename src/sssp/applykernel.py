@@ -4,25 +4,25 @@ from migen.genlib.record import *
 from sssp.interfaces import update_layout, node_storage_layout
 
 class ApplyKernel(Module):
-    def __init__(self, addresslayout):
-        nodeidsize = addresslayout.nodeidsize
+    def __init__(self, config):
+        nodeidsize = config.addresslayout.nodeidsize
 
         self.nodeid_in = Signal(nodeidsize)
-        self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.valid_in = Signal()
-        self.round_in = Signal(addresslayout.channel_bits)
+        self.round_in = Signal(config.addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.ready = Signal()
 
         self.nodeid_out = Signal(nodeidsize)
-        self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.state_out = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_valid = Signal()
         self.state_barrier = Signal()
 
-        self.update_out = Record(set_layout_parameters(update_layout, **addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
-        self.update_round = Signal(addresslayout.channel_bits)
+        self.update_round = Signal(config.addresslayout.channel_bits)
         self.barrier_out = Signal()
         self.update_ack = Signal()
 

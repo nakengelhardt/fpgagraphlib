@@ -5,21 +5,21 @@ from bfs.interfaces import payload_layout
 
 
 class ScatterKernel(Module):
-    def __init__(self, addresslayout):
+    def __init__(self, config):
 
-        self.update_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-        self.num_neighbors_in = Signal(addresslayout.edgeidsize)
-        self.neighbor_in = Signal(addresslayout.nodeidsize)
-        self.sender_in = Signal(addresslayout.nodeidsize)
-        self.round_in = Signal(addresslayout.channel_bits)
+        self.update_in = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.num_neighbors_in = Signal(config.addresslayout.edgeidsize)
+        self.neighbor_in = Signal(config.addresslayout.nodeidsize)
+        self.sender_in = Signal(config.addresslayout.nodeidsize)
+        self.round_in = Signal(config.addresslayout.channel_bits)
         self.barrier_in = Signal()
         self.valid_in = Signal()
         self.ready = Signal()
 
-        self.message_out = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-        self.neighbor_out = Signal(addresslayout.nodeidsize)
-        self.sender_out = Signal(addresslayout.nodeidsize)
-        self.round_out = Signal(addresslayout.channel_bits)
+        self.message_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.neighbor_out = Signal(config.addresslayout.nodeidsize)
+        self.sender_out = Signal(config.addresslayout.nodeidsize)
+        self.round_out = Signal(config.addresslayout.channel_bits)
         self.valid_out = Signal()
         self.message_ack = Signal()
         self.barrier_out = Signal()

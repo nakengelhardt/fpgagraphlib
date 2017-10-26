@@ -8,23 +8,21 @@ from fmul import FMul
 
 import logging
 
-total_pr_rounds = 30
-
 class GatherKernel(Module):
-    def __init__(self, addresslayout):
-        nodeidsize = addresslayout.nodeidsize
-        floatsize = addresslayout.floatsize
+    def __init__(self, config):
+        nodeidsize = config.addresslayout.nodeidsize
+        floatsize = config.addresslayout.floatsize
 
         self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(payload_layout, **addresslayout.get_params()))
-        self.state_in = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.message_in = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.valid_in = Signal()
         self.ready = Signal()
 
         self.nodeid_out = Signal(nodeidsize)
-        self.state_out = Record(set_layout_parameters(node_storage_layout, **addresslayout.get_params()))
+        self.state_out = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_valid = Signal()
         self.state_ack = Signal()
 
@@ -41,7 +39,7 @@ class GatherKernel(Module):
         n_nrecvd = Signal(nodeidsize)
         n_nneighbors = Signal(nodeidsize)
         n_barrier = Signal()
-        n_round = Signal(addresslayout.channel_bits)
+        n_round = Signal(config.addresslayout.channel_bits)
         n_valid = Signal()
         n_allrecvd = Signal()
         n_init = Signal()
@@ -59,7 +57,7 @@ class GatherKernel(Module):
 
         i_nrecvd = [Signal(nodeidsize) for _ in range(3)]
         i_nneighbors = [Signal(nodeidsize) for _ in range(3)]
-        i_round = [Signal(addresslayout.channel_bits) for _ in range(3)]
+        i_round = [Signal(config.addresslayout.channel_bits) for _ in range(3)]
         i_nodeid = [Signal(nodeidsize) for _ in range(3)]
         i_init = [Signal() for _ in range(3)]
         i_notend = [Signal() for _ in range(3)]
@@ -67,10 +65,10 @@ class GatherKernel(Module):
         self.sync += If(p1_ce, [
             i_nrecvd[0].eq(self.state_in.nrecvd + 1),
             i_nneighbors[0].eq(self.state_in.nneighbors),
-            i_round[0].eq(self.level_in[0:addresslayout.channel_bits]),
+            i_round[0].eq(self.level_in[0:config.addresslayout.channel_bits]),
             i_nodeid[0].eq(self.nodeid_in),
             i_init[0].eq(self.level_in == 0),
-            i_notend[0].eq(self.level_in < total_pr_rounds)
+            i_notend[0].eq(self.level_in < config.total_pr_rounds)
         ] + [
             i_nrecvd[i].eq(i_nrecvd[i-1]) for i in range(1,3)
         ] + [
