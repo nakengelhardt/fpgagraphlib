@@ -2,6 +2,8 @@ from migen import *
 from migen.fhdl import verilog
 
 import struct
+import os
+from contextlib import contextmanager
 
 class SimCase:
     def setUp(self, *args, **kwargs):
@@ -54,3 +56,11 @@ def ones(bits):
         ret = (ret << 1) | 1
     return ret
 
+@contextmanager
+def cd(newdir):
+    prevdir = os.getcwd()
+    os.chdir(os.path.expanduser(newdir))
+    try:
+        yield
+    finally:
+        os.chdir(prevdir)

@@ -9,6 +9,7 @@ from operator import and_
 
 import logging
 import random
+import os
 
 from core_init import init_parse
 
@@ -49,6 +50,46 @@ class Core(Module):
         # state of calculation
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
+
+        start_message = [a.start_message for a in self.network.arbiter]
+        layout = Message(**config.addresslayout.get_params()).layout
+        initdata = []
+        for i in range(pe_start, pe_end):
+            initdata.append([convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in config.init_messages[i]])
+        for i in initdata:
+            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
+        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini, name="initfifo_"+str(i)) for i, ini in enumerate(initdata)]
+
+        self.submodules += initfifos
+
+        self.start = Signal()
+        init = Signal()
+        self.done = Signal()
+        self.cycle_count = Signal(32)
+
+        self.sync += [
+            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
+        ]
+
+        self.comb += [
+            self.done.eq(~init & self.global_inactive)
+        ]
+
+        for i, initfifo in enumerate(initfifos):
+            self.comb += [
+                start_message[i].select.eq(init),
+                start_message[i].msg.eq(initfifo.dout),
+                start_message[i].valid.eq(initfifo.readable),
+                initfifo.re.eq(start_message[i].ack)
+            ]
+
+        self.sync += [
+            If(init,
+                self.cycle_count.eq(0)
+            ).Elif(~self.global_inactive,
+                self.cycle_count.eq(self.cycle_count + 1)
+            )
+        ]
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -115,6 +156,7 @@ class UnCore(Module):
         ext_dest_pe_channel_out = Array(core.network.external_network_interface_out.dest_pe for core in self.cores)
         ext_valid_channel_out = Array(core.network.external_network_interface_out.valid for core in self.cores)
         ext_ack_channel_out = Array(core.network.external_network_interface_out.ack for core in self.cores)
+        ext_special_channel_out = Array(core.network.external_network_interface_out.special for core in self.cores)
 
         fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out.layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
         self.submodules += fifos
@@ -126,6 +168,7 @@ class UnCore(Module):
         ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
         ext_valid_channel_in = Array(fifos[core].din.valid for core in range(config.addresslayout.num_fpga))
         ext_ack_channel_in = Array(fifos[core].din.ack for core in range(config.addresslayout.num_fpga))
+        ext_special_channel_in = Array(fifos[core].din.special for core in range(config.addresslayout.num_fpga))
 
         self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 
@@ -137,51 +180,19 @@ class UnCore(Module):
             self.adrlook.pe_adr_in.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
             ext_msg_channel_in[self.adrlook.fpga_out].eq(ext_msg_channel_out[self.roundrobin.grant]),
             ext_dest_pe_channel_in[self.adrlook.fpga_out].eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
+            ext_special_channel_in[self.adrlook.fpga_out].eq(ext_special_channel_out[self.roundrobin.grant]),
             ext_valid_channel_in[self.adrlook.fpga_out].eq(ext_valid_channel_out[self.roundrobin.grant]),
             ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
         ]
 
-        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-        layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
-        for i in initdata:
-            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
-        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
-
-        for i in range(config.addresslayout.num_pe):
-            initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
-            initfifos[i].re.name_override = "initfifos{}_re".format(i)
-            initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-
-        self.submodules += initfifos
-
         self.start = Signal()
-        init = Signal()
         self.done = Signal()
         self.cycle_count = Signal(32)
 
-        self.sync += [
-            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
-        ]
-
         self.comb += [
-            self.done.eq(~init & self.global_inactive)
-        ]
-
-        for i in range(config.addresslayout.num_pe):
-            self.comb += [
-                start_message[i].select.eq(init),
-                start_message[i].msg.eq(initfifos[i].dout),
-                start_message[i].valid.eq(initfifos[i].readable),
-                initfifos[i].re.eq(start_message[i].ack)
-            ]
-
-        self.sync += [
-            If(reduce(or_, [i.readable for i in initfifos]),
-                self.cycle_count.eq(0)
-            ).Elif(~self.global_inactive,
-                self.cycle_count.eq(self.cycle_count + 1)
-            )
+            [core.start.eq(self.start) for core in self.cores],
+            self.done.eq(reduce(and_, [core.done for core in self.cores])),
+            self.cycle_count.eq(self.cores[0].cycle_count)
         ]
 
     def gen_simulation(self, tb):
@@ -214,7 +225,7 @@ def sim(config):
 
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
-def export(config, filename='top.v'):
+def export_one(config, filename='top.v'):
 
     m = UnCore(config)
 
@@ -222,6 +233,20 @@ def export(config, filename='top.v'):
                     name="top",
                     ios={m.start, m.done, m.cycle_count}
                     ).write(filename)
+
+
+def export(config, filename='top.v'):
+
+    m = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
+
+    for i in range(config.addresslayout.num_fpga):
+        iname = filename + "_" + str(i)
+        os.makedirs(iname, exist_ok=True)
+        with cd(iname):
+            verilog.convert(m[i],
+                            name="top",
+                            ios={m[i].start, m[i].done, m[i].cycle_count}
+                            ).write(iname + ".v")
 
 def main():
     args, config = init_parse()
@@ -231,11 +256,17 @@ def main():
     if args.command=='sim':
         logger.info("Starting Simulation")
         sim(config)
-    if args.command=='export':
+    if args.command=='export_one':
         filename = "top.v"
         if args.output:
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
+        export_one(config, filename=filename)
+    if args.command=='export':
+        filename = "top"
+        if args.output:
+            filename = args.output
+        logger.info("Exporting design to files {}_[0-{}].v".format(filename, config.addresslayout.num_fpga-1))
         export(config, filename=filename)
 
 if __name__ == '__main__':
