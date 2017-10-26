@@ -111,6 +111,6 @@ class Barriercounter(Module):
                 If(apply_interface_in_fifo.dout.valid,
                     NextValue(self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)] + 1)
                 ),
-                NextState("CHK_BARRIER")
+                NextState("PASS_BARRIER")
             )
         )
