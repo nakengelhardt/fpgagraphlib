@@ -156,19 +156,9 @@ class UnCore(Module):
         ext_dest_pe_channel_out = Array(core.network.external_network_interface_out.dest_pe for core in self.cores)
         ext_valid_channel_out = Array(core.network.external_network_interface_out.valid for core in self.cores)
         ext_ack_channel_out = Array(core.network.external_network_interface_out.ack for core in self.cores)
-        ext_special_channel_out = Array(core.network.external_network_interface_out.special for core in self.cores)
+        ext_broadcast_channel_out = Array(core.network.external_network_interface_out.broadcast for core in self.cores)
 
-        fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out.layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
-        self.submodules += fifos
-
-        for core in range(config.addresslayout.num_fpga):
-            self.comb += fifos[core].dout.connect(self.cores[core].network.external_network_interface_in)
-
-        ext_msg_channel_in = Array(fifos[core].din.msg.raw_bits() for core in range(config.addresslayout.num_fpga))
-        ext_dest_pe_channel_in = Array(fifos[core].din.dest_pe for core in range(config.addresslayout.num_fpga))
-        ext_valid_channel_in = Array(fifos[core].din.valid for core in range(config.addresslayout.num_fpga))
-        ext_ack_channel_in = Array(fifos[core].din.ack for core in range(config.addresslayout.num_fpga))
-        ext_special_channel_in = Array(fifos[core].din.special for core in range(config.addresslayout.num_fpga))
+        self.submodules.fifo = InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out.layout, depth=8)
 
         self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 
@@ -177,12 +167,39 @@ class UnCore(Module):
         self.comb += [
             [self.roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
             self.roundrobin.ce.eq(1),
-            self.adrlook.pe_adr_in.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
-            ext_msg_channel_in[self.adrlook.fpga_out].eq(ext_msg_channel_out[self.roundrobin.grant]),
-            ext_dest_pe_channel_in[self.adrlook.fpga_out].eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
-            ext_special_channel_in[self.adrlook.fpga_out].eq(ext_special_channel_out[self.roundrobin.grant]),
-            ext_valid_channel_in[self.adrlook.fpga_out].eq(ext_valid_channel_out[self.roundrobin.grant]),
-            ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
+            self.fifo.din.msg.raw_bits().eq(ext_msg_channel_out[self.roundrobin.grant]),
+            self.fifo.din.dest_pe.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
+            self.fifo.din.broadcast.eq(ext_broadcast_channel_out[self.roundrobin.grant]),
+            self.fifo.din.valid.eq(ext_valid_channel_out[self.roundrobin.grant]),
+            ext_ack_channel_out[self.roundrobin.grant].eq(self.fifo.din.ack),
+        ]
+
+        got_ack = Signal(config.addresslayout.num_fpga)
+        all_ack = Signal()
+
+        self.sync += [
+            If(self.fifo.dout.valid & self.fifo.dout.broadcast,
+                If(all_ack,
+                    got_ack.eq(0)
+                ).Else(
+                    [got_ack[i].eq(got_ack[i] | self.cores[i].network.external_network_interface_in.ack) for i in range(config.addresslayout.num_fpga)]
+                )
+            )
+        ]
+
+        ext_ack_channel_in = Array(core.network.external_network_interface_in.ack for core in self.cores)
+
+        self.comb += [
+            all_ack.eq(reduce(and_, [got_ack[i] | (self.adrlook.fpga_out == i) for i in range(config.addresslayout.num_fpga)])),
+            self.adrlook.pe_adr_in.eq(self.fifo.dout.dest_pe),
+            [core.network.external_network_interface_in.msg.raw_bits().eq(self.fifo.dout.msg.raw_bits()) for core in self.cores],
+            [core.network.external_network_interface_in.dest_pe.eq(self.fifo.dout.dest_pe) for core in self.cores],
+            [core.network.external_network_interface_in.broadcast.eq(self.fifo.dout.broadcast) for core in self.cores],
+            [self.cores[i].network.external_network_interface_in.valid.eq(self.fifo.dout.valid & (
+            (~self.fifo.dout.broadcast & (self.adrlook.fpga_out == i))
+            | (self.fifo.dout.broadcast & ~(self.adrlook.fpga_out == i) & ~got_ack[i])
+            )) for i in range(config.addresslayout.num_fpga)],
+            self.fifo.dout.ack.eq((~self.fifo.dout.broadcast & ext_ack_channel_in[self.adrlook.fpga_out]) | (self.fifo.dout.broadcast & all_ack))
         ]
 
         self.start = Signal()

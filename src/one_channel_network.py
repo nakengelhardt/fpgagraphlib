@@ -129,6 +129,7 @@ class ExtGuard(Module):
     def __init__(self, config):
         self.network_interface_in_outside = NetworkInterface(name="ext_network_in_outside", **config.addresslayout.get_params())
         self.network_interface_in_inside = NetworkInterface(name="ext_network_in_inside", **config.addresslayout.get_params())
+        self.local_network_round = Signal(config.addresslayout.channel_bits)
 
         in_fifo = InterfaceFIFO(layout=self.network_interface_in_inside.layout, depth=4)
         self.submodules += in_fifo
@@ -140,7 +141,7 @@ class ExtGuard(Module):
 
         self.comb += [
             in_fifo.dout.connect(self.network_interface_in_inside),
-            If(self.network_interface_in_outside.special,
+            If(self.network_interface_in_outside.broadcast,
                 self.network_interface_in_outside.ack.eq(1)
             ).Else(
                 self.network_interface_in_outside.connect(in_fifo.din)
@@ -150,11 +151,11 @@ class ExtGuard(Module):
             ).Else(
                 next_round.eq(0)
             ),
-            proceed.eq(num_fpga_barriers == config.addresslayout.num_fpga)
+            proceed.eq((num_fpga_barriers == (config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
         ]
 
         self.sync += [
-            If(self.network_interface_in_outside.special & self.network_interface_in_outside.valid,
+            If(self.network_interface_in_outside.broadcast & self.network_interface_in_outside.valid,
                 num_fpga_barriers.eq(num_fpga_barriers + 1)
             ),
             If(proceed,
@@ -182,17 +183,11 @@ class ExtGuard(Module):
         )
 
         self.fsm.act("SEND_BARRIERS",
-            self.network_interface_out_outside.special.eq(1),
-            self.network_interface_out_outside.dest_pe.eq(dest_fpga),
+            self.network_interface_out_outside.broadcast.eq(1),
             self.network_interface_out_outside.msg.roundpar.eq(network_round),
             self.network_interface_out_outside.valid.eq(1),
             If(self.network_interface_out_outside.ack,
-                If((dest_fpga + config.addresslayout.num_pe_per_fpga) > config.addresslayout.num_fpga,
-                    NextValue(dest_fpga, 0),
-                    NextState("IDLE")
-                ).Else(
-                    NextValue(dest_fpga, dest_fpga + config.addresslayout.num_pe_per_fpga)
-                )
+                NextState("IDLE")
             )
         )
 

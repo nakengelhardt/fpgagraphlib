@@ -74,7 +74,7 @@ _neighbor_out_layout = [
 _network_layout = [
     ( "msg" , _msg_layout ),
     ( "dest_pe", "peidsize", DIR_M_TO_S ),
-    ( "special", 1, DIR_M_TO_S),
+    ( "broadcast", 1, DIR_M_TO_S),
     ( "valid", 1, DIR_M_TO_S ),
     ( "ack", 1, DIR_S_TO_M)
 ]
