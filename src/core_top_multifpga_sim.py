@@ -54,6 +54,46 @@ class Core(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
 
+        start_message = [a.start_message for a in self.network.arbiter]
+        layout = Message(**config.addresslayout.get_params()).layout
+        initdata = []
+        for i in range(pe_start, pe_end):
+            initdata.append([convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in config.init_messages[i]])
+        for i in initdata:
+            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
+        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini, name="initfifo_"+str(i)) for i, ini in enumerate(initdata)]
+
+        self.submodules += initfifos
+
+        self.start = Signal()
+        init = Signal()
+        self.done = Signal()
+        self.cycle_count = Signal(32)
+
+        self.sync += [
+            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
+        ]
+
+        self.comb += [
+            self.done.eq(~init & self.global_inactive)
+        ]
+
+        for i, initfifo in enumerate(initfifos):
+            self.comb += [
+                start_message[i].select.eq(init),
+                start_message[i].msg.eq(initfifo.dout),
+                start_message[i].valid.eq(initfifo.readable),
+                initfifo.re.eq(start_message[i].ack)
+            ]
+
+        self.sync += [
+            If(init,
+                self.cycle_count.eq(0)
+            ).Elif(~self.global_inactive,
+                self.cycle_count.eq(self.cycle_count + 1)
+            )
+        ]
+
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
@@ -128,47 +168,14 @@ class UnCore(Module):
                 ext_ack_channel_out[self.roundrobin.grant].eq(ext_ack_channel_in[self.adrlook.fpga_out])
             ]
 
-        start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-        layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
-        for i in initdata:
-            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
-        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
-
-        for i in range(config.addresslayout.num_pe):
-            initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
-            initfifos[i].re.name_override = "initfifos{}_re".format(i)
-            initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-
-        self.submodules += initfifos
-
         self.start = Signal()
-        init = Signal()
         self.done = Signal()
         self.cycle_count = Signal(32)
 
-        self.sync += [
-            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
-        ]
-
         self.comb += [
-            self.done.eq(~init & self.global_inactive)
-        ]
-
-        for i in range(config.addresslayout.num_pe):
-            self.comb += [
-                start_message[i].select.eq(init),
-                start_message[i].msg.eq(initfifos[i].dout),
-                start_message[i].valid.eq(initfifos[i].readable),
-                initfifos[i].re.eq(start_message[i].ack)
-            ]
-
-        self.sync += [
-            If(reduce(or_, [i.readable for i in initfifos]),
-                self.cycle_count.eq(0)
-            ).Elif(~self.global_inactive,
-                self.cycle_count.eq(self.cycle_count + 1)
-            )
+            [core.start.eq(self.start) for core in self.cores],
+            self.done.eq(reduce(and_, [core.done for core in self.cores])),
+            self.cycle_count.eq(self.cores[0].cycle_count)
         ]
 
     def gen_simulation(self, tb):
@@ -188,72 +195,6 @@ class UnCore(Module):
                 netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
                 yield
 
-class Top(Module):
-    def __init__(self, config):
-        self.config = config
-        num_pe = config.addresslayout.num_pe
-
-        self.submodules += config.platform
-
-        self.clock_domains.cd_sys = ClockDomain()
-        sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
-        # extra_clk = config.platform.getExtraClk()
-        self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
-
-        # self.clock_domains.cd_pcie = ClockDomain()
-        # clk, rst = config.platform.getStreamClkRst()
-        # self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
-
-        self.clock_domains.cd_pico = ClockDomain()
-        bus_clk, bus_rst = config.platform.getBusClkRst()
-        self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
-
-        self.submodules.uncore = UnCore(config)
-
-        status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
-        self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-        self.comb += [
-            self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
-            # self.status_regs_transfer.i.eq(Cat(sr for n in self.core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-            Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-        ]
-
-        cycle_count_pico = Signal(len(self.uncore.cycle_count))
-        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.uncore.cycle_count), "sys", "pico")
-        self.comb += [
-            self.cycle_count_transfer.i.eq(self.uncore.cycle_count),
-            cycle_count_pico.eq(self.cycle_count_transfer.o)
-        ]
-
-        start_pico = Signal()
-        start_pico.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(start_pico, self.uncore.start, odomain="sys")
-        ]
-
-        done_pico = Signal()
-        self.uncore.done.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(self.uncore.done, done_pico, odomain="pico")
-        ]
-
-        self.bus = config.platform.getBus()
-
-        self.sync.pico += [
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
-                self.bus.PicoDataOut.eq(cycle_count_pico)
-            ),
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
-                self.bus.PicoDataOut.eq(done_pico)
-            ),
-            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
-                self.bus.PicoDataOut.eq(csr)
-            ) for i, csr in enumerate(status_regs_pico)],
-            If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
-                start_pico.eq(1)
-            )
-        ]
-
 def sim(config):
 
     tb = UnCore(config)
@@ -268,18 +209,31 @@ def sim(config):
 
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
-def export(config, filename='top.v'):
+def export_one(config, filename='top.v'):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
-    m = Top(config)
-
-    so = dict(migen.build.xilinx.common.xilinx_special_overrides)
+    m = UnCore(config)
     verilog.convert(m,
                     name="echo",
-                    ios=config.platform.get_ios(),
-                    special_overrides=so,
-                    create_clock_domains=False
+                    ios={m.start, m.done, m.cycle_count}
                     ).write(filename)
+
+def export(config, filename='top'):
+
+    m = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
+
+    for i in range(config.addresslayout.num_fpga):
+        iname = filename + "_" + str(i)
+        os.makedirs(iname, exist_ok=True)
+        with cd(iname):
+            ios={m[i].start, m[i].done, m[i].cycle_count}
+            for j in range(config.addresslayout.num_channels):
+                ios |= set(m[i].network.external_network_interface_in[j].flatten())
+                ios |= set(m[i].network.external_network_interface_out[j].flatten())
+            verilog.convert(m[i],
+                            name="top",
+                            ios=ios
+                            ).write(iname + ".v")
 
 def main():
     args, config = init_parse()
@@ -289,11 +243,17 @@ def main():
     if args.command=='sim':
         logger.info("Starting Simulation")
         sim(config)
-    if args.command=='export':
+    if args.command=='export_one':
         filename = "top.v"
         if args.output:
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
+        export_one(config, filename=filename)
+    if args.command=='export':
+        filename = "top"
+        if args.output:
+            filename = args.output
+        logger.info("Exporting design to files {}_[0-{}].v".format(filename, config.addresslayout.num_fpga-1))
         export(config, filename=filename)
 
 if __name__ == '__main__':
