@@ -126,10 +126,11 @@ class Router(Module):
         ]
 
 class ExtGuard(Module):
-    def __init__(self, config):
+    def __init__(self, config, pe_start):
         self.network_interface_in_outside = NetworkInterface(name="ext_network_in_outside", **config.addresslayout.get_params())
         self.network_interface_in_inside = NetworkInterface(name="ext_network_in_inside", **config.addresslayout.get_params())
         self.local_network_round = Signal(config.addresslayout.channel_bits)
+        self.ext_network_current_round = Signal(config.addresslayout.channel_bits)
 
         in_fifo = InterfaceFIFO(layout=self.network_interface_in_inside.layout, depth=4)
         self.submodules += in_fifo
@@ -140,6 +141,7 @@ class ExtGuard(Module):
         proceed = Signal()
 
         self.comb += [
+            self.ext_network_current_round.eq(network_round),
             in_fifo.dout.connect(self.network_interface_in_inside),
             If(self.network_interface_in_outside.broadcast,
                 self.network_interface_in_outside.ack.eq(1)
@@ -185,6 +187,7 @@ class ExtGuard(Module):
         self.fsm.act("SEND_BARRIERS",
             self.network_interface_out_outside.broadcast.eq(1),
             self.network_interface_out_outside.msg.roundpar.eq(network_round),
+            self.network_interface_out_outside.msg.sender.eq(pe_start),
             self.network_interface_out_outside.valid.eq(1),
             If(self.network_interface_out_outside.ack,
                 NextState("IDLE")
@@ -210,11 +213,13 @@ class Network(Module):
         self.ext_network_current_round = Signal(config.addresslayout.channel_bits)
         self.local_network_round = Signal(config.addresslayout.channel_bits)
 
-        self.submodules.extguard = ExtGuard(config)
+        self.submodules.extguard = ExtGuard(config, pe_start)
 
         self.comb += [
             self.external_network_interface_in.connect(self.extguard.network_interface_in_outside),
-            self.extguard.network_interface_out_outside.connect(self.external_network_interface_out)
+            self.extguard.network_interface_out_outside.connect(self.external_network_interface_out),
+            self.extguard.local_network_round.eq(self.local_network_round),
+            self.ext_network_current_round.eq(self.extguard.ext_network_current_round)
         ]
 
         fifos = [[InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]

@@ -134,24 +134,6 @@ class UnCore(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [core.global_inactive for core in self.cores]))
 
-        network_round = Signal(config.addresslayout.channel_bits)
-        next_round = Signal(config.addresslayout.channel_bits)
-        proceed = Signal()
-
-        self.comb += [
-            proceed.eq(reduce(and_, [core.network.local_network_round == next_round for core in self.cores])),
-            If(network_round < config.addresslayout.num_channels - 1,
-                next_round.eq(network_round + 1)
-            ).Else(
-                next_round.eq(0)
-            ),
-            [core.network.ext_network_current_round.eq(network_round) for core in self.cores]
-        ]
-
-        self.sync += If(proceed,
-            network_round.eq(next_round)
-        )
-
         ext_msg_channel_out = Array(core.network.external_network_interface_out.msg.raw_bits() for core in self.cores)
         ext_dest_pe_channel_out = Array(core.network.external_network_interface_out.dest_pe for core in self.cores)
         ext_valid_channel_out = Array(core.network.external_network_interface_out.valid for core in self.cores)
@@ -163,6 +145,7 @@ class UnCore(Module):
         self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 
         self.submodules.adrlook = AddressLookup(config)
+        self.submodules.adrlook_sender = AddressLookup(config)
 
         self.comb += [
             [self.roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
@@ -190,14 +173,15 @@ class UnCore(Module):
         ext_ack_channel_in = Array(core.network.external_network_interface_in.ack for core in self.cores)
 
         self.comb += [
-            all_ack.eq(reduce(and_, [got_ack[i] | (self.adrlook.fpga_out == i) for i in range(config.addresslayout.num_fpga)])),
+            all_ack.eq(reduce(and_, [got_ack[i] | (self.adrlook_sender.fpga_out == i) for i in range(config.addresslayout.num_fpga)])),
             self.adrlook.pe_adr_in.eq(self.fifo.dout.dest_pe),
+            self.adrlook_sender.pe_adr_in.eq(self.fifo.dout.msg.sender),
             [core.network.external_network_interface_in.msg.raw_bits().eq(self.fifo.dout.msg.raw_bits()) for core in self.cores],
             [core.network.external_network_interface_in.dest_pe.eq(self.fifo.dout.dest_pe) for core in self.cores],
             [core.network.external_network_interface_in.broadcast.eq(self.fifo.dout.broadcast) for core in self.cores],
             [self.cores[i].network.external_network_interface_in.valid.eq(self.fifo.dout.valid & (
             (~self.fifo.dout.broadcast & (self.adrlook.fpga_out == i))
-            | (self.fifo.dout.broadcast & ~(self.adrlook.fpga_out == i) & ~got_ack[i])
+            | (self.fifo.dout.broadcast & (self.adrlook_sender.fpga_out != i) & ~got_ack[i])
             )) for i in range(config.addresslayout.num_fpga)],
             self.fifo.dout.ack.eq((~self.fifo.dout.broadcast & ext_ack_channel_in[self.adrlook.fpga_out]) | (self.fifo.dout.broadcast & all_ack))
         ]
@@ -251,8 +235,7 @@ def export_one(config, filename='top.v'):
                     ios={m.start, m.done, m.cycle_count}
                     ).write(filename)
 
-
-def export(config, filename='top.v'):
+def export(config, filename='top'):
 
     m = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
 
@@ -260,9 +243,12 @@ def export(config, filename='top.v'):
         iname = filename + "_" + str(i)
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
+            ios={m[i].start, m[i].done, m[i].cycle_count}
+            ios |= set(m[i].network.external_network_interface_in.flatten())
+            ios |= set(m[i].network.external_network_interface_out.flatten())
             verilog.convert(m[i],
                             name="top",
-                            ios={m[i].start, m[i].done, m[i].cycle_count}
+                            ios=ios
                             ).write(iname + ".v")
 
 def main():

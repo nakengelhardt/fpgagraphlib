@@ -109,8 +109,8 @@ class Barriercounter(Module):
                 NextValue(self.apply_interface_out.msg.raw_bits(), apply_interface_in_fifo.dout.msg.raw_bits()),
                 NextValue(self.apply_interface_out.valid, apply_interface_in_fifo.dout.valid),
                 If(apply_interface_in_fifo.dout.valid,
-                    NextValue(self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)] + 1)
-                ),
-                NextState("PASS_BARRIER")
+                    NextValue(self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)] + 1),
+                    NextState("PASS_BARRIER")
+                )
             )
         )
