@@ -33,7 +33,7 @@ class Apply(Module):
 
         ####
 
-        apply_interface_in_fifo = InterfaceFIFO(layout=self.apply_interface.layout, depth=2)
+        apply_interface_in_fifo = InterfaceFIFO(layout=self.apply_interface.layout, depth=8)
         self.submodules += apply_interface_in_fifo
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
@@ -69,9 +69,10 @@ class Apply(Module):
         # should pipeline advance?
         upstream_ack = Signal()
         collision_re = Signal()
+        collision_en = Signal()
 
         # count levels
-        self.level = Signal(32)
+        self.level = Signal(8)
 
         ## Stage 1
         # rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
@@ -91,15 +92,6 @@ class Apply(Module):
             barrier.eq(apply_interface_in_fifo.dout.valid & apply_interface_in_fifo.dout.msg.barrier & ~apply_interface_in_fifo.dout.msg.halt),
         ]
 
-        # collision handling (combinatorial)
-        self.submodules.collisiondetector = CollisionDetector(addresslayout)
-
-        self.comb += self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),\
-                     self.collisiondetector.read_adr_valid.eq(valid),\
-                     self.collisiondetector.write_adr.eq(wr_port.adr),\
-                     self.collisiondetector.write_adr_valid.eq(wr_port.we),\
-                     collision_re.eq(self.collisiondetector.re)
-
         ## Stage 2
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
@@ -113,11 +105,9 @@ class Apply(Module):
         apply_barrier2 = Signal()
         state_barrier = Signal()
 
-        num_nodes_in_use = Signal(nodeidsize)
-        num_nodes_in_use_up = Signal(nodeidsize)
         node_idx = Signal(nodeidsize)
         gather_en = Signal()
-        collision_en = Signal()
+        gather_done = Signal()
 
         next_roundpar = Signal(config.addresslayout.channel_bits)
         self.comb += If(roundpar==config.addresslayout.num_channels-1, next_roundpar.eq(0)).Else(next_roundpar.eq(roundpar+1))
@@ -128,7 +118,6 @@ class Apply(Module):
             apply_interface_in_fifo.dout.ack.eq(upstream_ack),
             local_rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),
             NextValue(valid2, valid & collision_re), # insert bubble if collision
-            NextValue(num_nodes_in_use, num_nodes_in_use_up + (valid & collision_re)),
             If(upstream_ack,
                 NextValue(dest_node_id2, dest_node_id),
                 NextValue(sender2, sender),
@@ -145,12 +134,11 @@ class Apply(Module):
             collision_en.eq(1)
         )
         self.fsm.act("FLUSH",
-            local_rd_port.re.eq(upstream_ack),
-            NextValue(num_nodes_in_use, num_nodes_in_use_up),
+            local_rd_port.re.eq(0),
             NextValue(node_idx, pe_id << log2_int(num_nodes_per_pe)),
             apply_interface_in_fifo.dout.ack.eq(0),
             local_rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),
-            If(num_nodes_in_use == 0,
+            If(gather_done,
                 NextState("APPLY")
             ),
             gather_en.eq(1)
@@ -185,15 +173,17 @@ class Apply(Module):
             )
         )
 
-        # collision handling
-
+        # collision handling (combinatorial)
         self.submodules.collisiondetector = CollisionDetector(addresslayout)
 
-        self.comb += self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),\
-                     self.collisiondetector.read_adr_valid.eq(valid & collision_en),\
-                     self.collisiondetector.write_adr.eq(wr_port.adr),\
-                     self.collisiondetector.write_adr_valid.eq(wr_port.we),\
-                     collision_re.eq(self.collisiondetector.re)
+        self.comb += [
+            self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),
+            self.collisiondetector.read_adr_valid.eq(valid & collision_en),
+            self.collisiondetector.write_adr.eq(wr_port.adr),
+            self.collisiondetector.write_adr_valid.eq(wr_port.we & gather_en),
+            collision_re.eq(self.collisiondetector.re),
+            gather_done.eq(self.collisiondetector.all_clear)
+        ]
 
         ## Stage 3
         dest_node_id3 = Signal(nodeidsize)
@@ -259,14 +249,6 @@ class Apply(Module):
             wr_port.we.eq(self.applykernel.state_valid)
         )
 
-        self.comb += [
-            If((self.gatherkernel.state_valid & self.gatherkernel.state_ack),
-                num_nodes_in_use_up.eq(num_nodes_in_use - 1)
-            ).Else(
-                num_nodes_in_use_up.eq(num_nodes_in_use)
-            )
-        ]
-
         # output handling
         _layout = [
         ( "barrier", 1, DIR_M_TO_S ),
@@ -274,7 +256,7 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=len(init_nodedata))
+        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=len(init_nodedata)*2)
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)

@@ -95,7 +95,7 @@ class MuxTree(Module):
                 self.fifo.we.eq(array_readable[self.roundrobin.grant] & (array_round[self.roundrobin.grant] == self.current_round)),
                 array_re[self.roundrobin.grant].eq(self.fifo.writable & (array_round[self.roundrobin.grant] == self.current_round)),
                 [self.roundrobin.request[i].eq(array_readable[i] & (array_round[i] == self.current_round)) for i in range(len(in_array))],
-                self.roundrobin.ce.eq(self.fifo.writable | ~self.fifo.we),
+                self.roundrobin.ce.eq(1),
                 self.fifo.dout.connect(self.apply_interface_out.msg),
                 self.apply_interface_out.valid.eq(self.fifo.readable),
                 self.fifo.re.eq(self.apply_interface_out.ack)
@@ -122,13 +122,14 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
+        fifos = [[InterfaceFIFOBuffered(layout=self.apply_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
 
         self.submodules.fifos = fifos
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_pe)]
 
         self.submodules.muxtree = [MuxTree(config, [fifos[sink][source].dout for source in range(num_pe)]) for sink in range(num_pe)]
+
         # connect PE incoming ports
         for sink in range(num_pe):
             self.comb += [

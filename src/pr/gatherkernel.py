@@ -39,9 +39,7 @@ class GatherKernel(Module):
         n_nrecvd = Signal(nodeidsize)
         n_nneighbors = Signal(nodeidsize)
         n_barrier = Signal()
-        n_round = Signal(config.addresslayout.channel_bits)
         n_valid = Signal()
-        n_allrecvd = Signal()
         n_init = Signal()
         n_notend = Signal()
 
@@ -57,7 +55,6 @@ class GatherKernel(Module):
 
         i_nrecvd = [Signal(nodeidsize) for _ in range(3)]
         i_nneighbors = [Signal(nodeidsize) for _ in range(3)]
-        i_round = [Signal(config.addresslayout.channel_bits) for _ in range(3)]
         i_nodeid = [Signal(nodeidsize) for _ in range(3)]
         i_init = [Signal() for _ in range(3)]
         i_notend = [Signal() for _ in range(3)]
@@ -65,7 +62,6 @@ class GatherKernel(Module):
         self.sync += If(p1_ce, [
             i_nrecvd[0].eq(self.state_in.nrecvd + 1),
             i_nneighbors[0].eq(self.state_in.nneighbors),
-            i_round[0].eq(self.level_in[0:config.addresslayout.channel_bits]),
             i_nodeid[0].eq(self.nodeid_in),
             i_init[0].eq(self.level_in == 0),
             i_notend[0].eq(self.level_in < config.total_pr_rounds)
@@ -73,8 +69,6 @@ class GatherKernel(Module):
             i_nrecvd[i].eq(i_nrecvd[i-1]) for i in range(1,3)
         ] + [
             i_nneighbors[i].eq(i_nneighbors[i-1]) for i in range(1,3)
-        ] + [
-            i_round[i].eq(i_round[i-1]) for i in range(1,3)
         ] + [
             i_nodeid[i].eq(i_nodeid[i-1]) for i in range(1,3)
         ] + [
@@ -84,9 +78,7 @@ class GatherKernel(Module):
         ] + [
             n_nrecvd.eq(i_nrecvd[-1]),
             n_nneighbors.eq(i_nneighbors[-1]),
-            n_round.eq(i_round[-1]),
             n_nodeid.eq(i_nodeid[-1]),
-            n_allrecvd.eq(i_nrecvd[-1] == i_nneighbors[-1]),
             n_init.eq(i_init[-1]),
             n_notend.eq(i_notend[-1])
         ])

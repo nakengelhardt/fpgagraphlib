@@ -2,6 +2,8 @@ from migen import *
 from migen.fhdl.specials import READ_FIRST
 from migen.genlib.record import *
 
+from functools import reduce
+from operator import or_
 
 class CollisionDetector(Module):
     def __init__(self, addresslayout):
@@ -16,14 +18,17 @@ class CollisionDetector(Module):
 
         self.re = Signal()
 
+        self.all_clear = Signal()
+
         ###
 
         arraysize = min(32, num_nodes_per_pe)
-        
-        self.state = Array([Signal(name="hazard_flag") for _ in range(arraysize)])
+
+        self.state = Array(Signal(name="hazard_flag") for _ in range(arraysize))
 
         self.comb += [
-            self.re.eq(~self.state[self.read_adr[:log2_int(arraysize)]] | ~self.read_adr_valid)
+            self.re.eq(~self.state[self.read_adr[:log2_int(arraysize)]] | ~self.read_adr_valid),
+            self.all_clear.eq(~reduce(or_, self.state))
         ]
 
         self.sync += [
