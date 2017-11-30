@@ -140,7 +140,7 @@ class UnCore(Module):
         ext_ack_channel_out = Array(core.network.external_network_interface_out.ack for core in self.cores)
         ext_broadcast_channel_out = Array(core.network.external_network_interface_out.broadcast for core in self.cores)
 
-        self.submodules.fifo = InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out.layout, depth=8)
+        self.submodules.fifo = InterfaceFIFO(layout=self.cores[0].network.external_network_interface_out.layout, depth=8)
 
         self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
 

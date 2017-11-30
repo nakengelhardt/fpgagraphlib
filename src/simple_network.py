@@ -1,7 +1,7 @@
 from migen import *
 
 from migen.genlib.roundrobin import *
-from recordfifo import RecordFIFO, RecordFIFOBuffered
+from recordfifo import RecordFIFO
 
 from core_interfaces import ApplyInterface, Message, NetworkInterface
 
@@ -87,10 +87,7 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(**config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(**config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[RecordFIFOBuffered(layout=Message(**config.addresslayout.get_params()).layout,
-                             depth=8#,
-                             #delay=(0 if i%config.addresslayout.pe_groups == j%config.addresslayout.pe_groups else config.addresslayout.inter_pe_delay)
-                             ) for i in range(num_pe)] for j in range(num_pe)]
+        fifos = [[RecordFIFO(layout=Message(**config.addresslayout.get_params()).layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
         self.submodules.fifos = fifos
         self.submodules.arbiter = [Arbiter(config, fifos[sink]) for sink in range(num_pe)]
 

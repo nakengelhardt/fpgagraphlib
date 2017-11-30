@@ -2,19 +2,6 @@ from migen import *
 from migen.genlib.record import *
 from migen.genlib.fifo import _FIFOInterface, _inc, SyncFIFO, SyncFIFOBuffered
 
-@CEInserter()
-class Delay(Module):
-    def __init__(self, s_in, ncycles):
-        self.s_out = Signal(len(s_in))
-        if ncycles > 0:
-            s_delay = [Signal(len(s_in)) for _ in range(ncycles)]
-            self.sync += [
-                s_delay[0].eq(s_in),
-                [s_delay[i].eq(s_delay[i-1]) for i in range(1, ncycles)]
-            ]
-            self.comb += self.s_out.eq(s_delay[-1])
-        else:
-            self.comb += self.s_out.eq(s_in)
 
 class InitFIFO(Module, _FIFOInterface):
     """Synchronous FIFO (first in, first out)

@@ -122,7 +122,7 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[InterfaceFIFOBuffered(layout=self.apply_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
+        fifos = [[InterfaceFIFO(layout=self.apply_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
 
         self.submodules.fifos = fifos
 

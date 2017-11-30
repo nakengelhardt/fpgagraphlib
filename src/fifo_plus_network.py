@@ -139,7 +139,7 @@ class Network(Module):
         self.external_network_interface_in = [NetworkInterface(name="ext_network_in", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_channels)]
         self.external_network_interface_out = [NetworkInterface(name="ext_network_out", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_channels)]
 
-        fifos = [[InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]
+        fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]
 
         self.submodules.fifos = fifos
 

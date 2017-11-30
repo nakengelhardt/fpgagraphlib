@@ -222,7 +222,7 @@ class Network(Module):
             self.ext_network_current_round.eq(self.extguard.ext_network_current_round)
         ]
 
-        fifos = [[InterfaceFIFOBuffered(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]
+        fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]
 
         self.submodules.fifos = fifos
 

@@ -143,7 +143,7 @@ class UnCore(Module):
             ext_valid_channel_out = Array(core.network.external_network_interface_out[i].valid for core in self.cores)
             ext_ack_channel_out = Array(core.network.external_network_interface_out[i].ack for core in self.cores)
 
-            fifos = [InterfaceFIFOBuffered(layout=self.cores[0].network.external_network_interface_out[i].layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
+            fifos = [InterfaceFIFO(layout=self.cores[0].network.external_network_interface_out[i].layout, depth=8, name="ext_link_to_{}".format(sink)) for sink in range(config.addresslayout.num_fpga)]
             self.submodules += fifos
 
             for core in range(config.addresslayout.num_fpga):
