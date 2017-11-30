@@ -148,5 +148,7 @@ def init_parse(args=None):
     logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
     logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
     logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
+    logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
+    logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
 
     return args, algo_config

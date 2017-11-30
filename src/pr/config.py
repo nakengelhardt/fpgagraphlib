@@ -47,7 +47,6 @@ class Config:
         max_node = self.addresslayout.max_per_pe(adj_dict)
 
         self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, nneighbors=(len(self.adj_dict[self.addresslayout.global_adr(pe_adr=pe, local_adr=node)]) if self.addresslayout.global_adr(pe_adr=pe, local_adr=node) in self.adj_dict else 0), sum=0, nrecvd=0, active=0)  for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
-        print("Nodes per PE: {}".format([(pe, len(self.init_nodedata[pe])) for pe in range(self.addresslayout.num_pe)]))
 
         self.has_edgedata = False
 
