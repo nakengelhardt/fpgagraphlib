@@ -2,10 +2,11 @@ from migen.fhdl import verilog
 from migen import *
 from migen.genlib.roundrobin import *
 from migen.genlib.cdc import *
+from migen.genlib.coding import PriorityEncoder
 from tbsupport import *
 
 from functools import reduce
-from operator import and_
+from operator import and_, or_
 
 import logging
 import random
@@ -84,7 +85,7 @@ class Core(Module):
             ]
 
         self.sync += [
-            If(init,
+            If(~self.start,
                 self.cycle_count.eq(0)
             ).Elif(~self.global_inactive,
                 self.cycle_count.eq(self.cycle_count + 1)
@@ -134,61 +135,79 @@ class UnCore(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [core.global_inactive for core in self.cores]))
 
-        ext_msg_channel_out = Array(core.network.external_network_interface_out.msg.raw_bits() for core in self.cores)
-        ext_dest_pe_channel_out = Array(core.network.external_network_interface_out.dest_pe for core in self.cores)
-        ext_valid_channel_out = Array(core.network.external_network_interface_out.valid for core in self.cores)
-        ext_ack_channel_out = Array(core.network.external_network_interface_out.ack for core in self.cores)
-        ext_broadcast_channel_out = Array(core.network.external_network_interface_out.broadcast for core in self.cores)
-
-        self.submodules.fifo = InterfaceFIFO(layout=self.cores[0].network.external_network_interface_out.layout, depth=8)
-
-        self.submodules.roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
-
-        self.submodules.adrlook = AddressLookup(config)
         self.submodules.adrlook_sender = AddressLookup(config)
-
-        self.comb += [
-            [self.roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
-            self.roundrobin.ce.eq(1),
-            self.fifo.din.msg.raw_bits().eq(ext_msg_channel_out[self.roundrobin.grant]),
-            self.fifo.din.dest_pe.eq(ext_dest_pe_channel_out[self.roundrobin.grant]),
-            self.fifo.din.broadcast.eq(ext_broadcast_channel_out[self.roundrobin.grant]),
-            self.fifo.din.valid.eq(ext_valid_channel_out[self.roundrobin.grant]),
-            ext_ack_channel_out[self.roundrobin.grant].eq(self.fifo.din.ack),
-        ]
-
-        got_ack = Signal(config.addresslayout.num_fpga)
+        broadcast = Signal()
+        broadcast_port = Signal(max=config.addresslayout.num_ext_ports)
+        got_ack = Signal(2*config.addresslayout.num_fpga)
         all_ack = Signal()
 
+        self.submodules.fifo = [InterfaceFIFO(layout=self.cores[0].network.external_network_interface_out[port].layout, depth=8) for port in range(config.addresslayout.num_ext_ports)]
+
+        for port in range(config.addresslayout.num_ext_ports):
+            ext_msg_channel_out = Array(core.network.external_network_interface_out[port].msg.raw_bits() for core in self.cores)
+            ext_dest_pe_channel_out = Array(core.network.external_network_interface_out[port].dest_pe for core in self.cores)
+            ext_valid_channel_out = Array(core.network.external_network_interface_out[port].valid for core in self.cores)
+            ext_ack_channel_out = Array(core.network.external_network_interface_out[port].ack for core in self.cores)
+            ext_broadcast_channel_out = Array(core.network.external_network_interface_out[port].broadcast for core in self.cores)
+
+            ext_ack_channel_in = Array(core.network.external_network_interface_in[port].ack for core in self.cores)
+
+            roundrobin = RoundRobin(config.addresslayout.num_fpga, switch_policy=SP_CE)
+            self.submodules += roundrobin
+
+            adrlook = AddressLookup(config)
+            self.submodules += adrlook
+
+            self.comb += [
+                [roundrobin.request[i].eq(ext_valid_channel_out[i]) for i in range(config.addresslayout.num_fpga)],
+                roundrobin.ce.eq(1),
+                self.fifo[port].din.msg.raw_bits().eq(ext_msg_channel_out[roundrobin.grant]),
+                self.fifo[port].din.dest_pe.eq(ext_dest_pe_channel_out[roundrobin.grant]),
+                self.fifo[port].din.broadcast.eq(ext_broadcast_channel_out[roundrobin.grant]),
+                self.fifo[port].din.valid.eq(ext_valid_channel_out[roundrobin.grant]),
+                ext_ack_channel_out[roundrobin.grant].eq(self.fifo[port].din.ack),
+            ]
+
+            self.comb += [
+                adrlook.pe_adr_in.eq(self.fifo[port].dout.dest_pe),
+                [core.network.external_network_interface_in[port].msg.raw_bits().eq(self.fifo[port].dout.msg.raw_bits()) for core in self.cores],
+                [core.network.external_network_interface_in[port].dest_pe.eq(self.fifo[port].dout.dest_pe) for core in self.cores],
+                [core.network.external_network_interface_in[port].broadcast.eq(broadcast) for core in self.cores],
+                [self.cores[i].network.external_network_interface_in[port].valid.eq((~broadcast & self.fifo[port].dout.valid & (adrlook.fpga_out == i)) | (broadcast & ~((self.adrlook_sender.fpga_out == i) & (broadcast_port == port)) & ~got_ack[port*i])) for i in range(config.addresslayout.num_fpga)],
+                self.fifo[port].dout.ack.eq((~broadcast & ext_ack_channel_in[adrlook.fpga_out]) | (broadcast & (port == broadcast_port) & all_ack))
+            ]
+
+        self.submodules.priorityencoder = PriorityEncoder(config.addresslayout.num_ext_ports)
+        array_sender = Array(self.fifo[port].dout.msg.sender for port in range(config.addresslayout.num_ext_ports))
+
+        self.comb += [self.priorityencoder.i[port].eq(self.fifo[port].dout.broadcast & self.fifo[port].dout.valid) for port in range(config.addresslayout.num_ext_ports)]
+
+        self.comb += [
+            self.adrlook_sender.pe_adr_in.eq(array_sender[broadcast_port]),
+            broadcast.eq(~self.priorityencoder.n),
+            broadcast_port.eq(self.priorityencoder.o)
+        ]
+
         self.sync += [
-            If(self.fifo.dout.valid & self.fifo.dout.broadcast,
+            If(broadcast,
                 If(all_ack,
                     got_ack.eq(0)
                 ).Else(
-                    [got_ack[i].eq(got_ack[i] | self.cores[i].network.external_network_interface_in.ack) for i in range(config.addresslayout.num_fpga)]
+                    [got_ack[port*i].eq(got_ack[port*i] | self.cores[i].network.external_network_interface_in[port].ack) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)]
                 )
             )
         ]
 
-        ext_ack_channel_in = Array(core.network.external_network_interface_in.ack for core in self.cores)
+
 
         self.comb += [
-            all_ack.eq(reduce(and_, [got_ack[i] | (self.adrlook_sender.fpga_out == i) for i in range(config.addresslayout.num_fpga)])),
-            self.adrlook.pe_adr_in.eq(self.fifo.dout.dest_pe),
-            self.adrlook_sender.pe_adr_in.eq(self.fifo.dout.msg.sender),
-            [core.network.external_network_interface_in.msg.raw_bits().eq(self.fifo.dout.msg.raw_bits()) for core in self.cores],
-            [core.network.external_network_interface_in.dest_pe.eq(self.fifo.dout.dest_pe) for core in self.cores],
-            [core.network.external_network_interface_in.broadcast.eq(self.fifo.dout.broadcast) for core in self.cores],
-            [self.cores[i].network.external_network_interface_in.valid.eq(self.fifo.dout.valid & (
-            (~self.fifo.dout.broadcast & (self.adrlook.fpga_out == i))
-            | (self.fifo.dout.broadcast & (self.adrlook_sender.fpga_out != i) & ~got_ack[i])
-            )) for i in range(config.addresslayout.num_fpga)],
-            self.fifo.dout.ack.eq((~self.fifo.dout.broadcast & ext_ack_channel_in[self.adrlook.fpga_out]) | (self.fifo.dout.broadcast & all_ack))
+            all_ack.eq(reduce(and_, [got_ack[port*i] | ((self.adrlook_sender.fpga_out == i) & (port == broadcast_port)) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)])),
         ]
+
 
         self.start = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
+        self.cycle_count = Signal(64)
 
         self.comb += [
             [core.start.eq(self.start) for core in self.cores],
@@ -244,8 +263,9 @@ def export(config, filename='top'):
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
             ios={m[i].start, m[i].done, m[i].cycle_count}
-            ios |= set(m[i].network.external_network_interface_in.flatten())
-            ios |= set(m[i].network.external_network_interface_out.flatten())
+            for j in range(config.addresslayout.num_ext_ports):
+                ios |= set(m[i].network.external_network_interface_in[j].flatten())
+                ios |= set(m[i].network.external_network_interface_out[j].flatten())
             verilog.convert(m[i],
                             name="top",
                             ios=ios

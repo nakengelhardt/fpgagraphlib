@@ -127,12 +127,12 @@ class Router(Module):
 
 class ExtGuard(Module):
     def __init__(self, config, pe_start):
-        self.network_interface_in_outside = NetworkInterface(name="ext_network_in_outside", **config.addresslayout.get_params())
-        self.network_interface_in_inside = NetworkInterface(name="ext_network_in_inside", **config.addresslayout.get_params())
+        self.network_interface_in_outside = [NetworkInterface(name="ext_network_in_outside", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
+        self.network_interface_in_inside = [NetworkInterface(name="ext_network_in_inside", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
         self.local_network_round = Signal(config.addresslayout.channel_bits)
         self.ext_network_current_round = Signal(config.addresslayout.channel_bits)
 
-        in_fifo = InterfaceFIFO(layout=self.network_interface_in_inside.layout, depth=4)
+        in_fifo = [InterfaceFIFO(layout=self.network_interface_in_inside[0].layout, depth=4) for _ in range(config.addresslayout.num_ext_ports)]
         self.submodules += in_fifo
 
         num_fpga_barriers = Signal(bits_for(config.addresslayout.num_fpga))
@@ -142,34 +142,42 @@ class ExtGuard(Module):
 
         self.comb += [
             self.ext_network_current_round.eq(network_round),
-            in_fifo.dout.connect(self.network_interface_in_inside),
-            If(self.network_interface_in_outside.broadcast,
-                self.network_interface_in_outside.ack.eq(1)
+            [in_fifo[i].dout.connect(self.network_interface_in_inside[i]) for i in range(config.addresslayout.num_ext_ports)],
+            [If(self.network_interface_in_outside[i].broadcast,
+                self.network_interface_in_outside[i].ack.eq(~proceed)
             ).Else(
-                self.network_interface_in_outside.connect(in_fifo.din)
-            ),
+                self.network_interface_in_outside[i].connect(in_fifo[i].din)
+            ) for i in range(config.addresslayout.num_ext_ports)],
             If(network_round < config.addresslayout.num_channels - 1,
                 next_round.eq(network_round + 1)
             ).Else(
                 next_round.eq(0)
             ),
-            proceed.eq((num_fpga_barriers == (config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
+            proceed.eq((num_fpga_barriers == (2*config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
         ]
 
+        fpga_barrier = [Signal() for _ in range(config.addresslayout.num_ext_ports)]
+        for port in range(config.addresslayout.num_ext_ports):
+            self.comb += [
+                If(self.network_interface_in_outside[port].broadcast & self.network_interface_in_outside[port].valid,
+                    fpga_barrier[port].eq(1)
+                ).Else(
+                    fpga_barrier[port].eq(0)
+                )
+            ]
+
         self.sync += [
-            If(self.network_interface_in_outside.broadcast & self.network_interface_in_outside.valid,
-                num_fpga_barriers.eq(num_fpga_barriers + 1)
-            ),
+            num_fpga_barriers.eq(num_fpga_barriers + sum(fpga_barrier)),
             If(proceed,
                 network_round.eq(next_round),
                 num_fpga_barriers.eq(0)
             )
         ]
 
-        self.network_interface_out_inside = NetworkInterface(name="ext_network_out_inside", **config.addresslayout.get_params())
-        self.network_interface_out_outside = NetworkInterface(name="ext_network_out_outside", **config.addresslayout.get_params())
+        self.network_interface_out_inside = [NetworkInterface(name="ext_network_out_inside", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
+        self.network_interface_out_outside = [NetworkInterface(name="ext_network_out_outside", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
 
-        out_fifo = InterfaceFIFO(layout=self.network_interface_out_inside.layout, depth=4)
+        out_fifo = [InterfaceFIFO(layout=self.network_interface_out_inside[0].layout, depth=4) for _ in range(config.addresslayout.num_ext_ports)]
         self.submodules += out_fifo
 
         self.change_rounds = Signal()
@@ -178,24 +186,24 @@ class ExtGuard(Module):
         self.submodules.fsm = FSM()
 
         self.fsm.act("IDLE",
-            out_fifo.dout.connect(self.network_interface_out_outside),
+            [out_fifo[i].dout.connect(self.network_interface_out_outside[i]) for i in range(config.addresslayout.num_ext_ports)],
             If(self.change_rounds,
                 NextState("SEND_BARRIERS")
             )
         )
 
         self.fsm.act("SEND_BARRIERS",
-            self.network_interface_out_outside.broadcast.eq(1),
-            self.network_interface_out_outside.msg.roundpar.eq(network_round),
-            self.network_interface_out_outside.msg.sender.eq(pe_start),
-            self.network_interface_out_outside.valid.eq(1),
-            If(self.network_interface_out_outside.ack,
+            self.network_interface_out_outside[0].broadcast.eq(1),
+            self.network_interface_out_outside[0].msg.roundpar.eq(network_round),
+            self.network_interface_out_outside[0].msg.sender.eq(pe_start),
+            self.network_interface_out_outside[0].valid.eq(1),
+            If(self.network_interface_out_outside[0].ack,
                 NextState("IDLE")
             )
         )
 
         self.comb += [
-            self.network_interface_out_inside.connect(out_fifo.din),
+            [self.network_interface_out_inside[i].connect(out_fifo[i].din) for i in range(config.addresslayout.num_ext_ports)]
         ]
 
 class Network(Module):
@@ -208,27 +216,30 @@ class Network(Module):
         self.apply_interface = [ApplyInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_local_pe)]
         self.network_interface = [NetworkInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_local_pe)]
 
-        self.external_network_interface_in = NetworkInterface(name="ext_network_in", **config.addresslayout.get_params())
-        self.external_network_interface_out = NetworkInterface(name="ext_network_out", **config.addresslayout.get_params())
+        if not hasattr(config.addresslayout, "num_ext_ports"):
+            config.addresslayout.num_ext_ports = 1
+
+        self.external_network_interface_in = [NetworkInterface(name="ext_network_in", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
+        self.external_network_interface_out = [NetworkInterface(name="ext_network_out", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_ext_ports)]
         self.ext_network_current_round = Signal(config.addresslayout.channel_bits)
         self.local_network_round = Signal(config.addresslayout.channel_bits)
 
         self.submodules.extguard = ExtGuard(config, pe_start)
 
         self.comb += [
-            self.external_network_interface_in.connect(self.extguard.network_interface_in_outside),
-            self.extguard.network_interface_out_outside.connect(self.external_network_interface_out),
+            [self.external_network_interface_in[i].connect(self.extguard.network_interface_in_outside[i]) for i in range(config.addresslayout.num_ext_ports)],
+            [self.extguard.network_interface_out_outside[i].connect(self.external_network_interface_out[i]) for i in range(config.addresslayout.num_ext_ports)],
             self.extguard.local_network_round.eq(self.local_network_round),
             self.ext_network_current_round.eq(self.extguard.ext_network_current_round)
         ]
 
-        fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(sink, source)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + 1)]
+        fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(source, sink)) for sink in range(num_local_pe + 1)] for source in range(num_local_pe + config.addresslayout.num_ext_ports)]
 
         self.submodules.fifos = fifos
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_local_pe)]
 
-        self.submodules.muxtree = [MuxTree(config, [fifos[sink][source].dout for source in range(num_local_pe + 1)]) for sink in range(num_local_pe)]
+        self.submodules.muxtree = [MuxTree(config, [fifos[source][sink].dout for source in range(num_local_pe + config.addresslayout.num_ext_ports)]) for sink in range(num_local_pe)]
         # connect PE incoming ports
         for sink in range(num_local_pe):
             self.comb += [
@@ -239,10 +250,10 @@ class Network(Module):
 
         # connect PE outgoing ports
         for source in range(num_local_pe):
-            array_msg = Array(fifo.din.msg.raw_bits() for fifo in [fifos[sink][source] for sink in range(num_local_pe + 1)])
-            array_dest_pe = Array(fifo.din.dest_pe for fifo in [fifos[sink][source] for sink in range(num_local_pe + 1)])
-            array_valid = Array(fifo.din.valid for fifo in [fifos[sink][source] for sink in range(num_local_pe + 1)])
-            array_ack = Array(fifo.din.ack for fifo in [fifos[sink][source] for sink in range(num_local_pe + 1)])
+            array_msg = Array(fifo.din.msg.raw_bits() for fifo in [fifos[source][sink] for sink in range(num_local_pe + 1)])
+            array_dest_pe = Array(fifo.din.dest_pe for fifo in [fifos[source][sink] for sink in range(num_local_pe + 1)])
+            array_valid = Array(fifo.din.valid for fifo in [fifos[source][sink] for sink in range(num_local_pe + 1)])
+            array_ack = Array(fifo.din.ack for fifo in [fifos[source][sink] for sink in range(num_local_pe + 1)])
 
             router = Router(config, pe_start, pe_end)
             self.submodules += router
@@ -277,38 +288,41 @@ class Network(Module):
             network_round.eq(next_round)
         )
 
-        fifo_msg_in = Array(fifo.din.msg.raw_bits() for fifo in [fifos[sink][num_local_pe] for sink in range(num_local_pe + 1)])
-        fifo_dest_pe_in = Array(fifo.din.dest_pe for fifo in [fifos[sink][num_local_pe] for sink in range(num_local_pe + 1)])
-        fifo_valid_in = Array(fifo.din.valid for fifo in [fifos[sink][num_local_pe] for sink in range(num_local_pe + 1)])
-        fifo_ack_in = Array(fifo.din.ack for fifo in [fifos[sink][num_local_pe] for sink in range(num_local_pe + 1)])
-        fifo_round_in = Array(fifo.din.msg.roundpar for fifo in [fifos[sink][num_local_pe] for sink in range(num_local_pe + 1)])
+        for port in range(config.addresslayout.num_ext_ports):
+            fifo_msg_in = Array(fifo.din.msg.raw_bits() for fifo in [fifos[num_local_pe+port][sink] for sink in range(num_local_pe + 1)])
+            fifo_dest_pe_in = Array(fifo.din.dest_pe for fifo in [fifos[num_local_pe+port][sink] for sink in range(num_local_pe + 1)])
+            fifo_valid_in = Array(fifo.din.valid for fifo in [fifos[num_local_pe+port][sink] for sink in range(num_local_pe + 1)])
+            fifo_ack_in = Array(fifo.din.ack for fifo in [fifos[num_local_pe+port][sink] for sink in range(num_local_pe + 1)])
+            fifo_round_in = Array(fifo.din.msg.roundpar for fifo in [fifos[num_local_pe+port][sink] for sink in range(num_local_pe + 1)])
 
-        router = Router(config, pe_start, pe_end)
-        self.submodules += router
+            router = Router(config, pe_start, pe_end)
+            self.submodules += router
 
-        self.comb += [
-            router.dest_pe_in.eq(self.extguard.network_interface_in_inside.dest_pe),
-            fifo_msg_in[router.sink_out].eq(self.extguard.network_interface_in_inside.msg.raw_bits()),
-            fifo_dest_pe_in[router.sink_out].eq(self.extguard.network_interface_in_inside.dest_pe),
-            fifo_valid_in[router.sink_out].eq(self.extguard.network_interface_in_inside.valid & (self.extguard.network_interface_in_inside.msg.roundpar == self.local_network_round)),
-            self.extguard.network_interface_in_inside.ack.eq(fifo_ack_in[router.sink_out] & (self.extguard.network_interface_in_inside.msg.roundpar == self.local_network_round))
-        ]
+            self.comb += [
+                router.dest_pe_in.eq(self.extguard.network_interface_in_inside[port].dest_pe),
+                fifo_msg_in[router.sink_out].eq(self.extguard.network_interface_in_inside[port].msg.raw_bits()),
+                fifo_dest_pe_in[router.sink_out].eq(self.extguard.network_interface_in_inside[port].dest_pe),
+                fifo_valid_in[router.sink_out].eq(self.extguard.network_interface_in_inside[port].valid & (self.extguard.network_interface_in_inside[port].msg.roundpar == self.local_network_round)),
+                self.extguard.network_interface_in_inside[port].ack.eq(fifo_ack_in[router.sink_out] & (self.extguard.network_interface_in_inside[port].msg.roundpar == self.local_network_round))
+            ]
 
         # push to outside
-        fifo_msg_out = Array(fifo.dout.msg.raw_bits() for fifo in [fifos[num_local_pe][source] for source in range(num_local_pe + 1)])
-        fifo_dest_pe_out = Array(fifo.dout.dest_pe for fifo in [fifos[num_local_pe][source] for source in range(num_local_pe + 1)])
-        fifo_round_out = Array(fifo.dout.msg.roundpar for fifo in [fifos[num_local_pe][source] for source in range(num_local_pe + 1)])
-        fifo_valid_out = Array(fifo.dout.valid for fifo in [fifos[num_local_pe][source] for source in range(num_local_pe + 1)])
-        fifo_ack_out = Array(fifo.dout.ack for fifo in [fifos[num_local_pe][source] for source in range(num_local_pe + 1)])
+        for port in range(config.addresslayout.num_ext_ports):
+            fifo_msg_out = Array(fifo.dout.msg.raw_bits() for fifo in [fifos[source][num_local_pe] for source in range(port, num_local_pe + config.addresslayout.num_ext_ports, config.addresslayout.num_ext_ports)])
+            fifo_dest_pe_out = Array(fifo.dout.dest_pe for fifo in [fifos[source][num_local_pe] for source in range(port, num_local_pe + config.addresslayout.num_ext_ports, config.addresslayout.num_ext_ports)])
+            fifo_round_out = Array(fifo.dout.msg.roundpar for fifo in [fifos[source][num_local_pe] for source in range(port, num_local_pe + config.addresslayout.num_ext_ports, config.addresslayout.num_ext_ports)])
+            fifo_valid_out = Array(fifo.dout.valid for fifo in [fifos[source][num_local_pe] for source in range(port, num_local_pe + config.addresslayout.num_ext_ports, config.addresslayout.num_ext_ports)])
+            fifo_ack_out = Array(fifo.dout.ack for fifo in [fifos[source][num_local_pe] for source in range(port, num_local_pe + config.addresslayout.num_ext_ports, config.addresslayout.num_ext_ports)])
 
-        self.submodules.roundrobin = RoundRobin(num_local_pe + 1, switch_policy=SP_CE)
-        roundpar = Signal(config.addresslayout.channel_bits)
+            n = len(fifo_msg_out)
+            self.submodules.roundrobin = RoundRobin(n, switch_policy=SP_CE)
+            roundpar = Signal(config.addresslayout.channel_bits)
 
-        self.comb += [
-            [self.roundrobin.request[i].eq(fifo_valid_out[i] & (fifo_round_out[i] == self.ext_network_current_round)) for i in range(num_local_pe + 1)],
-            self.roundrobin.ce.eq(1),
-            self.extguard.network_interface_out_inside.msg.raw_bits().eq(fifo_msg_out[self.roundrobin.grant]),
-            self.extguard.network_interface_out_inside.dest_pe.eq(fifo_dest_pe_out[self.roundrobin.grant]),
-            self.extguard.network_interface_out_inside.valid.eq(fifo_valid_out[self.roundrobin.grant] & (fifo_round_out[self.roundrobin.grant] == self.ext_network_current_round)),
-            fifo_ack_out[self.roundrobin.grant].eq(self.extguard.network_interface_out_inside.ack & (fifo_round_out[self.roundrobin.grant] == self.ext_network_current_round))
-        ]
+            self.comb += [
+                [self.roundrobin.request[i].eq(fifo_valid_out[i] & (fifo_round_out[i] == self.ext_network_current_round)) for i in range(n)],
+                self.roundrobin.ce.eq(1),
+                self.extguard.network_interface_out_inside[port].msg.raw_bits().eq(fifo_msg_out[self.roundrobin.grant]),
+                self.extguard.network_interface_out_inside[port].dest_pe.eq(fifo_dest_pe_out[self.roundrobin.grant]),
+                self.extguard.network_interface_out_inside[port].valid.eq(fifo_valid_out[self.roundrobin.grant] & (fifo_round_out[self.roundrobin.grant] == self.ext_network_current_round)),
+                fifo_ack_out[self.roundrobin.grant].eq(self.extguard.network_interface_out_inside[port].ack & (fifo_round_out[self.roundrobin.grant] == self.ext_network_current_round))
+            ]
