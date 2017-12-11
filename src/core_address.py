@@ -10,10 +10,10 @@ def unpack(data, n):
     return words
 
 class AddressLayout:
-    """Partition NodeID into PE number and local address"""
+    """Divide NodeID into PE number and local address"""
     def __init__(self, nodeidsize, edgeidsize, peidsize, num_pe, num_nodes_per_pe, max_edges_per_pe, payloadsize, **kwargs):
         assert nodeidsize >= peidsize + log2_int(num_nodes_per_pe)
-        assert peidsize >= bits_for(num_pe-1)
+        assert peidsize >= bits_for(num_pe)
         assert edgeidsize >= bits_for(max_edges_per_pe-1)
         self.nodeidsize = nodeidsize
         self.edgeidsize = edgeidsize

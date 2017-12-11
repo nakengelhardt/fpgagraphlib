@@ -1,6 +1,9 @@
 import re
 import argparse
+import logging
 from migen import *
+
+logger = logging.getLogger('config')
 
 def read_graph(f, digraph=False, connected=True):
     d = {}
@@ -30,8 +33,8 @@ def read_graph(f, digraph=False, connected=True):
             if not digraph:
                 d[sink].add(source)
     if connected:
-        make_connected(d)
-    print("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
+        make_connected(d, digraph=digraph)
+    logger.info("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
     return d
 
 def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=True):
@@ -59,12 +62,12 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
                     next_pe = 0
                     next_number += 1
             if next_number >= num_nodes_per_pe:
-                print("Graph too big for PE configuration!")
+                logger.error("Graph too big for PE configuration!")
                 raise ValueError
             source = numbers[source_txt]
             sink = numbers[sink_txt]
             if source == sink:
-                print("Node", source_txt, "linking to itself!")
+                logger.warning("Node", source_txt, "linking to itself!")
                 continue
             if source not in d:
                 d[source] = set()
@@ -74,9 +77,30 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
             if not digraph:
                 d[sink].add(source)
     if connected:
-        make_connected(d)
-    print("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
+        make_connected(d, digraph=digraph)
+    logger.info("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
     return d
+
+def quick_read_num_nodes_edges(f, digraph=False):
+    numbers = {}
+    num_seen = 0
+    num_edges = 0
+    for line in f:
+        match = re.match("(\w+)\s(\w+)", line)
+        if match:
+            source_txt = match.group(1)
+            sink_txt = match.group(2)
+            if source_txt not in numbers:
+                num_seen += 1
+                numbers[source_txt] = num_seen
+            if sink_txt not in numbers:
+                num_seen += 1
+                numbers[sink_txt] = num_seen
+            if numbers[source_txt] != numbers[sink_txt]:
+                num_edges += 1 if digraph else 2
+    f.seek(0)
+    return num_seen, num_edges
+
 
 def make_connected(d, init=1, digraph=False):
     visited = set()
@@ -89,11 +113,9 @@ def make_connected(d, init=1, digraph=False):
     not_visited = set()
     for node in d:
         if node not in visited:
-            not_visited.add(node)
-    for node in not_visited:
-        d[init].add(node)
-        if not digraph:
-            d[node].add(init)
+            d[init].add(node)
+            if not digraph:
+                d[node].add(init)
 
 def check_connected(d, init=1):
     visited = set()

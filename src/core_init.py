@@ -6,7 +6,7 @@ import configparser
 
 from migen import log2_int, bits_for
 
-from graph_input import read_graph, read_graph_balance_pe
+from graph_input import read_graph_balance_pe, quick_read_num_nodes_edges
 from graph_generate import generate_graph, export_graph
 
 from importlib import import_module
@@ -76,13 +76,28 @@ def init_parse(args=None):
         s = 42
     random.seed(s)
 
+    kwargs = dict()
+    for k in config['arch']:
+        kwargs[k] = eval(config['arch'].get(k))
+
+    if "num_channels" not in kwargs:
+        kwargs["num_channels"] = 3
+
+    kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
+
+    if "num_pe" not in kwargs:
+        kwargs["num_pe"] = 8
+
+    if "num_fpga" not in kwargs:
+        kwargs["num_fpga"] = 1
+
+    if "num_pe_per_fpga" not in kwargs:
+        kwargs["num_pe_per_fpga"] = (kwargs["num_pe"] + kwargs["num_fpga"] - 1)//kwargs["num_fpga"]
+
+    graphfile = None
     if args.graphfile:
-        logger.info("Reading graph from file {}".format(args.graphfile))
         graphfile = open(args.graphfile)
-        if 'num_pe' in config['arch']:
-            adj_dict = read_graph_balance_pe(graphfile, eval(config['arch'].get('num_pe')), eval(config['arch'].get('num_nodes_per_pe')))
-        else:
-            adj_dict = read_graph(graphfile)
+        num_nodes, num_edges = quick_read_num_nodes_edges(graphfile, digraph=args.digraph)
     elif args.nodes:
         num_nodes = args.nodes
         if args.edges:
@@ -93,14 +108,9 @@ def init_parse(args=None):
             approach = args.approach
         else:
             approach = "random_walk"
-        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
     elif 'graphfile' in config['graph']:
         graphfile = open(config['graph'].get('graphfile'))
-        if 'num_pe' in config['arch']:
-            adj_dict = read_graph_balance_pe(graphfile, eval(config['arch'].get('num_pe')), eval(config['arch'].get('num_nodes_per_pe')))
-        else:
-            adj_dict = read_graph(graphfile)
+        num_nodes, num_edges = quick_read_num_nodes_edges(graphfile)
     elif 'nodes' in config['graph']:
         num_nodes = eval(config['graph'].get('nodes'))
         if 'edges' in config['graph']:
@@ -111,31 +121,39 @@ def init_parse(args=None):
             approach = config['graph'].get('approach')
         else:
             approach = "random_walk"
-        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
     else:
         parser.print_help()
         exit(-1)
+
+    if "num_nodes_per_pe" not in kwargs:
+        kwargs["num_nodes_per_pe"] = 2**bits_for((num_nodes + kwargs["num_pe"] - 1)//kwargs["num_pe"])
+    assert kwargs["num_nodes_per_pe"]*kwargs["num_pe"] > num_nodes #strictly greater to account for 0 not being valid id
+
+    if "max_edges_per_pe" not in kwargs:
+        kwargs["max_edges_per_pe"] = 2**bits_for(num_edges) #very conservative
+
+    if graphfile:
+        logger.info("Reading graph from file {}".format(graphfile.name))
+        adj_dict = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph)
+    else:
+        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
+        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
 
     if args.graphsave:
         logger.info("Saving graph to file {}".format(args.graphsave))
         export_graph(adj_dict, args.graphsave)
 
+    if "peidsize" not in kwargs:
+        kwargs["peidsize"] = bits_for(kwargs["num_pe"])
+
+    if "nodeidsize" not in kwargs:
+        kwargs["nodeidsize"] = kwargs["peidsize"] + log2_int(kwargs["num_nodes_per_pe"])
+
+    if "edgeidsize" not in kwargs:
+        kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
+
     algo_config_module = "{}.config".format(config['app']['algo'])
     algo = import_module(algo_config_module)
-
-    kwargs = dict()
-    for k in config['arch']:
-        kwargs[k] = eval(config['arch'].get(k))
-
-    kwargs["num_channels"] = 3
-    kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
-
-    if "num_fpga" not in kwargs:
-        kwargs["num_fpga"] = 1
-
-    if "num_pe_per_fpga" not in kwargs:
-        kwargs["num_pe_per_fpga"] = (kwargs["num_pe"] + kwargs["num_fpga"] - 1)//kwargs["num_fpga"]
 
     algo_config = algo.Config(adj_dict, **kwargs)
 
