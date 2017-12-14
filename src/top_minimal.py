@@ -4,6 +4,7 @@ from migen import *
 from tbsupport import *
 
 import logging
+from contextlib import ExitStack
 
 from functools import reduce
 from operator import and_
@@ -80,7 +81,7 @@ class UnCore(Module):
 
         start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
         layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
+        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in sorted(init_message, key=lambda x: x["dest_id"])] for init_message in config.init_messages]
         for i in initdata:
             i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
         initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
@@ -114,7 +115,7 @@ class UnCore(Module):
             ]
 
         self.sync += [
-            If(reduce(or_, [i.readable for i in initfifos]),
+            If(~self.start,
                 self.cycle_count.eq(0)
             ).Elif(~self.global_inactive,
                 self.cycle_count.eq(self.cycle_count + 1)
@@ -142,10 +143,11 @@ def sim(config):
 def export(config, filename='top.v'):
 
     m = UnCore(config)
+    m.clock_domains.cd_sys = ClockDomain(reset_less=True)
 
     verilog.convert(m,
                     name="top",
-                    ios={m.start, m.done, m.cycle_count}
+                    ios={m.start, m.done, m.cycle_count, m.cd_sys.clk}
                     ).write(filename)
 
 def main():
