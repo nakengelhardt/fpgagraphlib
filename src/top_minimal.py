@@ -43,6 +43,10 @@ class Core(Module):
         # state of calculation
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
+        ]
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -97,6 +101,7 @@ class UnCore(Module):
         init = Signal()
         self.done = Signal()
         self.cycle_count = Signal(32)
+        self.total_num_messages = self.cores[0].total_num_messages
 
         self.sync += [
             init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
@@ -147,7 +152,7 @@ def export(config, filename='top.v'):
 
     verilog.convert(m,
                     name="top",
-                    ios={m.start, m.done, m.cycle_count, m.cd_sys.clk}
+                    ios={m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
                     ).write(filename)
 
 def main():

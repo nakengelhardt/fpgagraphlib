@@ -7,6 +7,13 @@ class BarrierDistributor(Module):
         self.network_interface_in = NetworkInterface(name="barrierdistributor_in", **config.addresslayout.get_params())
         self.network_interface_out = NetworkInterface(name="barrierdistributor_out", **config.addresslayout.get_params())
 
+        self.total_num_messages = Signal(32)
+        self.sync += [
+            If(self.network_interface_out.valid & self.network_interface_out.ack & ~self.network_interface_out.msg.barrier,
+                self.total_num_messages.eq(self.total_num_messages + 1)
+            )
+        ]
+
         num_pe = config.addresslayout.num_pe
 
         have_barrier = Signal()
@@ -35,7 +42,7 @@ class BarrierDistributor(Module):
 
         self.sync += [
             If(~have_barrier & self.network_interface_in.valid & self.network_interface_in.ack,
-                num_msgs_since_last_barrier[sink].eq(num_msgs_since_last_barrier[sink]+1),
+                num_msgs_since_last_barrier[sink].eq(num_msgs_since_last_barrier[sink] + 1),
                 halt.eq(0)
             )
         ]
