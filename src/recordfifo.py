@@ -37,7 +37,7 @@ class InitFIFO(Module, _FIFOInterface):
         storage = Memory(self.width, depth, init=init)
         self.specials += storage
 
-        wrport = storage.get_port(write_capable=True)
+        wrport = storage.get_port(write_capable=True, mode=READ_FIRST)
         self.specials += wrport
         self.comb += [
             If(self.replace,
@@ -54,7 +54,7 @@ class InitFIFO(Module, _FIFOInterface):
         do_read = Signal()
         self.comb += do_read.eq(self.readable & self.re)
 
-        rdport = storage.get_port(async_read=fwft, has_re=not fwft)
+        rdport = storage.get_port(async_read=fwft, has_re=not fwft, mode=READ_FIRST)
         self.specials += rdport
         self.comb += [
             rdport.adr.eq(consume),
