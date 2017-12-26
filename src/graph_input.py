@@ -102,7 +102,11 @@ def quick_read_num_nodes_edges(f, digraph=False):
     return num_seen, num_edges
 
 
-def make_connected(d, init=1, digraph=False):
+def make_connected(d, init=None, digraph=False):
+    if not init:
+        init = 1
+        while init not in d:
+            init += 1
     visited = set()
     to_visit = [init]
     while to_visit:

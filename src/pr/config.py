@@ -14,7 +14,7 @@ import logging
 class Config:
     def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
         self.name = "pr"
-        self.total_pr_rounds = 10
+        self.total_pr_rounds = 30
 
         logger = logging.getLogger('config')
 
@@ -52,7 +52,6 @@ class Config:
 
         init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         for node in self.adj_dict:
-            pe = node >> log2_int(self.addresslayout.num_nodes_per_pe)
-            init_messages[pe].append(({'dest_id':node, 'sender':0, 'payload':self.addresslayout.const_base}))
+            init_messages[self.addresslayout.pe_adr(node)].append(({'dest_id':node, 'sender':0, 'payload':self.addresslayout.const_base}))
 
         self.init_messages = init_messages

@@ -42,5 +42,4 @@ class Config:
 
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
         for node in self.adj_dict:
-            pe = node >> log2_int(self.addresslayout.num_nodes_per_pe)
-            self.init_messages[pe].append(({'dest_id':node, 'sender':0, 'payload':node}))
+            self.init_messages[self.addresslayout.pe_adr(node)].append(({'dest_id':node, 'sender':0, 'payload':node}))

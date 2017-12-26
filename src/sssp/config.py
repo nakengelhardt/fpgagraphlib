@@ -51,4 +51,4 @@ class Config:
             init_root += 1
 
         self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
-        self.init_messages[0].append({'dest_id':init_root, 'sender':init_root, 'payload':0})
+        self.init_messages[self.addresslayout.pe_adr(init_root)].append({'dest_id':init_root, 'sender':init_root, 'payload':0})
