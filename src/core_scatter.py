@@ -6,6 +6,7 @@ from core_interfaces import ScatterInterface, NetworkInterface, _msg_layout
 from core_neighbors import Neighbors
 from core_neighbors_hmc import NeighborsHMC
 from core_neighbors_dummy import NeighborsDummy
+from core_neighbors_ddr import NeighborsDDR
 
 from core_address import AddressLayout
 
@@ -51,6 +52,8 @@ class Scatter(Module):
                 self.submodules.get_neighbors = NeighborsDummy(config=config, adj_val=adj_val)
             else:
                 self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=adj_val, hmc_port=hmc_port)
+        elif config.use_ddr:
+            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, edge_data=edge_data, port=hmc_port)
         else:
             self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val, edge_data=edge_data)
 

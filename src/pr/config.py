@@ -12,7 +12,7 @@ from pr.scatterkernel import ScatterKernel
 import logging
 
 class Config:
-    def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
+    def __init__(self, adj_dict, use_hmc=False, use_ddr=False, share_mem_port=False, **kwargs):
         self.name = "pr"
         self.total_pr_rounds = 30
 
@@ -22,6 +22,7 @@ class Config:
         payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))
 
         self.use_hmc = use_hmc
+        self.use_ddr = use_ddr
         self.share_mem_port = share_mem_port
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
@@ -38,7 +39,9 @@ class Config:
 
         self.adj_dict = adj_dict
         if self.use_hmc:
-            adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+            adj_idx, adj_val = self.addresslayout.generate_partition_hmc(self.adj_dict)
+        elif self.use_ddr:
+            adj_idx, adj_val = self.addresslayout.generate_partition_ddr(self.adj_dict)
         else:
             adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         self.adj_idx = adj_idx

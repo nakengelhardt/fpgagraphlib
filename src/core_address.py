@@ -68,7 +68,7 @@ class AddressLayout:
 
         return adj_idx, adj_val
 
-    def generate_partition_flat(self, adj_dict):
+    def generate_partition_hmc(self, adj_dict):
         max_node = self.max_per_pe(adj_dict)
         adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
         adj_val = []
@@ -82,6 +82,23 @@ class AddressLayout:
             adj_val.extend(neighbors)
             if len(neighbors) % 4 != 0:
                 adj_val.extend(0 for _ in range(4-(len(neighbors) % 4)))
+
+        return adj_idx, adj_val
+
+    def generate_partition_ddr(self, adj_dict):
+        max_node = self.max_per_pe(adj_dict)
+        adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
+        adj_val = []
+
+        for node, neighbors in adj_dict.items():
+            pe = node//self.num_nodes_per_pe
+            localnode = node % self.num_nodes_per_pe
+            idx = len(adj_val)
+            n = len(neighbors)
+            adj_idx[pe][localnode] = (idx*4, n)
+            adj_val.extend(neighbors)
+            if len(neighbors) % 16 != 0:
+                adj_val.extend(0 for _ in range(16-(len(neighbors) % 16)))
 
         return adj_idx, adj_val
 

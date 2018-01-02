@@ -10,7 +10,7 @@ from cc.scatterkernel import ScatterKernel
 import logging
 
 class Config:
-    def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
+    def __init__(self, adj_dict, use_hmc=False, use_ddr=False, share_mem_port=False, **kwargs):
         self.name = "cc"
         logger = logging.getLogger('config')
 
@@ -20,11 +20,14 @@ class Config:
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.use_hmc = use_hmc
+        self.use_ddr = use_ddr
         self.share_mem_port = share_mem_port
 
         self.adj_dict = adj_dict
         if self.use_hmc:
-            adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+            adj_idx, adj_val = self.addresslayout.generate_partition_hmc(self.adj_dict)
+        elif self.use_ddr:
+            adj_idx, adj_val = self.addresslayout.generate_partition_ddr(self.adj_dict)
         else:
             adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         self.adj_idx = adj_idx
