@@ -28,8 +28,8 @@ class Config:
         self.share_mem_port = share_mem_port
 
         self.adj_dict = adj_dict
-        if self.use_hmc:
-            adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict)
+        if self.use_hmc or self.use_ddr:
+            raise NotImplementedError()
         else:
             adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
         self.adj_idx = adj_idx

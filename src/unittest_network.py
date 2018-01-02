@@ -8,7 +8,7 @@ from tbsupport import *
 from bfs.config import Config
 from graph_generate import generate_graph
 
-from fifo_network import Network
+from torus_network import Network
 
 class NetworkCase(SimCase, unittest.TestCase):
     class TestBench(Module):
