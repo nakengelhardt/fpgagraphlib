@@ -196,6 +196,10 @@ def export(config, filename='top.v'):
                     name="top",
                     ios=ios
                     ).write(filename)
+    if config.use_ddr:
+        with open("adj_val.data", 'wb') as f:
+            for x in config.adj_val:
+                f.write(struct.pack('=I', x))
 
 def main():
     args, config = init_parse()
