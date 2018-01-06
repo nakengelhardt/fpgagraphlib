@@ -29,7 +29,7 @@ class NeighborsDDR(Module):
 
         ###
 
-        assert(edgeidsize <= 32)
+        assert(nodeidsize <= 32)
 
         # TODO: acquire port
         # if not port:

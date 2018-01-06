@@ -32,7 +32,7 @@ class ApplyKernel(Module):
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
-
+        self.kernel_error = Signal()
 
         ###
 
@@ -54,7 +54,10 @@ class ApplyKernel(Module):
             self.state_out.sum.eq(0),
             self.state_out.active.eq(0),
             self.state_valid.eq(self.valid_in),
-            self.state_barrier.eq(self.barrier_in)
+            self.state_barrier.eq(self.barrier_in),
+            If(self.state_in.nrecvd != self.state_in.nneighbors,
+                self.kernel_error.eq(1)
+            )
         )
 
         # Second part: If at end, then multiply by 0.85 and add to const_base and send as message

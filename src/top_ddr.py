@@ -2,12 +2,13 @@ from migen.fhdl import verilog
 
 from migen import *
 from tbsupport import *
+from migen.genlib.roundrobin import *
 
 import logging
 from contextlib import ExitStack
 
 from functools import reduce
-from operator import and_
+from operator import and_, or_
 
 from core_init import init_parse
 from recordfifo import RecordFIFO
@@ -18,23 +19,110 @@ from fifo_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
 
-_ddr_layout = [
-                ("arid", "ID_WIDTH", DIR_M_TO_S),
-                ("araddr", "ADDR_WIDTH", DIR_M_TO_S),
-                ("arready", 1, DIR_S_TO_M),
-                ("arvalid", 1, DIR_M_TO_S),
-                ("rid", "ID_WIDTH", DIR_S_TO_M),
-                ("rdata", "DATA_WIDTH", DIR_S_TO_M),
-                ("rready", 1, DIR_M_TO_S),
-                ("rvalid", 1, DIR_S_TO_M)
-            ]
+class DDRPortSharer(Module):
+
+    def __init__(self, config, num_ports, ID_WIDTH=4, ADDR_WIDTH=33, DATA_WIDTH=64*8):
+        self.config = config
+
+        _ddr_layout = [
+                    ("arid", "ID_WIDTH", DIR_M_TO_S),
+                    ("araddr", "ADDR_WIDTH", DIR_M_TO_S),
+                    ("arready", 1, DIR_S_TO_M),
+                    ("arvalid", 1, DIR_M_TO_S),
+                    ("rid", "ID_WIDTH", DIR_S_TO_M),
+                    ("rdata", "DATA_WIDTH", DIR_S_TO_M),
+                    ("rready", 1, DIR_M_TO_S),
+                    ("rvalid", 1, DIR_S_TO_M)
+                ]
+
+        self.real_port = Record(set_layout_parameters(_ddr_layout, ID_WIDTH=ID_WIDTH, ADDR_WIDTH=ADDR_WIDTH, DATA_WIDTH=DATA_WIDTH))
+        self.ports = [Record(set_layout_parameters(_ddr_layout, ID_WIDTH=ID_WIDTH, ADDR_WIDTH=ADDR_WIDTH, DATA_WIDTH=DATA_WIDTH)) for _ in range(num_ports)]
+
+        if num_ports == 0:
+            return
+        if num_ports == 1:
+            self.comb += self.ports[0].connect(self.real_port)
+            return
+
+        # multiplex between ports
+
+        # ensure tag is large enough to number ports
+        assert(num_ports <= 2**ID_WIDTH)
+
+        array_arvalid = Array(port.arvalid for port in self.ports)
+        array_arready = Array(port.arready for port in self.ports)
+        array_araddr = Array(port.araddr for port in self.ports)
+
+        self.submodules.roundrobin = RoundRobin(num_ports, switch_policy=SP_CE)
+
+        self.comb += [
+            [self.roundrobin.request[i].eq(port.arvalid) for i, port in enumerate(self.ports)],
+            self.roundrobin.ce.eq(self.real_port.arready),
+            self.real_port.arvalid.eq(array_arvalid[self.roundrobin.grant]),
+            array_arready[self.roundrobin.grant].eq(self.real_port.arready),
+            self.real_port.araddr.eq(array_araddr[self.roundrobin.grant]),
+            self.real_port.arid.eq(self.roundrobin.grant)
+        ]
+
+        array_rvalid = Array(port.rvalid for port in self.ports)
+        array_rready = Array(port.rready for port in self.ports)
+
+        data_reg = Signal(DATA_WIDTH)
+        id_reg = Signal(ID_WIDTH)
+        valid_reg = Signal()
+
+        self.sync += [
+            If(self.real_port.rready,
+                data_reg.eq(self.real_port.rdata),
+                id_reg.eq(self.real_port.rid),
+                valid_reg.eq(self.real_port.rvalid)
+            )
+        ]
+
+        self.comb += [
+            [port.rdata.eq(data_reg) for port in self.ports],
+            array_rvalid[id_reg].eq(valid_reg),
+            self.real_port.rready.eq(array_rready[id_reg] | ~valid_reg)
+        ]
+
+    def get_port(self, i):
+        return self.ports[i]
+
+    def get_ios(self):
+        return set(self.real_port.flatten())
+
+    @passive
+    def gen_simulation(self, tb):
+        logger = logging.getLogger("ddr_sim")
+        edges_per_burst = len(self.real_port.rdata)//32
+        burst_bytes = len(self.real_port.rdata)//8
+        inflight_requests = []
+        yield self.real_port.arready.eq(1)
+        yield self.real_port.rvalid.eq(0)
+        while True:
+            if (yield self.real_port.rready):
+                if inflight_requests: # and random.choice([True, False])
+                    tag, addr = inflight_requests[0]
+                    inflight_requests.pop(0)
+                    logger.debug("Request: addr = {}, tag = {}".format(hex(addr), tag))
+                    assert(addr % burst_bytes == 0)
+                    idx = addr // 4
+                    data = 0
+                    for i in reversed(range(edges_per_burst)):
+                        data = (data << 32) | self.config.adj_val[idx + i]
+                    yield self.real_port.rdata.eq(data)
+                    yield self.real_port.rid.eq(tag)
+                    yield self.real_port.rvalid.eq(1)
+                else:
+                    yield self.real_port.rvalid.eq(0)
+            yield
+            if (yield self.real_port.arready) and (yield self.real_port.arvalid):
+                inflight_requests.append(((yield self.real_port.arid), (yield self.real_port.araddr)))
 
 class Core(Module):
     def __init__(self, config):
         self.config = config
         num_pe = self.config.addresslayout.num_pe
-
-        self.port = Record(set_layout_parameters(_ddr_layout, ID_WIDTH=4, ADDR_WIDTH=33, DATA_WIDTH=64*8))
 
         if config.has_edgedata:
             raise NotImplementedError()
@@ -42,7 +130,9 @@ class Core(Module):
         self.submodules.network = Network(config)
         self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), hmc_port=self.port) for i in range(num_pe)]
+        self.submodules.portsharer = DDRPortSharer(config=config, num_ports=num_pe)
+
+        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), hmc_port=self.portsharer.get_port(i)) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -83,34 +173,6 @@ class Core(Module):
                     if (yield s.barrierdistributor.network_interface_in.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
             yield
-
-    @passive
-    def gen_simulation(self, tb):
-        logger = logging.getLogger("ddr_sim")
-        edges_per_burst = len(self.port.rdata)//32
-        burst_bytes = len(self.port.rdata)//8
-        inflight_requests = []
-        yield self.port.arready.eq(1)
-        yield self.port.rvalid.eq(0)
-        while True:
-            if (yield self.port.rready):
-                if inflight_requests: # and random.choice([True, False])
-                    tag, addr = inflight_requests[0]
-                    inflight_requests.pop(0)
-                    logger.debug("Request: addr = {}, tag = {}".format(hex(addr), tag))
-                    assert(addr % burst_bytes == 0)
-                    idx = addr // 4
-                    data = 0
-                    for i in reversed(range(edges_per_burst)):
-                        data = (data << 32) | self.config.adj_val[idx + i]
-                    yield self.port.rdata.eq(data)
-                    yield self.port.rid.eq(tag)
-                    yield self.port.rvalid.eq(1)
-                else:
-                    yield self.port.rvalid.eq(0)
-            yield
-            if (yield self.port.arready) and (yield self.port.arvalid):
-                inflight_requests.append(((yield self.port.arid), (yield self.port.araddr)))
 
 class UnCore(Module):
     def __init__(self, config):
@@ -166,6 +228,11 @@ class UnCore(Module):
             )
         ]
 
+        if config.name == "pr":
+            self.kernel_error = Signal()
+
+            self.comb += self.kernel_error.eq(reduce(or_, (a.applykernel.kernel_error for a in self.cores[0].apply)))
+
     def gen_simulation(self, tb):
         yield self.start.eq(1)
         yield
@@ -190,7 +257,10 @@ def export(config, filename='top.v'):
     m.clock_domains.cd_sys = ClockDomain(reset_less=True)
 
     ios = {m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
-    ios |= set(m.cores[0].port.flatten())
+    ios |= m.cores[0].portsharer.get_ios()
+
+    if config.name == "pr":
+        ios.add(m.kernel_error)
 
     verilog.convert(m,
                     name="top",
