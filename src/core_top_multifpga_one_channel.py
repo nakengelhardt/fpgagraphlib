@@ -266,6 +266,13 @@ def export(config, filename='top'):
             for j in range(config.addresslayout.num_ext_ports):
                 ios |= set(m[i].network.external_network_interface_in[j].flatten())
                 ios |= set(m[i].network.external_network_interface_out[j].flatten())
+            # debug signals
+            for a in m[i].network.arbiter:
+                ios.add(a.barriercounter.all_messages_recvd)
+                ios.add(a.barriercounter.all_barriers_recvd)
+                # ios |= set(a.barriercounter.barrier_from_pe)
+                # ios |= set(a.barriercounter.num_from_pe)
+                # ios |= set(a.barriercounter.num_expected_from_pe)
             verilog.convert(m[i],
                             name="top",
                             ios=ios
