@@ -55,13 +55,25 @@ class DDRPortSharer(Module):
 
         self.submodules.roundrobin = RoundRobin(num_ports, switch_policy=SP_CE)
 
+        arid_reg = Signal(ID_WIDTH)
+        araddr_reg = Signal(ADDR_WIDTH)
+        arvalid_reg = Signal()
+
+        self.sync += [
+            If(self.real_port.arready,
+                self.real_port.arid.eq(arid_reg),
+                self.real_port.araddr.eq(araddr_reg),
+                self.real_port.arvalid_reg.eq(arvalid_reg)
+            )
+        ]
+
         self.comb += [
             [self.roundrobin.request[i].eq(port.arvalid) for i, port in enumerate(self.ports)],
             self.roundrobin.ce.eq(self.real_port.arready),
-            self.real_port.arvalid.eq(array_arvalid[self.roundrobin.grant]),
+            arvalid_reg.eq(array_arvalid[self.roundrobin.grant]),
             array_arready[self.roundrobin.grant].eq(self.real_port.arready),
-            self.real_port.araddr.eq(array_araddr[self.roundrobin.grant]),
-            self.real_port.arid.eq(self.roundrobin.grant)
+            araddr_reg.eq(array_araddr[self.roundrobin.grant]),
+            arid_reg.eq(self.roundrobin.grant)
         ]
 
         array_rvalid = Array(port.rvalid for port in self.ports)
