@@ -19,6 +19,7 @@ from core_interfaces import Message
 from one_channel_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
+from core_ddr import DDRPortSharer
 
 class Core(Module):
     def __init__(self, config, pe_start, pe_end):
@@ -32,14 +33,18 @@ class Core(Module):
         num_nodes = len(config.adj_dict)
 
         if config.has_edgedata:
+            assert not config.use_ddr
             init_edgedata = config.init_edgedata[pe_start:pe_end]
         else:
             init_edgedata = [None for _ in range(num_local_pe)]
 
+        if config.use_ddr:
+            self.submodules.portsharer = DDRPortSharer(config=config, num_ports=num_local_pe)
+
         self.submodules.network = Network(config, pe_start, pe_end)
         self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(pe_start, pe_end)]
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i-pe_start]) for i in range(pe_start, pe_end)]
+        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i-pe_start], hmc_port=self.portsharer.get_port(i-pe_start) if config.use_ddr else None) for i in range(pe_start, pe_end)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_local_pe)]
@@ -137,7 +142,7 @@ class UnCore(Module):
 
         self.submodules.adrlook_sender = AddressLookup(config)
         broadcast = Signal()
-        broadcast_port = Signal(max=config.addresslayout.num_ext_ports)
+        broadcast_port = Signal(max=max(2, config.addresslayout.num_ext_ports))
         got_ack = Signal(2*config.addresslayout.num_fpga)
         all_ack = Signal()
 
@@ -246,6 +251,7 @@ def sim(config):
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
 def export_one(config, filename='top.v'):
+    assert not config.use_ddr
 
     m = UnCore(config)
 
@@ -263,9 +269,14 @@ def export(config, filename='top'):
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
             ios={m[i].start, m[i].done, m[i].cycle_count}
+
+            if config.use_ddr:
+                ios |= m[i].portsharer.get_ios()
+
             for j in range(config.addresslayout.num_ext_ports):
                 ios |= set(m[i].network.external_network_interface_in[j].flatten())
                 ios |= set(m[i].network.external_network_interface_out[j].flatten())
+
             # debug signals
             for a in m[i].network.arbiter:
                 ios.add(a.barriercounter.all_messages_recvd)
@@ -273,10 +284,16 @@ def export(config, filename='top'):
                 # ios |= set(a.barriercounter.barrier_from_pe)
                 # ios |= set(a.barriercounter.num_from_pe)
                 # ios |= set(a.barriercounter.num_expected_from_pe)
+
             verilog.convert(m[i],
                             name="top",
                             ios=ios
                             ).write(iname + ".v")
+
+    if config.use_ddr:
+        with open("adj_val.data", 'wb') as f:
+            for x in config.adj_val:
+                f.write(struct.pack('=I', x))
 
 def main():
     args, config = init_parse()
