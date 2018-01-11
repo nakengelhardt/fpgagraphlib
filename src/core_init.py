@@ -85,11 +85,17 @@ def init_parse(args=None):
 
     kwargs["channel_bits"] = bits_for(kwargs["num_channels"] - 1)
 
-    if "num_pe" not in kwargs:
-        kwargs["num_pe"] = 8
-
     if "num_fpga" not in kwargs:
-        kwargs["num_fpga"] = 1
+        if "num_pe_per_fpga" in kwargs and "num_pe" in kwargs:
+            kwargs["num_fpga"] = (kwargs["num_pe"] + kwargs["num_pe_per_fpga"] - 1)//kwargs["num_pe_per_fpga"]
+        else:
+            kwargs["num_fpga"] = 1
+
+    if "num_pe" not in kwargs:
+        if "num_pe_per_fpga" in kwargs:
+            kwargs["num_pe"] = kwargs["num_pe_per_fpga"]*kwargs["num_fpga"]
+        else:
+            kwargs["num_pe"] = 8
 
     if "num_pe_per_fpga" not in kwargs:
         kwargs["num_pe_per_fpga"] = (kwargs["num_pe"] + kwargs["num_fpga"] - 1)//kwargs["num_fpga"]
@@ -158,12 +164,13 @@ def init_parse(args=None):
     algo_config = algo.Config(adj_dict, **kwargs)
 
     logger.info("Algorithm: " + algo_config.name)
-    logger.info("Using HMC: " + ("YES" if algo_config.use_hmc else "NO"))
-    logger.info("Sharing ports: " + ("YES" if algo_config.share_mem_port else "NO"))
+    logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
     logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
     logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
     logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
+    logger.info("num_fpga = " + str(algo_config.addresslayout.num_fpga))
     logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
+    logger.info("num_pe_per_fpga = " + str(algo_config.addresslayout.num_pe_per_fpga))
     logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
     logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
     logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
