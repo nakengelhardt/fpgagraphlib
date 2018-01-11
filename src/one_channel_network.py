@@ -153,7 +153,7 @@ class ExtGuard(Module):
             ).Else(
                 next_round.eq(0)
             ),
-            proceed.eq((num_fpga_barriers == (2*config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
+            proceed.eq((num_fpga_barriers == (config.addresslayout.num_ext_ports*config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
         ]
 
         fpga_barrier = [Signal() for _ in range(config.addresslayout.num_ext_ports)]
