@@ -2,6 +2,7 @@ from migen import *
 from tbsupport import *
 from migen.genlib.record import *
 from migen.genlib.roundrobin import *
+from migen.genlib.fifo import *
 
 import logging
 
@@ -11,15 +12,15 @@ class DDRPortSharer(Module):
         self.config = config
 
         _ddr_layout = [
-                    ("arid", "ID_WIDTH", DIR_M_TO_S),
-                    ("araddr", "ADDR_WIDTH", DIR_M_TO_S),
-                    ("arready", 1, DIR_S_TO_M),
-                    ("arvalid", 1, DIR_M_TO_S),
-                    ("rid", "ID_WIDTH", DIR_S_TO_M),
-                    ("rdata", "DATA_WIDTH", DIR_S_TO_M),
-                    ("rready", 1, DIR_M_TO_S),
-                    ("rvalid", 1, DIR_S_TO_M)
-                ]
+            ("arid", "ID_WIDTH", DIR_M_TO_S),
+            ("araddr", "ADDR_WIDTH", DIR_M_TO_S),
+            ("arready", 1, DIR_S_TO_M),
+            ("arvalid", 1, DIR_M_TO_S),
+            ("rid", "ID_WIDTH", DIR_S_TO_M),
+            ("rdata", "DATA_WIDTH", DIR_S_TO_M),
+            ("rready", 1, DIR_M_TO_S),
+            ("rvalid", 1, DIR_S_TO_M)
+        ]
 
         self.real_port = Record(set_layout_parameters(_ddr_layout, ID_WIDTH=ID_WIDTH, ADDR_WIDTH=ADDR_WIDTH, DATA_WIDTH=DATA_WIDTH))
         self.ports = [Record(set_layout_parameters(_ddr_layout, ID_WIDTH=ID_WIDTH, ADDR_WIDTH=ADDR_WIDTH, DATA_WIDTH=DATA_WIDTH)) for _ in range(num_ports)]
@@ -30,14 +31,32 @@ class DDRPortSharer(Module):
             self.comb += self.ports[0].connect(self.real_port)
             return
 
+        #buffer ports with fifos for better timing
+
+        addr_fifos = [SyncFIFO(width=ADDR_WIDTH, depth=8) for _ in range(num_ports)]
+        data_fifos = [SyncFIFO(width=DATA_WIDTH, depth=8) for _ in range(num_ports)]
+
+        self.submodules += addr_fifos
+        self.submodules += data_fifos
+
+        for i in range(num_ports):
+            self.comb += [
+                addr_fifos[i].din.eq(self.ports[i].araddr),
+                addr_fifos[i].we.eq(self.ports[i].arvalid),
+                self.ports[i].arready.eq(addr_fifos[i].writable),
+                self.ports[i].rdata.eq(data_fifos[i].dout),
+                self.ports[i].rvalid.eq(data_fifos[i].readable),
+                data_fifos[i].re.eq(self.ports[i].rready)
+            ]
+
         # multiplex between ports
 
         # ensure tag is large enough to number ports
         assert(num_ports <= 2**ID_WIDTH)
 
-        array_arvalid = Array(port.arvalid for port in self.ports)
-        array_arready = Array(port.arready for port in self.ports)
-        array_araddr = Array(port.araddr for port in self.ports)
+        array_arvalid = Array(addr_fifo.readable for addr_fifo in addr_fifos)
+        array_arready = Array(addr_fifo.re for addr_fifo in addr_fifos)
+        array_araddr = Array(addr_fifo.dout for addr_fifo in addr_fifos)
 
         self.submodules.roundrobin = RoundRobin(num_ports, switch_policy=SP_CE)
 
@@ -72,8 +91,8 @@ class DDRPortSharer(Module):
             arid_reg[0].eq(self.roundrobin.grant)
         ]
 
-        array_rvalid = Array(port.rvalid for port in self.ports)
-        array_rready = Array(port.rready for port in self.ports)
+        array_rvalid = Array(data_fifo.we for data_fifo in data_fifos)
+        array_rready = Array(data_fifo.writable for data_fifo in data_fifos)
 
         data_reg = Signal(DATA_WIDTH)
         id_reg = Signal(ID_WIDTH)
@@ -88,7 +107,7 @@ class DDRPortSharer(Module):
         ]
 
         self.comb += [
-            [port.rdata.eq(data_reg) for port in self.ports],
+            [data_fifo.din.eq(data_reg) for data_fifo in data_fifos],
             array_rvalid[id_reg].eq(valid_reg),
             self.real_port.rready.eq(array_rready[id_reg] | ~valid_reg)
         ]
