@@ -163,10 +163,10 @@ def init_parse(args=None):
 
     algo_config = algo.Config(adj_dict, **kwargs)
 
-    for pe in range(num_pe):
+    for pe in range(kwargs["num_pe"]):
         assert len(algo_config.adj_idx[pe]) <= kwargs["num_nodes_per_pe"]
         if not algo_config.use_hmc and not algo_config.use_ddr:
-            assert len(algo_config.adj_val[pe] <= kwargs["max_edges_per_pe"]
+            assert len(algo_config.adj_val[pe]) <= kwargs["max_edges_per_pe"]
 
     logger.info("Algorithm: " + algo_config.name)
     logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
