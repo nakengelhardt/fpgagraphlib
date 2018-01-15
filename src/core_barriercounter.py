@@ -76,12 +76,12 @@ class Barriercounter(Module):
 
         self.fsm.act("CHK_BARRIER",
             If(self.apply_interface_out.ack,
-                NextValue(self.apply_interface_out.valid, 0)
-            ),
-            If(self.all_barriers_recvd,
-                NextState("PASS_BARRIER")
-            ).Else(
-                NextState("DEFAULT")
+                NextValue(self.apply_interface_out.valid, 0),
+                If(self.all_barriers_recvd,
+                    NextState("PASS_BARRIER")
+                ).Else(
+                    NextState("DEFAULT")
+                )
             )
         )
 
