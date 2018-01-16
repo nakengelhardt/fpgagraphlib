@@ -71,7 +71,7 @@ class Core(Module):
         self.start = Signal()
         init = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
+        self.cycle_count = Signal(64)
 
         self.sync += [
             init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
