@@ -97,6 +97,11 @@ class Core(Module):
             )
         ]
 
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
+        ]
+
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
@@ -268,7 +273,7 @@ def export(config, filename='top'):
         iname = filename + "_" + str(i)
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
-            ios={m[i].start, m[i].done, m[i].cycle_count}
+            ios={m[i].start, m[i].done, m[i].cycle_count, m[i].total_num_messages}
 
             if config.use_ddr:
                 ios |= m[i].portsharer.get_ios()
