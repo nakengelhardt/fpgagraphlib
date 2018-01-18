@@ -185,7 +185,7 @@ class UnCore(Module):
                 [core.network.external_network_interface_in[port].msg.raw_bits().eq(self.fifo[port].dout.msg.raw_bits()) for core in self.cores],
                 [core.network.external_network_interface_in[port].dest_pe.eq(self.fifo[port].dout.dest_pe) for core in self.cores],
                 [core.network.external_network_interface_in[port].broadcast.eq(broadcast) for core in self.cores],
-                [self.cores[i].network.external_network_interface_in[port].valid.eq((~broadcast & self.fifo[port].dout.valid & (adrlook.fpga_out == i)) | (broadcast & ~((self.adrlook_sender.fpga_out == i) & (broadcast_port == port)) & ~got_ack[port*i])) for i in range(config.addresslayout.num_fpga)],
+                [self.cores[i].network.external_network_interface_in[port].valid.eq((~broadcast & self.fifo[port].dout.valid & (adrlook.fpga_out == i)) | (broadcast & ~((self.adrlook_sender.fpga_out == i) & (broadcast_port == port)) & ~got_ack[i * config.addresslayout.num_ext_ports + port])) for i in range(config.addresslayout.num_fpga)],
                 self.fifo[port].dout.ack.eq((~broadcast & ext_ack_channel_in[adrlook.fpga_out]) | (broadcast & (port == broadcast_port) & all_ack))
             ]
 
@@ -205,7 +205,7 @@ class UnCore(Module):
                 If(all_ack,
                     got_ack.eq(0)
                 ).Else(
-                    [got_ack[port*i].eq(got_ack[port*i] | self.cores[i].network.external_network_interface_in[port].ack) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)]
+                    [got_ack[i * config.addresslayout.num_ext_ports + port].eq(got_ack[i * config.addresslayout.num_ext_ports + port] | self.cores[i].network.external_network_interface_in[port].ack) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)]
                 )
             )
         ]
@@ -213,7 +213,7 @@ class UnCore(Module):
 
 
         self.comb += [
-            all_ack.eq(reduce(and_, [got_ack[port*i] | ((self.adrlook_sender.fpga_out == i) & (port == broadcast_port)) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)])),
+            all_ack.eq(reduce(and_, [got_ack[i * config.addresslayout.num_ext_ports + port] | ((self.adrlook_sender.fpga_out == i) & (port == broadcast_port)) for i in range(config.addresslayout.num_fpga) for port in range(config.addresslayout.num_ext_ports)])),
         ]
 
 
