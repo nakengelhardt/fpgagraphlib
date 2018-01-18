@@ -55,7 +55,7 @@ class ApplyKernel(Module):
             self.state_out.active.eq(0),
             self.state_valid.eq(self.valid_in),
             self.state_barrier.eq(self.barrier_in),
-            If(self.state_in.nrecvd != self.state_in.nneighbors,
+            If(self.valid_in & self.state_in.active & (self.state_in.nrecvd != self.state_in.nneighbors),
                 self.kernel_error.eq(1)
             )
         )

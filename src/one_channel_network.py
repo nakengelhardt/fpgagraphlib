@@ -135,10 +135,11 @@ class ExtGuard(Module):
         in_fifo = [InterfaceFIFO(layout=self.network_interface_in_inside[0].layout, depth=4) for _ in range(config.addresslayout.num_ext_ports)]
         self.submodules += in_fifo
 
-        num_fpga_barriers = Signal(bits_for(config.addresslayout.num_fpga))
+        num_fpga_barriers = Signal(max=config.addresslayout.num_ext_ports * config.addresslayout.num_fpga)
         network_round = Signal(config.addresslayout.channel_bits)
         next_round = Signal(config.addresslayout.channel_bits)
         proceed = Signal()
+        proceed2 = Signal(16)
 
         self.comb += [
             self.ext_network_current_round.eq(network_round),
@@ -153,7 +154,7 @@ class ExtGuard(Module):
             ).Else(
                 next_round.eq(0)
             ),
-            proceed.eq((num_fpga_barriers == (config.addresslayout.num_ext_ports*config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
+            proceed.eq((num_fpga_barriers == (config.addresslayout.num_ext_ports * config.addresslayout.num_fpga - 1)) & (self.local_network_round == next_round))
         ]
 
         fpga_barrier = [Signal() for _ in range(config.addresslayout.num_ext_ports)]
@@ -167,10 +168,14 @@ class ExtGuard(Module):
             ]
 
         self.sync += [
-            num_fpga_barriers.eq(num_fpga_barriers + sum(fpga_barrier)),
             If(proceed,
+                proceed2.eq(proceed2 + 1)
+            ),
+            num_fpga_barriers.eq(num_fpga_barriers + sum(fpga_barrier)),
+            If(proceed2[-1],
                 network_round.eq(next_round),
-                num_fpga_barriers.eq(0)
+                num_fpga_barriers.eq(0),
+                proceed2.eq(0)
             )
         ]
 

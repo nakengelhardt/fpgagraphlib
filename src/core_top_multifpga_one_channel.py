@@ -133,7 +133,7 @@ class Core(Module):
 class AddressLookup(Module):
     def __init__(self, config):
         self.pe_adr_in = Signal(config.addresslayout.peidsize)
-        self.fpga_out = Signal(bits_for(config.addresslayout.num_fpga))
+        self.fpga_out = Signal(max=config.addresslayout.num_fpga)
 
         adr = Array(i//config.addresslayout.num_pe_per_fpga for i in range(config.addresslayout.num_pe))
 
@@ -150,7 +150,7 @@ class UnCore(Module):
         self.submodules.adrlook_sender = AddressLookup(config)
         broadcast = Signal()
         broadcast_port = Signal(max=max(2, config.addresslayout.num_ext_ports))
-        got_ack = Signal(2*config.addresslayout.num_fpga)
+        got_ack = Signal(config.addresslayout.num_ext_ports*config.addresslayout.num_fpga)
         all_ack = Signal()
 
         self.submodules.fifo = [InterfaceFIFO(layout=self.cores[0].network.external_network_interface_out[port].layout, depth=8) for port in range(config.addresslayout.num_ext_ports)]
@@ -291,6 +291,8 @@ def export(config, filename='top'):
                 # ios |= set(a.barriercounter.barrier_from_pe)
                 # ios |= set(a.barriercounter.num_from_pe)
                 # ios |= set(a.barriercounter.num_expected_from_pe)
+            ios.add(m[i].network.local_network_round)
+            ios.add(m[i].network.extguard.ext_network_current_round)
 
             verilog.convert(m[i],
                             name="top",
