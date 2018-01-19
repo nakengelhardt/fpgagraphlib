@@ -110,13 +110,7 @@ class Barriercounter(Module):
                 NextValue(self.apply_interface_out.valid, apply_interface_in_fifo.dout.valid),
                 If(apply_interface_in_fifo.dout.valid,
                     NextValue(self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)], self.num_from_pe[config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)] + 1),
-                    NextState("WAIT_CNT_UPDATE")
+                    NextState("CHK_BARRIER") #this gratuitously checks all_barriers_recvd again, but we need to wait an extra cycle for all_messages_recvd to be updated
                 )
             )
-        )
-
-        self.fsm.act("WAIT_CNT_UPDATE",
-        # self.all_messages_recvd is updated with an extra cycle delay
-        # so have to wait 1 cycle before going to check
-            NextState("PASS_BARRIER")
         )
