@@ -14,9 +14,10 @@ import logging
 class Config:
     def __init__(self, adj_dict, use_hmc=False, use_ddr=False, share_mem_port=False, **kwargs):
         self.name = "pr"
-        self.total_pr_rounds = 30
+        self.total_pr_rounds = 10
 
         logger = logging.getLogger('config')
+        logger.info("total_pr_rounds = {}".format(self.total_pr_rounds))
 
         floatsize = 32
         payloadsize = layout_len(set_layout_parameters(payload_layout, floatsize=floatsize))

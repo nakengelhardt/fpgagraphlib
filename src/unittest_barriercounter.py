@@ -16,7 +16,7 @@ class BarriercounterCase(SimCase, unittest.TestCase):
             self.graph = generate_graph(num_nodes=31, num_edges=64)
             # print(self.graph)
 
-            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=2, num_pe=4, num_nodes_per_pe=8, max_edges_per_pe=64, use_hmc=False, share_mem_port=False, num_channels=4, channel_bits=2)
+            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=3, num_pe=4, num_nodes_per_pe=8, max_edges_per_pe=64, use_hmc=False, share_mem_port=False, num_channels=4, channel_bits=2)
             self.submodules.dut = Barriercounter(self.config)
 
     def test_barriercount(self):

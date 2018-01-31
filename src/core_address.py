@@ -29,6 +29,8 @@ class AddressLayout:
         return dict((key, getattr(self, key)) for key in dir(self) if key not in dir(self.__class__))
 
     def pe_adr(self, nodeid):
+        if self.num_pe < 2:
+            return 0
         if isinstance(nodeid, Signal):
             return nodeid[log2_int(self.num_nodes_per_pe):log2_int(self.num_nodes_per_pe)+self.peidsize]
         else:
