@@ -161,7 +161,25 @@ def init_parse(args=None):
     algo_config_module = "{}.config".format(config['app']['algo'])
     algo = import_module(algo_config_module)
 
+    use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
+    use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
+    share_mem_port = kwargs["share_mem_port"] if "share_mem_port" in kwargs else False
+
     algo_config = algo.Config(adj_dict, **kwargs)
+
+    algo_config.use_hmc = use_hmc
+    algo_config.use_ddr = use_ddr
+    algo_config.share_mem_port = share_mem_port
+    if use_hmc:
+        assert not algo_config.has_edgedata
+        adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=4)
+    elif use_ddr:
+        assert not algo_config.has_edgedata
+        adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=16)
+    else:
+        adj_idx, adj_val = algo_config.addresslayout.generate_partition(adj_dict)
+    algo_config.adj_idx = adj_idx
+    algo_config.adj_val = adj_val
 
     for pe in range(kwargs["num_pe"]):
         assert len(algo_config.adj_idx[pe]) <= kwargs["num_nodes_per_pe"]

@@ -11,7 +11,7 @@ import random
 import logging
 
 class Config:
-    def __init__(self, adj_dict, use_hmc=False, share_mem_port=False, **kwargs):
+    def __init__(self, adj_dict, **kwargs):
         self.name = "sssp"
 
         logger = logging.getLogger('config')
@@ -22,18 +22,7 @@ class Config:
         self.addresslayout.edgedatasize = 8
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
-        #edgedata not supported yet on HMC
-        assert(use_hmc==False)
-        self.use_hmc = use_hmc
-        self.share_mem_port = share_mem_port
-
         self.adj_dict = adj_dict
-        if self.use_hmc or self.use_ddr:
-            raise NotImplementedError()
-        else:
-            adj_idx, adj_val = self.addresslayout.generate_partition(self.adj_dict)
-        self.adj_idx = adj_idx
-        self.adj_val = adj_val
 
         self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
