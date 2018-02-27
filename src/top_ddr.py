@@ -18,7 +18,7 @@ from core_interfaces import Message
 from fifo_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
-from core_ddr import DDRPortSharer
+from core_ddr import *
 
 class Core(Module):
     def __init__(self, config):
@@ -142,6 +142,9 @@ def sim(config):
 
     tb = UnCore(config)
 
+    if len(config.adj_dict) < 64:
+        print(config.adj_dict)
+
     generators = []
 
     for core in tb.cores:
@@ -172,6 +175,27 @@ def export(config, filename='top.v'):
             for x in config.adj_val:
                 f.write(struct.pack('=I', x))
 
+def export_fake(config, filename='top.v'):
+
+    m = UnCore(config)
+    m.clock_domains.cd_sys = ClockDomain(reset_less=True)
+
+    m.cores[0].submodules += FakeDDR(config=config, port=m.cores[0].portsharer.real_port)
+
+    ios = {m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
+
+    if config.name == "pr":
+        ios.add(m.kernel_error)
+
+    verilog.convert(m,
+                    name="top",
+                    ios=ios
+                    ).write(filename)
+    if config.use_ddr:
+        with open("adj_val.data", 'wb') as f:
+            for x in config.adj_val:
+                f.write(struct.pack('=I', x))
+
 def main():
     args, config = init_parse()
 
@@ -186,6 +210,12 @@ def main():
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
         export(config, filename=filename)
+    if args.command=='export_fake':
+        filename = "top.v"
+        if args.output:
+            filename = args.output
+        logger.info("Exporting design to file {}".format(filename))
+        export_fake(config, filename=filename)
 
 if __name__ == '__main__':
     main()

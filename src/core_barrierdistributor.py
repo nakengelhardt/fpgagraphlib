@@ -1,11 +1,18 @@
 from migen import *
 
 from core_interfaces import NetworkInterface
+from recordfifo import *
 
 class BarrierDistributor(Module):
     def __init__(self, config):
         self.network_interface_in = NetworkInterface(name="barrierdistributor_in", **config.addresslayout.get_params())
         self.network_interface_out = NetworkInterface(name="barrierdistributor_out", **config.addresslayout.get_params())
+
+        self.submodules.fifo = InterfaceFIFO(layout=self.network_interface_in.layout, depth=8)
+
+        self.comb += [
+            self.network_interface_in.connect(self.fifo.din)
+        ]
 
         self.total_num_messages = Signal(32)
         self.sync += [
@@ -24,7 +31,7 @@ class BarrierDistributor(Module):
         halt = Signal()
 
         self.comb += [
-            have_barrier.eq(self.network_interface_in.msg.barrier & self.network_interface_in.valid),
+            have_barrier.eq(self.fifo.dout.msg.barrier & self.fifo.dout.valid),
             barrier_done.eq(curr_barrier == (num_pe - 1))
         ]
 
@@ -41,7 +48,7 @@ class BarrierDistributor(Module):
         ]
 
         self.sync += [
-            If(~have_barrier & self.network_interface_in.valid & self.network_interface_in.ack,
+            If(~have_barrier & self.fifo.dout.valid & self.fifo.dout.ack,
                 num_msgs_since_last_barrier[sink].eq(num_msgs_since_last_barrier[sink] + 1),
                 halt.eq(0)
             )
@@ -53,13 +60,13 @@ class BarrierDistributor(Module):
                 self.network_interface_out.dest_pe.eq(curr_barrier),
                 self.network_interface_out.msg.dest_id.eq(num_msgs_since_last_barrier[sink]),
                 self.network_interface_out.msg.halt.eq(halt),
-                self.network_interface_in.ack.eq(barrier_done & self.network_interface_out.ack)
+                self.fifo.dout.ack.eq(barrier_done & self.network_interface_out.ack)
             ).Else(
-                sink.eq(self.network_interface_in.dest_pe),
-                self.network_interface_out.dest_pe.eq(self.network_interface_in.dest_pe),
-                self.network_interface_out.msg.dest_id.eq(self.network_interface_in.msg.dest_id),
+                sink.eq(self.fifo.dout.dest_pe),
+                self.network_interface_out.dest_pe.eq(self.fifo.dout.dest_pe),
+                self.network_interface_out.msg.dest_id.eq(self.fifo.dout.msg.dest_id),
                 self.network_interface_out.msg.halt.eq(0),
-                self.network_interface_in.ack.eq(self.network_interface_out.ack)
+                self.fifo.dout.ack.eq(self.network_interface_out.ack)
             ),
-            self.network_interface_in.connect(self.network_interface_out, omit=["ack", "dest_id", "dest_pe", "halt"])
+            self.fifo.dout.connect(self.network_interface_out, omit=["ack", "dest_id", "dest_pe", "halt"])
         ]

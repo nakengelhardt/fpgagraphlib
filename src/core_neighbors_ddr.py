@@ -1,9 +1,10 @@
 from migen import *
-from migen.genlib.fsm import FSM, NextState, NextValue
-from migen.genlib.fifo import SyncFIFO
+from migen.genlib.fsm import *
+from migen.genlib.fifo import *
 
 import logging
 
+from recordfifo import *
 from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 _data_layout = [
@@ -43,8 +44,8 @@ class NeighborsDDR(Module):
 
         update_dat_w = Record(set_layout_parameters(_data_layout, log_edges_per_burst=log2_int(edges_per_burst), **config.addresslayout.get_params()))
 
-        self.submodules.answerbuffer = SyncFIFO(width=len(port.rdata), depth=max_inflight)
-        self.submodules.updatebuffer = SyncFIFO(width=layout_len(update_dat_w.layout), depth=max_inflight)
+        self.submodules.answerbuffer = SyncFIFOBuffered(width=len(port.rdata), depth=max_inflight)
+        self.submodules.updatebuffer = SyncFIFOBuffered(width=layout_len(update_dat_w.layout), depth=max_inflight)
 
         self.comb += [
             self.updatebuffer.din.eq(update_dat_w.raw_bits())
@@ -73,6 +74,7 @@ class NeighborsDDR(Module):
         roundpar = Signal(config.addresslayout.channel_bits)
         num_neighbors = Signal(edgeidsize)
 
+        self.submodules.neighbor_out_fifo = InterfaceFIFO(layout=self.neighbor_out.layout, depth=8)
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
@@ -115,14 +117,14 @@ class NeighborsDDR(Module):
         ]
 
         fsm.act("BARRIER",
-            If((num_inflight == 0) & ~self.neighbor_out.valid,
-                NextValue(self.neighbor_out.barrier, 1),
+            If((num_inflight == 0) & ~self.neighbor_out_fifo.din.valid,
+                NextValue(self.neighbor_out_fifo.din.barrier, 1),
                 NextState("BARRIER_WAIT")
             )
         )
         fsm.act("BARRIER_WAIT",
-            If(self.neighbor_out.ack,
-                NextValue(self.neighbor_out.barrier, 0),
+            If(self.neighbor_out_fifo.din.ack,
+                NextValue(self.neighbor_out_fifo.din.barrier, 0),
                 NextState("IDLE")
             )
         )
@@ -171,11 +173,11 @@ class NeighborsDDR(Module):
         last = Signal()
         self.comb += [
             last.eq(mux == update_dat_r.valid),
-            burst_done.eq(last & self.neighbor_out.ack)
+            burst_done.eq(last & self.neighbor_out_fifo.din.ack)
         ]
 
         self.sync += [
-            If(self.neighbor_out.valid & self.neighbor_out.ack,
+            If(self.neighbor_out_fifo.din.valid & self.neighbor_out_fifo.din.ack & ~self.neighbor_out_fifo.din.barrier,
                 If(last,
                     mux.eq(0)
                 ).Else(
@@ -186,39 +188,38 @@ class NeighborsDDR(Module):
 
         cases = {}
         for i in range(edges_per_burst):
-            cases[i] = self.neighbor_out.neighbor.eq(self.answerbuffer.dout[i*32:(i+1)*32])
+            cases[i] = self.neighbor_out_fifo.din.neighbor.eq(self.answerbuffer.dout[i*32:(i+1)*32])
         self.comb += Case(mux, cases).makedefault()
 
         # output
         self.comb += [
-            If(self.neighbor_out.barrier,
-                self.neighbor_out.message.eq(message),
-                self.neighbor_out.sender.eq(sender),
-                self.neighbor_out.round.eq(roundpar),
-                self.neighbor_out.num_neighbors.eq(num_neighbors)
+            If(self.neighbor_out_fifo.din.barrier,
+                self.neighbor_out_fifo.din.valid.eq(1),
+                self.neighbor_out_fifo.din.message.eq(message),
+                self.neighbor_out_fifo.din.sender.eq(sender),
+                self.neighbor_out_fifo.din.round.eq(roundpar),
+                self.neighbor_out_fifo.din.num_neighbors.eq(num_neighbors)
             ).Else(
-                self.neighbor_out.valid.eq(burst_valid),
-                self.neighbor_out.message.eq(update_dat_r.message),
-                self.neighbor_out.sender.eq(update_dat_r.sender),
-                self.neighbor_out.round.eq(update_dat_r.round),
-                self.neighbor_out.num_neighbors.eq(update_dat_r.num_neighbors)
-            )
+                self.neighbor_out_fifo.din.valid.eq(burst_valid),
+                self.neighbor_out_fifo.din.message.eq(update_dat_r.message),
+                self.neighbor_out_fifo.din.sender.eq(update_dat_r.sender),
+                self.neighbor_out_fifo.din.round.eq(update_dat_r.round),
+                self.neighbor_out_fifo.din.num_neighbors.eq(update_dat_r.num_neighbors)
+            ),
+            self.neighbor_out_fifo.dout.connect(self.neighbor_out, omit={"valid"}),
+            self.neighbor_out.valid.eq(self.neighbor_out_fifo.dout.valid & ~self.neighbor_out_fifo.dout.barrier)
         ]
 
-
-        # stats
-        self.num_requests_accepted = Signal(32)
-        self.num_hmc_commands_issued = Signal(32)
-        self.num_hmc_commands_retired = Signal(32)
-        self.num_hmc_responses = Signal(32)
-        self.num_neighbors_issued = Signal(32)
+        self.requests_emitted = Signal(32)
+        self.requests_fulfilled = Signal(32)
 
         self.sync += [
-            If(port.arvalid & port.arready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
-            If(self.answerbuffer.readable & self.answerbuffer.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
-            If(port.rvalid & port.rready, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(neighbor_in_p.valid & neighbor_in_p.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+            If(port.arready & port.arvalid,
+                self.requests_emitted.eq(self.requests_emitted + 1)
+            ),
+            If(port.rready & port.rvalid,
+                self.requests_fulfilled.eq(self.requests_fulfilled + 1)
+            )
         ]
 
     def gen_selfcheck(self, tb):
