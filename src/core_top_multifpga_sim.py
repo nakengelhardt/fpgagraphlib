@@ -12,8 +12,6 @@ from operator import and_
 import logging
 import random
 
-from pico import PicoPlatform
-
 from core_init import init_parse
 
 from recordfifo import *
@@ -93,6 +91,13 @@ class Core(Module):
                 self.cycle_count.eq(self.cycle_count + 1)
             )
         ]
+
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
+        ]
+
+        self.level = self.apply[0].level
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -226,10 +231,22 @@ def export(config, filename='top'):
         iname = filename + "_" + str(i)
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
-            ios={m[i].start, m[i].done, m[i].cycle_count}
+
+            ios={m[i].start, m[i].done, m[i].cycle_count, m[i].total_num_messages, m[i].level}
+
             for j in range(config.addresslayout.num_channels):
                 ios |= set(m[i].network.external_network_interface_in[j].flatten())
                 ios |= set(m[i].network.external_network_interface_out[j].flatten())
+
+            # debug signals
+            for a in m[i].network.arbiter:
+                ios.add(a.barriercounter.all_messages_recvd)
+                ios.add(a.barriercounter.all_barriers_recvd)
+                # ios |= set(a.barriercounter.barrier_from_pe)
+                # ios |= set(a.barriercounter.num_from_pe)
+                # ios |= set(a.barriercounter.num_expected_from_pe)
+            ios.add(m[i].network.local_network_round)
+
             verilog.convert(m[i],
                             name="top",
                             ios=ios

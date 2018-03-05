@@ -176,6 +176,7 @@ class Network(Module):
 
         # pull from outside
         network_round = Signal(config.addresslayout.channel_bits)
+        self.local_network_round = network_round
         next_round = Signal(config.addresslayout.channel_bits)
         proceed = Signal()
 
