@@ -25,7 +25,7 @@ class Core(Module):
         self.config = config
         num_pe = self.config.addresslayout.num_pe
 
-        if config.has_edgedata:
+        if config.use_ddr and config.has_edgedata:
             raise NotImplementedError()
 
         self.submodules.network = Network(config)
@@ -182,7 +182,10 @@ def export_fake(config, filename='top.v'):
 
     m.cores[0].submodules += FakeDDR(config=config, port=m.cores[0].portsharer.real_port)
 
+    real_port = Record(m.cores[0].portsharer.real_port.layout, name="real_port")
+
     ios = {m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
+    ios |= set(real_port.flatten())
 
     if config.name == "pr":
         ios.add(m.kernel_error)
