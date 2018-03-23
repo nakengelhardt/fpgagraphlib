@@ -215,7 +215,7 @@ class Top(Module):
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
                 self.comb += [
-                    self.status_regs_transfer.i.eq(Cat(sr for n in self.uncore.core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued))),
+                    self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired))),
                     # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
                     Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
                 ]

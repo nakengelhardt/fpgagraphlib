@@ -75,16 +75,16 @@ class NeighborsHMC(Module):
 
         assert(edgeidsize <= 32)
 
-        num_injected = Signal(7)
-        inject = Signal()
-
-        no_tags_inflight = Signal()
-
         if not hmc_port:
             hmc_port = config.platform.getHMCPort(0)
 
         self.hmc_port = hmc_port
         effective_max_tag_size = self.hmc_port.effective_max_tag_size
+
+        num_injected = Signal(7)
+        inject = Signal()
+
+        no_tags_inflight = Signal()
 
         update_dat_w = Record(set_layout_parameters(_data_layout, **config.addresslayout.get_params()))
 
@@ -106,7 +106,7 @@ class NeighborsHMC(Module):
 
         self.sync += [
             If(self.neighbor_in.ack,
-                self.neighbor_in.connect(neighbor_in_p, omit="ack"),
+                self.neighbor_in.connect(neighbor_in_p, omit={"ack"}),
                 end_node_idx_p.eq(self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << 2))
             )
         ]
@@ -125,8 +125,6 @@ class NeighborsHMC(Module):
         num_neighbors = Signal(edgeidsize)
 
         current_tag = Signal(6)
-
-
 
         self.submodules.fsm = fsm = FSM()
         fsm.act("IDLE", # wait for input
@@ -193,7 +191,7 @@ class NeighborsHMC(Module):
         )
         self.comb += [
             no_tags_inflight.eq(self.tags.level == num_injected),
-            inject.eq(~num_injected[effective_max_tag_size]),
+            inject.eq(num_injected <= 2**effective_max_tag_size),
             If(inject, current_tag.eq(num_injected)).Else(current_tag.eq(self.tags.dout))
         ]
 
