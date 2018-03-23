@@ -84,12 +84,28 @@ class Core(Module):
             ]
 
         self.sync += [
-            If(init,
+            If(~self.start,
                 self.cycle_count.eq(0)
             ).Elif(~self.global_inactive,
                 self.cycle_count.eq(self.cycle_count + 1)
             )
         ]
+
+        # self.total_num_messages = Signal(32)
+        # self.comb += [
+        #     self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
+        # ]
+
+        # debug signals
+        for a in self.network.arbiter:
+            a.barriercounter.all_messages_recvd.attr.add("mark_debug")
+            a.barriercounter.all_barriers_recvd.attr.add("mark_debug")
+            for i in range(num_pe):
+                a.barriercounter.barrier_from_pe[i].attr.add("mark_debug")
+                a.barriercounter.num_from_pe[i].attr.add("mark_debug")
+                a.barriercounter.num_expected_from_pe[i].attr.add("mark_debug")
+        self.network.nrs.network_round.attr.add("mark_debug")
+        self.network.nrs.local_proceed.attr.add("mark_debug")
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -151,11 +167,15 @@ class UnCore(Module):
         self.done = Signal()
         self.cycle_count = Signal(32)
 
-        self.comb += [
+        self.sync += [
             [core.start.eq(self.start) for core in self.cores],
             self.done.eq(reduce(and_, [core.done for core in self.cores])),
             self.cycle_count.eq(self.cores[0].cycle_count)
         ]
+
+        self.total_num_messages = Signal(32)
+
+        # self.comb += self.total_num_messages.eq(sum(core.total_num_messages for core in self.cores))
 
     def gen_simulation(self, tb):
         yield self.start.eq(1)
@@ -176,10 +196,11 @@ def sim(config):
 def export_one(config, filename='top.v'):
 
     m = UnCore(config)
+    m.clock_domains.cd_sys = ClockDomain(reset_less=True)
 
     verilog.convert(m,
                     name="top",
-                    ios={m.start, m.done, m.cycle_count}
+                    ios={m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
                     ).write(filename)
 
 def export(config, filename='top'):

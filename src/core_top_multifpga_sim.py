@@ -66,7 +66,7 @@ class Core(Module):
         self.start = Signal()
         init = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
+        self.cycle_count = Signal(64)
 
         self.sync += [
             init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
@@ -175,7 +175,7 @@ class UnCore(Module):
 
         self.start = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
+        self.cycle_count = Signal(64)
 
         self.comb += [
             [core.start.eq(self.start) for core in self.cores],
@@ -215,7 +215,6 @@ def sim(config):
     run_simulation(tb, generators, vcd_name="tb.vcd")
 
 def export_one(config, filename='top.v'):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
     m = UnCore(config)
     verilog.convert(m,
