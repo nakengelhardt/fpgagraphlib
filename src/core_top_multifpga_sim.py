@@ -80,8 +80,8 @@ class Core(Module):
             self.comb += [
                 start_message[i].select.eq(init),
                 start_message[i].msg.eq(initfifo.dout),
-                start_message[i].valid.eq(initfifo.readable),
-                initfifo.re.eq(start_message[i].ack)
+                start_message[i].valid.eq(initfifo.readable & self.start),
+                initfifo.re.eq(start_message[i].ack & self.start)
             ]
 
         self.sync += [
