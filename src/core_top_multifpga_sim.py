@@ -69,7 +69,7 @@ class Core(Module):
         self.cycle_count = Signal(64)
 
         self.sync += [
-            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
+            init.eq(reduce(or_, [i.readable for i in initfifos]))
         ]
 
         self.comb += [
