@@ -206,7 +206,8 @@ class NeighborsDDR(Module):
                 self.neighbor_out_fifo.din.round.eq(update_dat_r.round),
                 self.neighbor_out_fifo.din.num_neighbors.eq(update_dat_r.num_neighbors)
             ),
-            self.neighbor_out_fifo.dout.connect(self.neighbor_out, omit={"valid"}),
+            self.neighbor_out_fifo.dout.connect(self.neighbor_out, omit={"valid", "barrier"}),
+            self.neighbor_out.barrier.eq(self.neighbor_out_fifo.dout.valid & self.neighbor_out_fifo.dout.barrier),
             self.neighbor_out.valid.eq(self.neighbor_out_fifo.dout.valid & ~self.neighbor_out_fifo.dout.barrier)
         ]
 
