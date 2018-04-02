@@ -154,6 +154,11 @@ class UnCore(Module):
             )
         ]
 
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.cores[0].scatter))
+        ]
+
     def gen_simulation(self, tb):
         yield self.start.eq(1)
         yield
@@ -244,6 +249,13 @@ class Top(Module):
             cycle_count_pico.eq(self.cycle_count_transfer.o)
         ]
 
+        total_num_messages_pico = Signal(len(self.uncore.total_num_messages))
+        self.submodules.total_num_messages_transfer = BusSynchronizer(len(self.uncore.total_num_messages), "sys", "pico")
+        self.comb += [
+            self.total_num_messages_transfer.i.eq(self.uncore.total_num_messages),
+            total_num_messages_pico.eq(self.total_num_messages_transfer.o)
+        ]
+
         start_pico = Signal()
         start_pico.attr.add("no_retiming")
         self.specials += [
@@ -264,6 +276,9 @@ class Top(Module):
             ),
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
                 self.bus.PicoDataOut.eq(done_pico)
+            ),
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10008),
+                self.bus.PicoDataOut.eq(total_num_messages_pico)
             ),
             [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i*4),
                 self.bus.PicoDataOut.eq(csr)

@@ -108,7 +108,7 @@ class Neighborsx4(Module):
             self.comb += [
                 self.fifos[i].we.eq(self.neighbor_in[i].valid | self.neighbor_in[i].barrier),
                 self.neighbor_in[i].ack.eq(self.fifos[i].writable),
-                self.neighbor_in[i].connect(self.fifos[i].din, leave_out={"valid", "ack"})
+                self.neighbor_in[i].connect(self.fifos[i].din, omit={"valid", "ack"})
             ]
 
         array_data = Array(fifo.dout.raw_bits() for fifo in self.fifos)

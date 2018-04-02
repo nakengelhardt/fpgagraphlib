@@ -136,7 +136,7 @@ class NeighborsHMC(Module):
             If(neighbor_in_p.barrier,
                 NextState("BARRIER")
             ),
-            If(neighbor_in_p.valid & (neighbor_in_p.num_neighbors != 0),
+            If(neighbor_in_p.valid & (neighbor_in_p.num_neighbors > 0),
                 NextValue(current_node_idx, neighbor_in_p.start_idx),
                 NextValue(end_node_idx, end_node_idx_p),
                 NextState("GET_NEIGHBORS")
@@ -191,7 +191,7 @@ class NeighborsHMC(Module):
         )
         self.comb += [
             no_tags_inflight.eq(self.tags.level == num_injected),
-            inject.eq(num_injected <= 2**effective_max_tag_size),
+            inject.eq(num_injected < 2**effective_max_tag_size),
             If(inject, current_tag.eq(num_injected)).Else(current_tag.eq(self.tags.dout))
         ]
 
