@@ -200,10 +200,13 @@ class Top(Module):
 
         hmc_perf_counters = []
         if config.use_hmc:
-            hmc_perf_counters = [Signal(32) for _ in range(9)]
+            hmc_perf_counters = [Signal(32) for _ in range(2*9)]
             for i in range(9):
-                port = config.platform.getHMCPort(i)
-                self.sync += If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1))
+                port = config.platform.picoHMCports[i]
+                self.sync += [
+                    If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
+                    If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
+                ]
                 self.comb += [
                     port.wr_data.eq(0),
                     port.wr_data_valid.eq(0)
