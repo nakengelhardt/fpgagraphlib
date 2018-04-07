@@ -129,10 +129,9 @@ class UnCore(Module):
             )
         ]
 
-        if config.name == "pr":
-            self.kernel_error = Signal()
+        self.kernel_error = Signal()
 
-            self.comb += self.kernel_error.eq(reduce(or_, (a.applykernel.kernel_error for a in self.cores[0].apply)))
+        self.comb += self.kernel_error.eq(reduce(or_, (a.applykernel.kernel_error for a in self.cores[0].apply)))
 
     def gen_simulation(self, tb):
         yield self.start.eq(1)
@@ -160,11 +159,9 @@ def export(config, filename='top.v'):
     m = UnCore(config)
     m.clock_domains.cd_sys = ClockDomain(reset_less=True)
 
-    ios = {m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk}
-    ios |= m.cores[0].portsharer.get_ios()
-
-    if config.name == "pr":
-        ios.add(m.kernel_error)
+    ios = {m.start, m.done, m.cycle_count, m.total_num_messages, m.cd_sys.clk, m.kernel_error}
+    if config.use_ddr:
+        ios |= m.cores[0].portsharer.get_ios()
 
     verilog.convert(m,
                     name="top",

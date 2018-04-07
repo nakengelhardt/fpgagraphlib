@@ -28,6 +28,8 @@ class ApplyKernel(Module):
         self.barrier_out = Signal()
         self.update_ack = Signal()
 
+        self.kernel_error = Signal()
+
         ###
 
         # find out if we have an update

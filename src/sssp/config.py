@@ -16,10 +16,10 @@ class Config:
 
         logger = logging.getLogger('config')
 
-        payloadsize = kwargs['nodeidsize']
+        payloadsize = 8
 
         self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
-        self.addresslayout.edgedatasize = 8
+        self.addresslayout.edgedatasize = payloadsize
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.adj_dict = adj_dict

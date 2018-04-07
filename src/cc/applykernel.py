@@ -28,6 +28,8 @@ class ApplyKernel(Module):
         self.update_valid = Signal()
         self.update_ack = Signal()
 
+        self.kernel_error = Signal()
+
         ###
 
         self.comb+= [
