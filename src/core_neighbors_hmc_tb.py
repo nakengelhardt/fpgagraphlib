@@ -7,7 +7,7 @@ from migen.genlib.cdc import *
 
 from pico import PicoPlatform
 
-from core_neighbors_hmc import Neighbors
+from core_neighbors_hmc import NeighborsHMC
 
 from types import SimpleNamespace
 
@@ -71,7 +71,7 @@ class Top(Module):
         # request memory lookup
         addresslayout = SimpleNamespace(nodeidsize=32, edgeidsize=32, payloadsize=32)
         config = SimpleNamespace(platform=platform, addresslayout=addresslayout)
-        self.submodules.neighbors = Neighbors(config, 0, hmc_port=platform.getHMCPort(0))
+        self.submodules.neighbors = NeighborsHMC(config=config, pe_id=0, hmc_port=platform.getHMCPort(0))
 
         valid = Signal()
         self.sync += [

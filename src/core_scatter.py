@@ -14,7 +14,7 @@ from recordfifo import *
 from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
-    def __init__(self, pe_id, config, adj_mat=None, edge_data=None, hmc_port=None):
+    def __init__(self, pe_id, config, adj_mat=None, hmc_port=None):
         self.pe_id = pe_id
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
@@ -53,9 +53,9 @@ class Scatter(Module):
             else:
                 self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=adj_val, hmc_port=hmc_port)
         elif config.use_ddr:
-            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, edge_data=edge_data, port=hmc_port)
+            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=hmc_port)
         else:
-            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val, edge_data=edge_data)
+            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val)
 
 
         # flow control variables

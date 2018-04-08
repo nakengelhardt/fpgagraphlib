@@ -4,6 +4,8 @@ import migen.build.xilinx.common
 from migen import *
 from migen.genlib.roundrobin import *
 from migen.genlib.cdc import *
+from migen.genlib.fifo import *
+from migen.fhdl.decorators import ClockDomainsRenamer
 from tbsupport import *
 
 from functools import reduce
@@ -15,7 +17,7 @@ import random
 from core_init import init_parse
 
 from recordfifo import *
-from core_interfaces import Message
+from core_interfaces import *
 from fifo_plus_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
@@ -31,15 +33,10 @@ class Core(Module):
 
         num_nodes = len(config.adj_dict)
 
-        if config.has_edgedata:
-            init_edgedata = config.init_edgedata[pe_start:pe_end]
-        else:
-            init_edgedata = [None for _ in range(num_local_pe)]
-
         self.submodules.network = Network(config, pe_start, pe_end)
         self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(pe_start, pe_end)]
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i-pe_start]) for i in range(pe_start, pe_end)]
+        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i])) for i in range(pe_start, pe_end)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_local_pe)]
@@ -98,6 +95,9 @@ class Core(Module):
         ]
 
         self.level = self.apply[0].level
+
+        self.kernel_error = Signal()
+        self.comb += self.kernel_error.eq(reduce(or_, (a.applykernel.kernel_error for a in self.apply)))
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -231,11 +231,72 @@ def export(config, filename='top'):
         os.makedirs(iname, exist_ok=True)
         with cd(iname):
 
-            ios={m[i].start, m[i].done, m[i].cycle_count, m[i].total_num_messages, m[i].level}
+            ios={m[i].start, m[i].done, m[i].cycle_count, m[i].total_num_messages, m[i].level, m[i].kernel_error}
 
             for j in range(config.addresslayout.num_channels):
                 ios |= set(m[i].network.external_network_interface_in[j].flatten())
                 ios |= set(m[i].network.external_network_interface_out[j].flatten())
+
+            # debug signals
+            for a in m[i].network.arbiter:
+                ios.add(a.barriercounter.all_messages_recvd)
+                ios.add(a.barriercounter.all_barriers_recvd)
+                # ios |= set(a.barriercounter.barrier_from_pe)
+                # ios |= set(a.barriercounter.num_from_pe)
+                # ios |= set(a.barriercounter.num_expected_from_pe)
+            ios.add(m[i].network.local_network_round)
+
+            verilog.convert(m[i],
+                            name="top",
+                            ios=ios
+                            ).write(iname + ".v")
+
+def export_async(config, filename='top'):
+    print("Adding async FIFOs to external network interfaces")
+
+    m = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
+
+    for core in m:
+        core.clock_domains.cd_sys = ClockDomain(reset_less=True)
+        core.clock_domains.cd_ext = ClockDomain(reset_less=True)
+        core.submodules.asyncfifos_in = [ ClockDomainsRenamer({"write":"ext", "read":"sys"}) (AsyncFIFOBuffered(width=layout_len(core.network.external_network_interface_in[j].layout), depth=16)) for j in range(config.addresslayout.num_channels)]
+        core.submodules.asyncfifos_out = [ ClockDomainsRenamer({"write":"sys", "read":"ext"}) (AsyncFIFOBuffered(width=layout_len(core.network.external_network_interface_in[j].layout), depth=16)) for j in range(config.addresslayout.num_channels)]
+        core.external_network_interface_in = [NetworkInterface(name="ext_network_in", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_channels)]
+        core.external_network_interface_out = [NetworkInterface(name="ext_network_out", **config.addresslayout.get_params()) for _ in range(config.addresslayout.num_channels)]
+        for j in range(config.addresslayout.num_channels):
+            core.comb += [
+                core.asyncfifos_in[j].din.eq(core.external_network_interface_in[j].raw_bits()),
+                core.asyncfifos_in[j].we.eq(core.external_network_interface_in[j].valid),
+                core.external_network_interface_in[j].ack.eq(core.asyncfifos_in[j].writable)
+            ]
+            core.comb += [
+                core.network.external_network_interface_in[j].raw_bits().eq(core.asyncfifos_in[j].dout),
+                core.network.external_network_interface_in[j].valid.eq(core.asyncfifos_in[j].readable),
+                core.asyncfifos_in[j].re.eq(core.network.external_network_interface_in[j].ack)
+            ]
+            core.comb += [
+                core.asyncfifos_out[j].din.eq(core.network.external_network_interface_out[j].raw_bits()),
+                core.asyncfifos_out[j].we.eq(core.network.external_network_interface_out[j].valid),
+                core.network.external_network_interface_out[j].ack.eq(core.asyncfifos_out[j].writable)
+            ]
+            core.comb += [
+                core.external_network_interface_out[j].raw_bits().eq(core.asyncfifos_out[j].dout),
+                core.external_network_interface_out[j].valid.eq(core.asyncfifos_out[j].readable),
+                core.asyncfifos_out[j].re.eq(core.external_network_interface_out[j].ack)
+            ]
+
+
+
+    for i in range(config.addresslayout.num_fpga):
+        iname = filename + "_" + str(i)
+        os.makedirs(iname, exist_ok=True)
+        with cd(iname):
+
+            ios={m[i].start, m[i].done, m[i].cycle_count, m[i].total_num_messages, m[i].level, m[i].kernel_error, m[i].cd_sys.clk, m[i].cd_ext.clk}
+
+            for j in range(config.addresslayout.num_channels):
+                ios |= set(m[i].external_network_interface_in[j].flatten())
+                ios |= set(m[i].external_network_interface_out[j].flatten())
 
             # debug signals
             for a in m[i].network.arbiter:
@@ -271,6 +332,12 @@ def main():
             filename = args.output
         logger.info("Exporting design to files {}_[0-{}].v".format(filename, config.addresslayout.num_fpga-1))
         export(config, filename=filename)
+    if args.command=='export_async':
+        filename = "top"
+        if args.output:
+            filename = args.output
+        logger.info("Exporting design to files {}_[0-{}].v".format(filename, config.addresslayout.num_fpga-1))
+        export_async(config, filename=filename)
 
 if __name__ == '__main__':
     main()
