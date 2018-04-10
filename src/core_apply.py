@@ -193,7 +193,7 @@ class Apply(Module):
         valid3 = Signal()
         data3 = Signal(len(rd_port.dat_r))
 
-        self.submodules.applykernel = config.applykernel(config)
+        self.submodules.applykernel = config.applykernel(config, pe_id)
         state_in = Record(addresslayout.node_storage_layout)
 
         self.sync += [
@@ -209,7 +209,7 @@ class Apply(Module):
                 self.applykernel.nodeid_in.eq(dest_node_id2),
                 self.applykernel.state_in.raw_bits().eq(local_rd_port.dat_r),
                 self.applykernel.round_in.eq(roundpar2),
-                self.applykernel.valid_in.eq(state_in.active & apply_valid2),
+                self.applykernel.valid_in.eq(apply_valid2),
                 self.applykernel.barrier_in.eq(apply_barrier2),
             )
         ]

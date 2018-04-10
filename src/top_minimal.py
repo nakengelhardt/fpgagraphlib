@@ -23,15 +23,10 @@ class Core(Module):
         self.config = config
         num_pe = self.config.addresslayout.num_pe
 
-        if config.has_edgedata:
-            init_edgedata = config.init_edgedata
-        else:
-            init_edgedata = [None for _ in range(num_pe)]
-
         self.submodules.network = Network(config)
         self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i])) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]

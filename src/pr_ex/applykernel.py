@@ -2,14 +2,14 @@ from migen import *
 from migen.genlib.record import *
 from tbsupport import convert_32b_int_to_float, convert_int_to_record
 
-from pr.interfaces import payload_layout, node_storage_layout
+from pr_ex.interfaces import payload_layout, node_storage_layout
 from faddsub import FAddSub
 from fmul import FMul
 
 import logging
 
 class ApplyKernel(Module):
-    def __init__(self, config):
+    def __init__(self, config, pe_id):
         nodeidsize = config.addresslayout.nodeidsize
         floatsize = config.addresslayout.floatsize
 
@@ -63,6 +63,9 @@ class ApplyKernel(Module):
         # Second part: If at end, then multiply by 0.85 and add to const_base and send as message
         # 6 + 4 cycles latency
 
+        first_round = Signal(reset=1)
+        self.sync += If(self.barrier_in, first_round.eq(0))
+
         dyn_rank = Signal(floatsize)
         dyn_rank_valid = Signal()
 
@@ -71,7 +74,7 @@ class ApplyKernel(Module):
         self.comb += [
             self.mul.a.eq(self.state_in.sum),
             self.mul.b.eq(const_0_85),
-            self.mul.valid_i.eq(self.valid_in & self.state_in.active),
+            self.mul.valid_i.eq(self.valid_in & (self.state_in.active | (first_round if pe_id != 0 else first_round & (self.nodeid_in != 0)))),
             dyn_rank.eq(self.mul.r),
             dyn_rank_valid.eq(self.mul.valid_o),
             self.mul.ce.eq(p2_ce)
