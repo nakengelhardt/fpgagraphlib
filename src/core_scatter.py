@@ -14,7 +14,7 @@ from recordfifo import *
 from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
-    def __init__(self, pe_id, config, adj_mat=None, hmc_port=None):
+    def __init__(self, pe_id, config, hmc_port=None):
         self.pe_id = pe_id
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
@@ -32,15 +32,15 @@ class Scatter(Module):
 
         ###
 
-        # memory layout (TODO: replace with an actual record)
-        def _pack_adj_idx(adj_idx):
-            return [b<<edgeidsize | a for a,b in adj_idx]
-
-        adj_idx, adj_val = adj_mat
+        # # memory layout (TODO: replace with an actual record)
+        # def _pack_adj_idx(adj_idx):
+        #     return [b<<edgeidsize | a for a,b in adj_idx]
+        #
+        # adj_idx, adj_val = adj_mat
 
         # CSR edge storage: (idx, val) tuple of arrays
         # idx: array of (start_adr, num_neighbors)
-        self.specials.mem_idx = Memory(edgeidsize*2, max(2, len(adj_idx)), init=_pack_adj_idx(adj_idx), name="edge_csr_idx")
+        self.specials.mem_idx = Memory(edgeidsize*2, max(2, len(config.adj_idx[pe_id])), name="edge_csr_idx")
         self.specials.rd_port_idx = rd_port_idx = self.mem_idx.get_port(has_re=True)
         self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
 
@@ -55,7 +55,7 @@ class Scatter(Module):
         elif config.use_ddr:
             self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=hmc_port)
         else:
-            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, adj_val=adj_val)
+            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config)
 
 
         # flow control variables

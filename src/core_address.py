@@ -45,18 +45,18 @@ class AddressLayout:
     def global_adr(self, pe_adr, local_adr):
         return (pe_adr << log2_int(self.num_nodes_per_pe)) | local_adr
 
-    def max_per_pe(self, adj_dict):
+    def max_node_per_pe(self, adj_dict):
         max_node = [0 for _ in range(self.num_pe)]
         for node in adj_dict:
-            pe = node//self.num_nodes_per_pe
-            localnode = node % self.num_nodes_per_pe
+            pe = self.pe_adr(node)
+            localnode = self.local_adr(node)
             if max_node[pe] < localnode:
                 max_node[pe] = localnode
         return max_node
 
     def generate_partition(self, adj_dict):
         logger = logging.getLogger('config')
-        max_node = self.max_per_pe(adj_dict)
+        max_node = self.max_node_per_pe(adj_dict)
         adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
         adj_val = [[] for _ in range(self.num_pe)]
 
@@ -72,7 +72,7 @@ class AddressLayout:
 
     def generate_partition_flat(self, adj_dict, edges_per_burst=1, bytes_per_edge=4):
         assert self.edgeidsize <= bytes_per_edge*8
-        max_node = self.max_per_pe(adj_dict)
+        max_node = self.max_node_per_pe(adj_dict)
         adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(self.num_pe)]
         adj_val = []
 

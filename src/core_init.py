@@ -43,6 +43,13 @@ def parse_cmd_args(args=None):
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
     return parser.parse_args(args)
 
+def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
+    max_pe = [0 for _ in range(num_pe)]
+    for node in adj_dict:
+        pe = node >> log2_int(num_nodes_per_pe)
+        max_pe[pe] += len(adj_dict[node])
+    return max(max_pe)
+
 def init_parse(args=None):
     args = parse_cmd_args(args)
 
@@ -51,14 +58,14 @@ def init_parse(args=None):
     else:
         config = read_config_files()
 
-    logging.basicConfig(level=config['logging'].get('console_log_level', fallback='DEBUG'),
+    logging.basicConfig(level=config['logging'].get('file_log_level', fallback='DEBUG'),
                         format='%(name)-25s %(levelname)-8s %(message)s',
                         datefmt='%m-%d %H:%M',
                         filename=config['logging'].get('log_file_name', fallback='fpgagraphlib.log'),
                         filemode='w')
     # define a Handler which writes INFO messages or higher to the sys.stderr
     console = logging.StreamHandler()
-    console.setLevel(config['logging'].get('file_log_level', fallback='INFO'))
+    console.setLevel(config['logging'].get('console_log_level', fallback='INFO'))
     # set a format which is simpler for console use
     formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
     # tell the handler to use this format
@@ -131,12 +138,13 @@ def init_parse(args=None):
         parser.print_help()
         exit(-1)
 
+    use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
+    use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
+    share_mem_port = kwargs["share_mem_port"] if "share_mem_port" in kwargs else False
+
     if "num_nodes_per_pe" not in kwargs:
         kwargs["num_nodes_per_pe"] = 2**bits_for((num_nodes + kwargs["num_pe"] - 1)//kwargs["num_pe"])
     assert kwargs["num_nodes_per_pe"]*kwargs["num_pe"] > num_nodes #strictly greater to account for 0 not being valid id
-
-    if "max_edges_per_pe" not in kwargs:
-        kwargs["max_edges_per_pe"] = 2**bits_for(num_edges) #very conservative
 
     if graphfile:
         logger.info("Reading graph from file {}".format(graphfile.name))
@@ -149,6 +157,12 @@ def init_parse(args=None):
         logger.info("Saving graph to file {}".format(args.graphsave))
         export_graph(adj_dict, args.graphsave)
 
+    if "max_edges_per_pe" not in kwargs:
+        if not use_ddr and not use_hmc:
+            kwargs["max_edges_per_pe"] = 2**bits_for(max_edges_per_pe(adj_dict, kwargs["num_pe"], kwargs["num_nodes_per_pe"]))
+        else:
+            kwargs["max_edges_per_pe"] = 2**bits_for(num_edges-1)
+
     if "peidsize" not in kwargs:
         kwargs["peidsize"] = bits_for(kwargs["num_pe"])
 
@@ -156,14 +170,15 @@ def init_parse(args=None):
         kwargs["nodeidsize"] = kwargs["peidsize"] + log2_int(kwargs["num_nodes_per_pe"])
 
     if "edgeidsize" not in kwargs:
-        kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
+        if use_ddr:
+            kwargs["edgeidsize"] = 33
+        elif use_hmc:
+            kwargs["edgeidsize"] = 34
+        else:
+            kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
 
     algo_config_module = "{}.config".format(config['app']['algo'])
     algo = import_module(algo_config_module)
-
-    use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
-    use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
-    share_mem_port = kwargs["share_mem_port"] if "share_mem_port" in kwargs else False
 
     algo_config = algo.Config(adj_dict, **kwargs)
 
@@ -180,11 +195,13 @@ def init_parse(args=None):
         adj_idx, adj_val = algo_config.addresslayout.generate_partition(adj_dict)
     algo_config.adj_idx = adj_idx
     algo_config.adj_val = adj_val
+    algo_config.start_addr = (1<<34)
 
-    for pe in range(kwargs["num_pe"]):
-        assert len(algo_config.adj_idx[pe]) <= kwargs["num_nodes_per_pe"]
+    for pe in range(algo_config.addresslayout.num_pe):
+        assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe
+        assert len(algo_config.adj_idx[pe]) <= 2**(algo_config.addresslayout.nodeidsize - algo_config.addresslayout.peidsize)
         if not algo_config.use_hmc and not algo_config.use_ddr:
-            assert len(algo_config.adj_val[pe]) <= kwargs["max_edges_per_pe"]
+            assert len(algo_config.adj_val[pe]) <= algo_config.addresslayout.max_edges_per_pe
 
     logger.info("Algorithm: " + algo_config.name)
     logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))

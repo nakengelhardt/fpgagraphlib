@@ -47,6 +47,8 @@ def convert_int_to_record(n, record):
 def convert_record_to_int(record, **kwargs):
     ret = 0
     for field in record[::-1]:
+        if field[0] in kwargs:
+            assert bits_for(kwargs[field[0]]) <= field[1]
         ret = (ret << field[1]) | (kwargs[field[0]] if field[0] in kwargs else 0)
     return ret
 
@@ -55,6 +57,32 @@ def ones(bits):
     for i in range(bits):
         ret = (ret << 1) | 1
     return ret
+
+def popcount(val):
+    assert val >= 0
+    n = 0
+    while val:
+        n += val & 1
+        val >>= 1
+    return n
+
+def bit_vector(l):
+    bv = 0
+    for b in reversed(list(l)):
+        bv = (bv << 1) | (1 if b else 0)
+    return bv
+
+def get_mem_port_layout(port):
+    layout = [
+    ("adr", len(port.adr), DIR_M_TO_S),
+    ("dat_r", len(port.dat_r), DIR_S_TO_M)
+    ]
+    if port.re is not None:
+        layout.append(("re", len(port.re), DIR_M_TO_S))
+    if port.we is not None:
+        layout.append(("we", len(port.we), DIR_M_TO_S))
+        layout.append(("dat_w", len(port.dat_w), DIR_M_TO_S))
+    return layout
 
 @contextmanager
 def cd(newdir):

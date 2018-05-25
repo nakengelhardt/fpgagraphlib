@@ -138,7 +138,7 @@ def check_connected(d, init=1):
     else:
         print("Graph is connected.")
 
-def max_per_pe(adj_dict, num_pe, num_nodes_per_pe):
+def max_node_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     max_node = [0 for _ in range(num_pe)]
     for node in adj_dict:
         pe = node//num_nodes_per_pe
@@ -149,7 +149,7 @@ def max_per_pe(adj_dict, num_pe, num_nodes_per_pe):
 
 def print_stats(adj_dict, num_pe, num_nodes_per_pe):
     from statistics import mean, stdev
-    max_node = max_per_pe(adj_dict, num_pe, num_nodes_per_pe)
+    max_node = max_node_per_pe(adj_dict, num_pe, num_nodes_per_pe)
     adj_idx = [[(0,0) for _ in range(max_node[pe] + 1)] for pe in range(num_pe)]
     adj_val = [[] for _ in range(num_pe)]
 

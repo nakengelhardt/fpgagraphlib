@@ -19,6 +19,7 @@ from fifo_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
 from core_ddr import *
+from core_bramif import *
 
 class Core(Module):
     def __init__(self, config):
@@ -29,11 +30,11 @@ class Core(Module):
             raise NotImplementedError()
 
         self.submodules.network = Network(config)
-        self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, i) for i in range(num_pe)]
 
         self.submodules.portsharer = DDRPortSharer(config=config, num_ports=num_pe)
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), hmc_port=self.portsharer.get_port(i)) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(i, config, hmc_port=self.portsharer.get_port(i)) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -49,6 +50,14 @@ class Core(Module):
         self.comb += [
             self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
         ]
+
+        # I/O interface
+        internal_mem_ports = [a.external_wr_port for a in self.apply]
+        internal_mem_ports.extend([s.wr_port_idx for s in self.scatter])
+        if not config.use_ddr:
+            internal_mem_ports.extend([s.get_neighbors.wr_port_val for s in self.scatter])
+        self.submodules.bramio = BRAMIO(start_addr=config.start_addr, endpoints=internal_mem_ports)
+        self.init_complete = Signal()
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -74,6 +83,39 @@ class Core(Module):
                     if (yield s.barrierdistributor.network_interface_in.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
             yield
+
+    def gen_simulation(self, tb):
+        word_offset = self.bramio.word_offset
+        addr_spacing = self.bramio.addr_spacing
+        start_addr = self.config.start_addr
+        for pe_id in range(self.config.addresslayout.num_pe):
+            if self.config.init_nodedata:
+                for addr, data in enumerate(self.config.init_nodedata[pe_id]):
+                    yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+            start_addr += addr_spacing
+        for pe_id in range(self.config.addresslayout.num_pe):
+            for addr, (index, length) in enumerate(self.config.adj_idx[pe_id]):
+                data = convert_record_to_int([("index", self.config.addresslayout.edgeidsize), ("length", self.config.addresslayout.edgeidsize)], index=index, length=length)
+                yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+            start_addr += addr_spacing
+        if not self.config.use_ddr:
+            for pe_id in range(self.config.addresslayout.num_pe):
+                for addr, data in enumerate(self.config.adj_val[pe_id]):
+                    yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+                start_addr += addr_spacing
+        yield self.init_complete.eq(1)
+        while not (yield tb.global_inactive):
+            yield
+        start_addr = self.config.start_addr
+        for pe_id in range(self.config.addresslayout.num_pe):
+            for addr in range(len(self.config.adj_idx[pe_id])):
+                data = (yield from self.bramio.axi_port.read(adr=start_addr + (addr << word_offset)))
+                r = convert_int_to_record(data, self.config.addresslayout.node_storage_layout)
+                vertexid = self.config.addresslayout.global_adr(pe_id, addr)
+                if vertexid != 0:
+                    print("Data of Vertex {}:\t {}".format(vertexid, [(f[0], r[f[0]]) for f in self.config.addresslayout.node_storage_layout]))
+            start_addr += addr_spacing
+
 
 class UnCore(Module):
     def __init__(self, config):
@@ -134,6 +176,8 @@ class UnCore(Module):
         self.comb += self.kernel_error.eq(reduce(or_, (a.applykernel.kernel_error for a in self.cores[0].apply)))
 
     def gen_simulation(self, tb):
+        while not (yield self.cores[0].init_complete):
+            yield
         yield self.start.eq(1)
         yield
 
@@ -148,6 +192,7 @@ def sim(config):
 
     for core in tb.cores:
         generators.extend([core.gen_barrier_monitor(tb)])
+        generators.extend([core.bramio.axi_port.gen_radr(), core.bramio.axi_port.gen_rdata(), core.bramio.axi_port.gen_wadr(), core.bramio.axi_port.gen_wdata(), core.bramio.axi_port.gen_wresp()])
 
     generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
     generators.extend(get_simulators(tb, 'gen_simulation', tb))
@@ -167,10 +212,41 @@ def export(config, filename='top.v'):
                     name="top",
                     ios=ios
                     ).write(filename)
-    if config.use_ddr:
-        with open("adj_val.data", 'wb') as f:
-            for x in config.adj_val:
-                f.write(struct.pack('=I', x))
+
+    with open("address_mapping.txt", 'w') as adrmap:
+        word_offset = m.cores[0].bramio.word_offset
+        addr_spacing = m.cores[0].bramio.addr_spacing
+        start_addr = m.cores[0].config.start_addr
+        if config.init_nodedata:
+            for pe_id, data in enumerate(config.init_nodedata):
+                fname = "init_nodedata{}.data".format(pe_id)
+                with open(fname, 'wb') as f:
+                    adrmap.write("{}\t{}\n".format(hex(start_addr), fname))
+                    for x in data:
+                        f.write(struct.pack('=I', x))
+                start_addr += addr_spacing
+        else:
+            start_addr += config.addresslayout.num_pe * addr_spacing
+        for pe_id, adj_idx in enumerate(config.adj_idx):
+            fname = "adj_idx{}.data".format(pe_id)
+            with open(fname, 'wb') as f:
+                adrmap.write("{}\t{}\n".format(hex(start_addr), fname))
+                for index, length in adj_idx:
+                    data = convert_record_to_int([("index", config.addresslayout.edgeidsize), ("length", config.addresslayout.edgeidsize)], index=index, length=length)
+                    f.write(struct.pack('=I', data))
+            start_addr += addr_spacing
+        if config.use_ddr:
+            with open("adj_val.data", 'wb') as f:
+                adrmap.write("0x000000000\tadj_val.data\n")
+                for x in config.adj_val:
+                    f.write(struct.pack('=I', x))
+        else:
+            fname = "adj_val{}.data".format(pe_id)
+            with open(fname, 'wb') as f:
+                adrmap.write("{}\t{}\n".format(hex(start_addr), fname))
+                for x in data:
+                    f.write(struct.pack('=I', x))
+            start_addr += addr_spacing
 
 def export_fake(config, filename='top.v'):
 
@@ -191,10 +267,6 @@ def export_fake(config, filename='top.v'):
                     name="top",
                     ios=ios
                     ).write(filename)
-    if config.use_ddr:
-        with open("adj_val.data", 'wb') as f:
-            for x in config.adj_val:
-                f.write(struct.pack('=I', x))
 
 def main():
     args, config = init_parse()

@@ -17,6 +17,7 @@ from core_interfaces import Message
 from fifo_network import Network
 from core_apply import Apply
 from core_scatter import Scatter
+from core_bramif import *
 
 class Core(Module):
     def __init__(self, config):
@@ -29,9 +30,9 @@ class Core(Module):
             init_edgedata = [None for _ in range(num_pe)]
 
         self.submodules.network = Network(config)
-        self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, i) for i in range(num_pe)]
 
-        self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(i, config) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -47,6 +48,13 @@ class Core(Module):
         self.comb += [
             self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
         ]
+
+        # I/O interface
+        internal_mem_ports = [a.external_wr_port for a in self.apply]
+        internal_mem_ports.extend([s.wr_port_idx for s in self.scatter])
+        internal_mem_ports.extend([s.get_neighbors.wr_port_val for s in self.scatter])
+        self.submodules.bramio = BRAMIO(start_addr=config.start_addr, endpoints=internal_mem_ports)
+        self.init_complete = Signal()
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
@@ -72,6 +80,37 @@ class Core(Module):
                     if (yield s.barrierdistributor.network_interface_in.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
             yield
+
+    def gen_simulation(self, tb):
+        word_offset = self.bramio.word_offset
+        addr_spacing = self.bramio.addr_spacing
+        start_addr = self.config.start_addr
+        for pe_id in range(self.config.addresslayout.num_pe):
+            if self.config.init_nodedata:
+                for addr, data in enumerate(self.config.init_nodedata[pe_id]):
+                    yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+            start_addr += addr_spacing
+        for pe_id in range(self.config.addresslayout.num_pe):
+            for addr, (index, length) in enumerate(self.config.adj_idx[pe_id]):
+                data = convert_record_to_int([("index", self.config.addresslayout.edgeidsize), ("length", self.config.addresslayout.edgeidsize)], index=index, length=length)
+                yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+            start_addr += addr_spacing
+        for pe_id in range(self.config.addresslayout.num_pe):
+            for addr, data in enumerate(self.config.adj_val[pe_id]):
+                yield from self.bramio.axi_port.write(adr=start_addr + (addr << word_offset), wdata=data)
+            start_addr += addr_spacing
+        yield self.init_complete.eq(1)
+        while not (yield tb.global_inactive):
+            yield
+        start_addr = self.config.start_addr
+        for pe_id in range(self.config.addresslayout.num_pe):
+            for addr in range(len(self.config.adj_idx[pe_id])):
+                data = (yield from self.bramio.axi_port.read(adr=start_addr + (addr << word_offset)))
+                r = convert_int_to_record(data, self.config.addresslayout.node_storage_layout)
+                vertexid = self.config.addresslayout.global_adr(pe_id, addr)
+                if vertexid != 0:
+                    print("Data of Vertex {}:\t {}".format(vertexid, [(f[0], r[f[0]]) for f in self.config.addresslayout.node_storage_layout]))
+            start_addr += addr_spacing
 
 class UnCore(Module):
     def __init__(self, config):
@@ -128,6 +167,8 @@ class UnCore(Module):
         ]
 
     def gen_simulation(self, tb):
+        while not (yield self.cores[0].init_complete):
+            yield
         yield self.start.eq(1)
         yield
 
@@ -139,6 +180,7 @@ def sim(config):
 
     for core in tb.cores:
         generators.extend([core.gen_barrier_monitor(tb)])
+        generators.extend([core.bramio.axi_port.gen_radr(), core.bramio.axi_port.gen_rdata(), core.bramio.axi_port.gen_wadr(), core.bramio.axi_port.gen_wdata(), core.bramio.axi_port.gen_wresp()])
 
     generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
     generators.extend(get_simulators(tb, 'gen_simulation', tb))

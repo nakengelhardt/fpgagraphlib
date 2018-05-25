@@ -30,6 +30,7 @@ class InitFIFO(Module, _FIFOInterface):
         self.level = Signal(max=depth+1, reset=startlevel)
         self.replace = Signal()
 
+        self.almost_full = Signal()
         ###
 
         produce = Signal(max=depth, reset=startlevel)
@@ -72,29 +73,27 @@ class InitFIFO(Module, _FIFOInterface):
             )
         self.comb += [
             self.writable.eq(self.level != depth),
-            self.readable.eq(self.level != 0)
+            self.readable.eq(self.level != 0),
+            self.almost_full.eq(self.level >= depth - 1)
         ]
 
 class RecordFIFO(Module):
     def __init__(self, layout, depth, init=None, name=None):
-        self.we = Signal()
-        self.writable = Signal()  # not full
-        self.re = Signal()
-        self.readable = Signal()  # not empty
-
         self.din = Record(layout, name= (name + "_din") if name else None)
         self.dout = Record(layout, name= (name + "_dout") if name else None)
         self.width = len(self.din.raw_bits())
 
         self.submodules.fifo = InitFIFO(self.width, depth, init=init)
 
+        self.we = self.fifo.we
+        self.writable = self.fifo.writable
+        self.re = self.fifo.re
+        self.readable = self.fifo.readable
+        self.almost_full = self.fifo.almost_full
+        
         self.comb += [
             self.fifo.din.eq(self.din.raw_bits()),
-            self.writable.eq(self.fifo.writable),
-            self.fifo.we.eq(self.we),
-            self.dout.raw_bits().eq(self.fifo.dout),
-            self.readable.eq(self.fifo.readable),
-            self.fifo.re.eq(self.re)
+            self.dout.raw_bits().eq(self.fifo.dout)
         ]
 
 class RecordFIFOBuffered(Module):

@@ -43,7 +43,7 @@ class ApplyKernel(Module):
             self.update_sender.eq(self.nodeid_in),
             self.update_round.eq(self.round_in),
             self.barrier_out.eq(self.barrier_in),
-            self.update_valid.eq(self.valid_in),
+            self.update_valid.eq(self.valid_in & self.state_in.active),
 
             self.ready.eq(self.update_ack)
         ]
