@@ -1,17 +1,26 @@
 Simulator for GraVF using verilator-generated C++ for user kernels
 
+To make a new app, create a folder $(APP).
+Populate with files user_def.h, init.cpp, applykernel.cpp, scatterkernel.cpp [optionally graph_edgedata.cpp].
+Define the necessary functions.
+
+Software Kernels:
+
+Inherit from class SWApplyKernel/SWScatterKernel.
+Define functions gather, apply, scatter.
+
+Hardware Kernels:
+
 If using migen kernels:
-> cd sim
-> python3 ../src/sim_export_apply_scatter_kernels.py #(uses config.ini in current directory)
+> cd sim/$(APP)
+> python3 ../src/sim_export_apply_scatter_kernels.py export -c ../config.ini
 
-Otherwise, name kernel files ${APP}_apply.v and ${APP}_scatter.v and move to folder "sim".
+Otherwise, name kernel files gather.v, apply.v, and scatter.v and move to folder "sim".
 
-Verilate:
-> verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc ${APP}_apply.v
-> verilator -Wno-lint -Wno-INITIALDLY -Wno-COMBDLY --cc ${APP}_scatter.v
+Inherit from class HWApplyKernel/HWScatterKernel.
+Define set/get vertex data functions.
 
-(creates folder "obj_dir")
+Build:
 
-> cd obj_dir
-> make -f ../Makefile
-> ./sim_main
+> cd build
+> make
