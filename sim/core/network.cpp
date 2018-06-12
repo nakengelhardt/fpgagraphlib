@@ -56,7 +56,7 @@ void Network::tick() {
 void Network::putMessageAt(int i, Message* message) {
     numMessagesSent++;
     if(message->barrier){
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
         std::cout << "Distributing barrier from PE " << i << std::endl;
 #endif
         for(int j = 0; j < num_pe; j++){

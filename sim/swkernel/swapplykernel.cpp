@@ -4,6 +4,7 @@
 
 SWApplyKernel::SWApplyKernel(int pe_id, vertexid_t num_vertices, Graph* graph) : BaseApplyKernel(pe_id, num_vertices, graph){
     last_input_time = new int[num_vertices];
+    level = 0;
 }
 
 SWApplyKernel::~SWApplyKernel() {
@@ -15,7 +16,19 @@ void SWApplyKernel::gather_tick() {
         timestamp_in.incrementTime(1);
         ApplyKernelInput input = inputQ.front();
 
-        gather(input.message, input.vertex, input.level);
+        Update* update = gatherapply(input.message, input.vertex, input.level);
+
+        if (input.level != level) {
+            std::cout << "Message for level " << input.level << " received in level " << level << "!\n";
+        }
+
+        if (update) {
+            update->sender = input.vertex->id;
+            update->roundpar = (input.message->roundpar + 1) % num_channels;
+            update->barrier = false;
+            update->timestamp = timestamp_out.getTime();
+            outputQ.push(update);
+        }
 
         timestamp_in.updateTime(input.message->timestamp);
 
@@ -31,13 +44,13 @@ void SWApplyKernel::apply_tick() {
 }
 
 void SWApplyKernel::barrier(Message* bm) {
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
     std::cout << timestamp_in.getTime() << ": Barrier received, emptying queue" << std::endl;
 #endif
     while (!inputQ.empty()) {
         gather_tick();
     }
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
     printState();
 #endif
     Update* update = NULL;
@@ -49,7 +62,7 @@ void SWApplyKernel::barrier(Message* bm) {
             last_input_time[i] = timestamp_in.getTime();
             timestamp_in.incrementTime(1);
 
-            update = apply(vertex, (bm->roundpar + 1) % num_channels);
+            update = gatherapply(bm, vertex, level);
 
             timestamp_out.updateTime(last_input_time[i]);
 
@@ -66,6 +79,8 @@ void SWApplyKernel::barrier(Message* bm) {
         }
         i++;
     }
+
+    level++;
 
     Update* bu = new Update();
     bu->sender = pe_id << PEID_SHIFT;

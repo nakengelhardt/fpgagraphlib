@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <stdexcept>
 #include <iostream>
+#include <fstream>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -20,10 +21,6 @@ Graph::Graph(const char* dumpname, int64_t nedge) {
         throw std::runtime_error("Error reading input graph file");
     }
     close (fd);
-
-    // for(int i = 0; i < nedge; i++){
-    //     std::cout << IJ[i].v0 << " -- " << IJ[i].v1 << std::endl;
-    // }
 
     find_nv(IJ, nedge);
     xoff = new vertexid_t[2*nv+2];
@@ -148,4 +145,26 @@ edge_t Graph::get_neighbor(vertexid_t vertex, vertexid_t index){
         throw std::runtime_error("edge index out of bounds");
     }
     return xadj[XOFF(vertex) + index];
+}
+
+
+void Graph::print_dot(const char* fname){
+    std::ofstream ofs;
+    ofs.open (fname, std::ofstream::out);
+    ofs << "graph last_graph {" << std::endl;
+    int64_t v;
+    for (v = 0; v < nv; ++v) {
+        if (num_neighbors(v) == 0){
+            ofs << partition->placement(v) << '\n';
+        }
+        int k;
+        for (k = 0; k < num_neighbors(v); k++) {
+            vertexid_t u = get_neighbor(v, k).dest_id;
+            if (u > v)
+                ofs << partition->placement(v) << " -- " << partition->placement(u) << '\n';
+        }
+
+    }
+    ofs << "}" << '\n';
+    ofs.close();
 }

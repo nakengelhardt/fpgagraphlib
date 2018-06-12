@@ -20,21 +20,24 @@ Message* SWScatterKernel::tick() {
         Message* message = NULL;
 
         if (input.update->barrier){
-            #ifdef DEBUG_PRINT
+            #ifdef SIM_DEBUG
                 std::cout << "Scatter barrier" << std::endl;
             #endif
             message = new Message();
         } else {
             message = scatter(input.update, input.edge, input.num_neighbors);
-            message->dest_id = input.edge.dest_id;
-            message->dest_pe = message->dest_id >> PEID_SHIFT;
+            if(message){
+                message->dest_id = input.edge.dest_id;
+                message->dest_pe = message->dest_id >> PEID_SHIFT;
+            }
         }
-
-        message->sender = input.update->sender;
-        message->roundpar = input.update->roundpar;
-        message->barrier = input.update->barrier;
-        message->timestamp = timestamp_in.getTime() + latency;
-
+        if (message) {
+            message->sender = input.update->sender;
+            message->roundpar = input.update->roundpar;
+            message->barrier = input.update->barrier;
+            message->timestamp = timestamp_in.getTime() + latency;
+        }
+        
         if(inputQ.front().last) {
             delete inputQ.front().update;
         }

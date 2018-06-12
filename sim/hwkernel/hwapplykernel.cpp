@@ -72,13 +72,13 @@ void HWApplyKernel::apply_tick() {
 }
 
 void HWApplyKernel::barrier(Message* bm) {
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
     std::cout << timestamp_in.getTime() << ": Barrier received, emptying queue" << std::endl;
 #endif
     while (!inputQ.empty() || num_in_use_gather > 0) {
         gather_tick();
     }
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
     printState();
 #endif
 
@@ -102,7 +102,7 @@ void HWApplyKernel::barrier(Message* bm) {
                 i++;
                 num_in_use_apply++;
                 timestamp_in.incrementTime(1);
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
                 std::cout << timestamp_in.getTime() << ": Apply in vertex "<< vertex->id << std::endl;
 #endif
             }
@@ -164,7 +164,7 @@ void HWApplyKernel::gather_tick() {
     if (gather_hw->ready && gather_hw->valid_in) {
         inputQ.front().vertex->in_use = true;
         num_in_use_gather++;
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
         vertexCheckoutPrint();
 #endif
         delete inputQ.front().message;
@@ -180,7 +180,7 @@ void HWApplyKernel::gather_tick() {
         VertexEntry* vertex = getVertexEntry(gather_hw->nodeid_out);
         if (vertex->in_use) {
             num_in_use_gather--;
-#ifdef DEBUG_PRINT
+#ifdef SIM_DEBUG
             vertexWritebackPrint(vertex);
 #endif
             getStateOutputGather(&(vertex->data));

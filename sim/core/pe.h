@@ -12,9 +12,11 @@ class PE {
     std::queue<Message*> outputQ;
     int timestamp_out;
 public:
+    static int num_updates;
     PE(Apply* apply, Scatter* scatter);
+    ~PE();
     void tick();
-    Message* getSentMessage();
+    Message* getSentMessage(int roundpar);
     void putMessageToReceive(Message* message);
     int getTime();
 };

@@ -26,6 +26,7 @@ public:
     vertexid_t ne;
     vertexid_t num_neighbors(vertexid_t vertex);
     edge_t get_neighbor(vertexid_t vertex, vertexid_t index);
+    void print_dot(const char* fname);
 };
 
 

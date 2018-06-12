@@ -7,15 +7,21 @@
 
 #include <iostream>
 #include <stdexcept>
-
+#include <string>
 
 int main(int argc, char **argv, char **env) {
-    // Verilated::commandArgs(argc, argv);
+    char const * gname = "../../data/4x4";
+    int sz = 64;
 
-    Graph* graph = new Graph("../../data/4x4", 64);
-    // Graph* graph = new Graph("../data/s11e16", 32768);
-    // Graph* graph = new Graph("../data/s13e16", 131072);
-    // Graph* graph = new Graph("../data/s14e16", 262144);
+    if (argc > 2) {
+        gname = argv[1];
+        sz = std::stoi(argv[2]);
+    }
+
+    // Graph* graph = new Graph("../../data/s11e16", 32768);
+    // Graph* graph = new Graph("../../data/s13e16", 131072);
+    // Graph* graph = new Graph("../../data/s14e16", 262144);
+    Graph* graph = new Graph(gname, sz);
 
     graph->partition = new GraphPartition(graph->nv);
 
@@ -28,12 +34,15 @@ int main(int argc, char **argv, char **env) {
         if(local_id > max_vertices_per_pe){
             max_vertices_per_pe = local_id;
         }
-        // std::cout << "Vertex " << vname << " has " << graph->num_neighbors(i) << " neighbors: ";
-        // for(int j = 0; j < graph->num_neighbors(i); j++){
-        //     std::cout << graph->partition->placement(graph->get_neighbor(i,j).dest_id) << " ";
-        // }
-        // std::cout << std::endl;
+        if(graph->nv < 30){
+            std::cout << "Vertex " << vname << " has " << graph->num_neighbors(i) << " neighbors: ";
+            for(int j = 0; j < graph->num_neighbors(i); j++){
+                std::cout << graph->partition->placement(graph->get_neighbor(i,j).dest_id) << " ";
+            }
+            std::cout << "\n";
+        }
     }
+    graph->print_dot("last_graph.dot");
 
     // add 1 for bound
     max_vertices_per_pe++;
@@ -79,10 +88,10 @@ int main(int argc, char **argv, char **env) {
     while (!inactive){
         for(int i = 0; i < num_pe; i++){
             pe[i]->tick();
-            message = pe[i]->getSentMessage();
+            message = pe[i]->getSentMessage(supersteps % num_channels);
             if(message){
                 if(message->barrier){
-                    #ifdef DEBUG_PRINT
+                    #ifdef SIM_DEBUG
                     std::cout << message->timestamp << ": Barrier from PE " << i << " for PE " << message->dest_pe << std::endl;
                     #endif
                     barrier[i]++;
@@ -95,7 +104,8 @@ int main(int argc, char **argv, char **env) {
                     }
                     if(all_barriers){
                         supersteps++;
-                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages (not counting barriers)" << std::endl;
+                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages and " << PE::num_updates << " updates (not counting barriers)" << std::endl;
+                        PE::num_updates = 0;
                         if(num_messages == 0){
                             inactive = true;
                         }
@@ -105,8 +115,8 @@ int main(int argc, char **argv, char **env) {
                         }
                     }
                 } else {
-                    #ifdef DEBUG_PRINT
-                    std::cout << message->timestamp << ": Message from node " << message->sender << " for node " << message->dest_id << std::endl;
+                    #ifdef SIM_DEBUG
+                    std::cout << message->roundpar << ": Message from node " << message->sender << " for node " << message->dest_id << std::endl;
                     #endif
                     num_messages++;
                 }
@@ -133,8 +143,11 @@ int main(int argc, char **argv, char **env) {
             total_time = pe_time;
         }
         // std::cout << "PE " << i << ": " << pe_time << std::endl;
+        delete pe[i];
     }
     std::cout << total_time << std::endl;
+
+    printFinalResult();
 
     exit(0);
 }

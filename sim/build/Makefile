@@ -35,7 +35,7 @@ else
 endif
 
 APP_U := $(shell echo $(APP) | tr a-z A-Z)
-CPPFLAGS += $(INCLUDES) -DAPP=$(APP_U) -DDEBUG_PRINT
+CPPFLAGS += $(INCLUDES) -DAPP=$(APP_U)# -DAPP_DEBUG# -DSIM_DEBUG
 CXXFLAGS += -faligned-new -MMD -g -O0 -Wall
 LIBS   += -lm -lstdc++
 
