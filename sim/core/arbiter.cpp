@@ -31,14 +31,14 @@ void Arbiter::putMessage(Message* m) {
     if(m->barrier){
         barrier[src_pe] = 1;
         num_expected_from_pe[src_pe] = m->dest_id;
-        delete m;
 #ifdef SIM_DEBUG
-        std::cout << m->timestamp << ": PE " << pe_id << ": "
+        std::cout << m->roundpar << ": PE " << pe_id << ": "
         << "Received barrier from PE " << src_pe
         << ". Expected messages: " << num_expected_from_pe[src_pe]
         << ". Received messages: " << num_received_from_pe[src_pe]
         << std::endl;
 #endif
+        delete m;
     } else {
 #ifdef SIM_DEBUG
         std::cout << "Message " << m->sender << " -> " << m->dest_id << std::endl;
@@ -64,7 +64,6 @@ void Arbiter::putMessage(Message* m) {
     bm->dest_id = 0;
     bm->roundpar = current_round;
     bm->barrier = true;
-    // bm->timestamp = timestamp.getTime();
     outputQ.push(bm);
 
     current_round++;
@@ -101,7 +100,6 @@ Message* Arbiter::getMessage(){
     Message* message = NULL;
     if (!outputQ.empty()) {
         message = outputQ.front();
-        message->timestamp = timestamp.updateTime(message->timestamp);
         outputQ.pop();
     }
     return message;

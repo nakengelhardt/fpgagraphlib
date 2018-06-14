@@ -2,10 +2,12 @@
 
 #include <iostream>
 
-int PE::num_updates = 0;
-
 PE::PE(Apply* apply, Scatter* scatter) : apply(apply), scatter(scatter) {
-    timestamp_out = 0;
+    num_ticks = 0;
+    num_messages = 0;
+    num_updates = 0;
+    last_completed_superstep_updates = 0;
+    last_completed_superstep_messages = 0;
 }
 
 PE::~PE() {
@@ -14,6 +16,7 @@ PE::~PE() {
 }
 
 void PE::tick() {
+    num_ticks++;
     Message* message = NULL;
     if (!inputQ.empty()) {
         message = inputQ.front();
@@ -26,6 +29,8 @@ void PE::tick() {
             #ifdef SIM_DEBUG
             std::cout << "Update barrier" << std::endl;
             #endif
+            last_completed_superstep_updates = num_updates;
+            num_updates = 0;
         } else {
             num_updates++;
             #ifdef SIM_DEBUG
@@ -36,6 +41,12 @@ void PE::tick() {
 
     message = scatter->receiveUpdate(update);
     if (message) {
+        if (message->barrier){
+            last_completed_superstep_messages = num_messages;
+            num_messages = 0;
+        } else {
+            num_messages++;
+        }
         outputQ.push(message);
     }
 }
@@ -44,9 +55,6 @@ Message* PE::getSentMessage(int roundpar) {
     Message* message = NULL;
     if (!outputQ.empty() && outputQ.front()->roundpar == roundpar) {
         message = outputQ.front();
-        if(timestamp_out < message->timestamp){
-            timestamp_out = message->timestamp;
-        }
         outputQ.pop();
     }
     return message;
@@ -59,5 +67,5 @@ void PE::putMessageToReceive(Message* message){
 }
 
 int PE::getTime() {
-    return timestamp_out;
+    return num_ticks;
 }

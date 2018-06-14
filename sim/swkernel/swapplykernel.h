@@ -4,11 +4,8 @@
 
 class SWApplyKernel : public BaseApplyKernel {
 protected:
-    TimeStation timestamp_in;
-    TimeStation timestamp_out;
     int latency;
     int level;
-    int* last_input_time;
     // virtual void gather(Message* message, VertexEntry* vertex, int level) = 0;
     // virtual Update* apply(VertexEntry* vertex, int level) = 0;
     virtual Update* gatherapply(Message* message, VertexEntry* vertex, int level) = 0;

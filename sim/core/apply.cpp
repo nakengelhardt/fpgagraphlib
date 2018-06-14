@@ -46,7 +46,6 @@ Update* Apply::receiveMessage(Message* message) {
             if (level != update_level){
                 throw std::runtime_error(AT "Too many barriers");
             }
-
         } else {
             if(update->roundpar != update_level % num_channels) {
                 throw std::runtime_error(AT "Superstep order not respected");

@@ -73,7 +73,6 @@ int main(int argc, char **argv, char **env) {
         message->dest_pe = i;
         message->roundpar = 3;
         message->barrier = true;
-        message->timestamp = 0;
         pe[i]->putMessageToReceive(message);
     }
 
@@ -92,7 +91,7 @@ int main(int argc, char **argv, char **env) {
             if(message){
                 if(message->barrier){
                     #ifdef SIM_DEBUG
-                    std::cout << message->timestamp << ": Barrier from PE " << i << " for PE " << message->dest_pe << std::endl;
+                    std::cout << message->roundpar << ": Barrier from PE " << i << " for PE " << message->dest_pe << std::endl;
                     #endif
                     barrier[i]++;
                     int all_barriers = 1;
@@ -104,8 +103,33 @@ int main(int argc, char **argv, char **env) {
                     }
                     if(all_barriers){
                         supersteps++;
-                        std::cout << "Superstep " << supersteps << ": " << num_messages << " messages and " << PE::num_updates << " updates (not counting barriers)" << std::endl;
-                        PE::num_updates = 0;
+                        std::cout << "Superstep " << supersteps << ":";
+                        int min_updates = pe[0]->last_completed_superstep_updates;
+                        int max_updates = pe[0]->last_completed_superstep_updates;
+                        int total_updates = pe[0]->last_completed_superstep_updates;
+                        std::cout << " " << pe[0]->last_completed_superstep_updates;
+                        for (int j = 1; j < num_pe; j++) {
+                            int j_updates = pe[j]->last_completed_superstep_updates;
+                            min_updates = std::min(min_updates, j_updates);
+                            max_updates = std::max(max_updates, j_updates);
+                            total_updates += j_updates;
+                            std::cout << " " << j_updates;
+                        }
+                        std::cout << " updates (imbalance " << (total_updates==0 ? 0 : 100*(max_updates - min_updates)/total_updates) << "%) and";
+
+                        int min_messages = pe[0]->last_completed_superstep_messages;
+                        int max_messages = pe[0]->last_completed_superstep_messages;
+                        int total_messages = pe[0]->last_completed_superstep_messages;
+                        std::cout << " " << pe[0]->last_completed_superstep_messages;
+                        for (int j = 1; j < num_pe; j++) {
+                            int j_messages = pe[j]->last_completed_superstep_messages;
+                            min_messages = std::min(min_messages, j_messages);
+                            max_messages = std::max(max_messages, j_messages);
+                            total_messages += j_messages;
+                            std::cout << " " << j_messages;
+                        }
+                        std::cout << " messages (imbalance " << (total_messages==0 ? 0 : 100*(max_messages - min_messages)/total_messages) << "%)\n";
+
                         if(num_messages == 0){
                             inactive = true;
                         }

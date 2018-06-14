@@ -10,9 +10,12 @@ class PE {
     Scatter* scatter;
     std::queue<Message*> inputQ;
     std::queue<Message*> outputQ;
-    int timestamp_out;
+    int num_ticks;
+    int num_messages;
+    int num_updates;
 public:
-    static int num_updates;
+    int last_completed_superstep_updates;
+    int last_completed_superstep_messages;
     PE(Apply* apply, Scatter* scatter);
     ~PE();
     void tick();
