@@ -81,7 +81,7 @@ void ApplyKernel::printState(){
 int ApplyKernel::total_triangles = 0;
 
 int ApplyKernel::countTriangles(){
-    int num_triangles;
+    int num_triangles = 0;
     for(int i = 0; i < num_vertices; i++){
         if (pe_id != 0 or i != 0) {
             if (vertex_data[i].active)
