@@ -19,7 +19,7 @@ class HMCBackedFIFOCase(SimCase, unittest.TestCase):
 
             pico = PicoPlatform(1, bus_width=32, stream_width=128)
 
-            self.submodules.dut = HMCBackedFIFO(width=32, start_addr=0x1000, end_addr=0x11000, port=pico.getHMCPort(0))
+            self.submodules.dut = HMCBackedFIFO(width=32, start_addr=0x0, end_addr=0x10000, port=pico.getHMCPort(0))
 
     def test_rw(self):
         def gen_write():

@@ -60,8 +60,8 @@ class HMCBackedFIFO(Module):
                 self.port.cmd.eq(HMC_CMD_WR_NP),
                 self.port.addr[word_offset:].eq(start_addr + wr_ptr),
                 self.port.cmd_valid.eq(self.we & no_hazard),
-                self.writable.eq(self.data.writable & no_hazard),
-                self.data.we.eq(self.we & no_hazard)
+                self.writable.eq(self.data.writable & no_hazard & self.port.cmd_ready),
+                self.data.we.eq(self.we & no_hazard & self.port.cmd_ready)
             ),
             self.port.tag.eq(Cat(do_rd, tag)),
             self.port.wr_data.eq(self.data.dout),
