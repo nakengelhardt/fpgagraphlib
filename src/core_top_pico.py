@@ -32,12 +32,12 @@ class Core(Module):
             init_edgedata = [None for _ in range(num_pe)]
 
         self.submodules.network = Network(config)
-        self.submodules.apply = [Apply(config, i, config.init_nodedata[i] if config.init_nodedata else None) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, i) for i in range(num_pe)]
 
 
         if config.use_hmc:
             if not config.share_mem_port:
-                self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i], hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
+                self.submodules.scatter = [Scatter(i, config, hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
             else:
                 assert(num_pe <= 36)
                 # assert((num_pe % 4) == 0)
@@ -52,7 +52,7 @@ class Core(Module):
                                 self.neighbors_hmc[i].neighbor_out[j].connect(self.scatter[n].get_neighbors.neighbor_out)
                             ]
         else:
-            self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
+            self.submodules.scatter = [Scatter(i, config) for i in range(num_pe)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_pe)]
@@ -189,6 +189,8 @@ class Top(Module):
         sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
         # extra_clk = config.platform.getExtraClk()
         self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
+        for port in config.platform.picoHMCports:
+            self.comb += port.clk.eq(sys_clk)
 
         # self.clock_domains.cd_pcie = ClockDomain()
         # clk, rst = config.platform.getStreamClkRst()
@@ -198,27 +200,21 @@ class Top(Module):
         bus_clk, bus_rst = config.platform.getBusClkRst()
         self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
 
-        hmc_perf_counters = []
-        if config.use_hmc:
-            hmc_perf_counters = [Signal(32) for _ in range(2*9)]
-            for i in range(9):
-                port = config.platform.picoHMCports[i]
-                self.sync += [
-                    If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
-                    If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
-                ]
-                self.comb += [
-                    port.wr_data.eq(0),
-                    port.wr_data_valid.eq(0)
-                ]
-
-            hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
-            self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
-            self.comb += [
-                self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
-                Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
+        hmc_perf_counters = [Signal(32) for _ in range(2*9)]
+        for i in range(9):
+            port = config.platform.picoHMCports[i]
+            self.sync += [
+                If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
+                If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
             ]
 
+        hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
+        self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
+        self.comb += [
+            self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
+            Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
+        ]
+        if config.use_hmc:
             if not config.share_mem_port:
                 status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
                 self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
@@ -285,7 +281,7 @@ class Top(Module):
             ),
             [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i*4),
                 self.bus.PicoDataOut.eq(csr)
-            ) for i, csr in enumerate(hmc_perf_counters)],
+            ) for i, csr in enumerate(hmc_perf_counters_pico)],
             [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
                 self.bus.PicoDataOut.eq(csr)
             ) for i, csr in enumerate(status_regs_pico)],

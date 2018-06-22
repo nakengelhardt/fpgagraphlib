@@ -5,6 +5,7 @@ from tbsupport import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
 from core_collision import CollisionDetector
+from hmc_backed_fifo import HMCBackedFIFO
 
 class Apply(Module):
     def __init__(self, config, pe_id):
@@ -29,7 +30,7 @@ class Apply(Module):
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
         # local node data storage
-        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), max(2, len(config.adj_idx[pe_id])+1), name="vertex_data_{}".format(self.pe_id))
+        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), max(2, len(config.adj_idx[pe_id])+1), init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
@@ -240,18 +241,26 @@ class Apply(Module):
         ( "sender", "nodeidsize", DIR_M_TO_S ),
         ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
         ]
-        self.submodules.outfifo = RecordFIFOBuffered(layout=set_layout_parameters(_layout, **addresslayout.get_params()), depth=len(config.adj_idx[pe_id])*2)
+        outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
+        outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
+        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
+        # self.submodules.outfifo = RecordFIFOBuffered(layout=, depth=len(config.adj_idx[pe_id])*2)
+        self.comb += [
+            self.outfifo.din.eq(outfifo_in.raw_bits()),
+            outfifo_out.raw_bits().eq(self.outfifo.dout)
+        ]
+
 
         # stall if fifo full or if collision
         self.comb += downstream_ack.eq(self.outfifo.writable)
 
         self.comb += [
             self.outfifo.we.eq(self.applykernel.update_valid | self.applykernel.barrier_out),
-            self.outfifo.din.msg.eq(self.applykernel.update_out.raw_bits()),
-            If(self.applykernel.barrier_out, self.outfifo.din.sender.eq(pe_id << log2_int(num_nodes_per_pe))
-            ).Else(self.outfifo.din.sender.eq(self.applykernel.update_sender)),
-            self.outfifo.din.roundpar.eq(self.applykernel.update_round),
-            self.outfifo.din.barrier.eq(self.applykernel.barrier_out)
+            outfifo_in.msg.eq(self.applykernel.update_out.raw_bits()),
+            If(self.applykernel.barrier_out, outfifo_in.sender.eq(pe_id << log2_int(num_nodes_per_pe))
+            ).Else(outfifo_in.sender.eq(self.applykernel.update_sender)),
+            outfifo_in.roundpar.eq(self.applykernel.update_round),
+            outfifo_in.barrier.eq(self.applykernel.barrier_out)
         ]
 
         payload4 = Signal(addresslayout.payloadsize)
@@ -261,10 +270,10 @@ class Apply(Module):
         valid4 = Signal()
 
         self.sync += If(self.scatter_interface.ack,
-            payload4.eq(self.outfifo.dout.msg),
-            sender4.eq(self.outfifo.dout.sender),
-            roundpar4.eq(self.outfifo.dout.roundpar),
-            barrier4.eq(self.outfifo.dout.barrier),
+            payload4.eq(outfifo_out.msg),
+            sender4.eq(outfifo_out.sender),
+            roundpar4.eq(outfifo_out.roundpar),
+            barrier4.eq(outfifo_out.barrier),
             valid4.eq(self.outfifo.readable)
         )
 

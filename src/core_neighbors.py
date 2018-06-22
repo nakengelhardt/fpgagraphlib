@@ -24,7 +24,7 @@ class Neighbors(Module):
 
         # adjacency list storage (second half of CSR storage, index comes from input)
         # val: array of nodeids
-        self.specials.mem_val = Memory(nodeidsize, len(config.adj_val[pe_id]) + 2, name="edge_csr_val")
+        self.specials.mem_val = Memory(nodeidsize, len(config.adj_val[pe_id]) + 2, name="edge_csr_val", init=config.adj_val[pe_id])
         # self.specials.mem_val = Memory(nodeidsize, max_edges_per_pe, init=adj_val)
         self.specials.rd_port_val = rd_port_val = self.mem_val.get_port(has_re=True)
         self.specials.wr_port_val = self.mem_val.get_port(write_capable=True)
