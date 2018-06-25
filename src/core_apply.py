@@ -1,6 +1,7 @@
 from migen import *
 from migen.genlib.record import *
-from recordfifo import *
+from migen.genlib.fifo import SyncFIFO
+from recordfifo import InterfaceFIFO
 from tbsupport import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
@@ -16,16 +17,16 @@ class Apply(Module):
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
 
         # input Q interface
-        self.apply_interface = ApplyInterface(**addresslayout.get_params())
+        self.apply_interface = ApplyInterface(name="apply_in", **addresslayout.get_params())
 
         # scatter interface
         # send self.update message to all neighbors
         # message format (sending_node_id) (normally would be (sending_node_id, weight), but for PR weight = sending_node_id)
-        self.scatter_interface = ScatterInterface(**addresslayout.get_params())
+        self.scatter_interface = ScatterInterface(name="apply_out", **addresslayout.get_params())
 
         ####
 
-        apply_interface_in_fifo = InterfaceFIFO(layout=self.apply_interface.layout, depth=8)
+        apply_interface_in_fifo = InterfaceFIFO(layout=self.apply_interface.layout, depth=8, name="apply_in_fifo")
         self.submodules += apply_interface_in_fifo
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
@@ -82,16 +83,15 @@ class Apply(Module):
         sender2 = Signal(nodeidsize)
         payload2 = Signal(addresslayout.payloadsize)
         roundpar2 = Signal(config.addresslayout.channel_bits)
+        barrier2 = Signal()
         valid2 = Signal()
         ready = Signal()
+        msgvalid2 = Signal()
+        statevalid2 = Signal()
 
-        apply_valid2 = Signal()
-        apply_ready = Signal()
-        apply_barrier2 = Signal()
         state_barrier = Signal()
 
         node_idx = Signal(nodeidsize)
-        gather_en = Signal()
         gather_done = Signal()
 
         next_roundpar = Signal(config.addresslayout.channel_bits)
@@ -103,20 +103,20 @@ class Apply(Module):
             apply_interface_in_fifo.dout.ack.eq(upstream_ack),
             rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),
             NextValue(valid2, valid & collision_re), # insert bubble if collision
+            NextValue(collision_en, 1),
             If(upstream_ack,
                 NextValue(dest_node_id2, dest_node_id),
                 NextValue(sender2, sender),
                 NextValue(payload2, payload),
-                NextValue(roundpar2, roundpar),
+                NextValue(roundpar2, next_roundpar),
+                NextValue(statevalid2, 1),
+                NextValue(msgvalid2, ~barrier),
                 If(barrier,
-                    NextValue(valid2, 0), # this should already be the case, just making sure
-                    # note to self, check if sythesizer optimizes it away
-                    NextValue(roundpar2, next_roundpar),
+                    NextValue(collision_en, 0),
+                    NextValue(valid2, 0),
                     NextState("FLUSH")
                 )
-            ),
-            gather_en.eq(1),
-            collision_en.eq(1)
+            )
         )
         self.fsm.act("FLUSH",
             rd_port.re.eq(0),
@@ -125,20 +125,20 @@ class Apply(Module):
             rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),
             If(gather_done,
                 NextState("APPLY")
-            ),
-            gather_en.eq(1)
+            )
         )
         self.fsm.act("APPLY",
-            rd_port.re.eq(apply_ready),
+            rd_port.re.eq(ready),
             apply_interface_in_fifo.dout.ack.eq(0),
             rd_port.adr.eq(addresslayout.local_adr(node_idx)),
-            NextValue(apply_valid2, 1),
-            If(apply_ready,
+            NextValue(valid2, 1),
+            If(ready,
                 NextValue(dest_node_id2, node_idx),
                 NextValue(node_idx, node_idx+1),
                 If(node_idx==(len(config.adj_idx[pe_id]) + (pe_id << log2_int(num_nodes_per_pe))),
-                    NextValue(apply_barrier2, 1),
-                    NextValue(apply_valid2, 0),
+                    NextValue(statevalid2, 0),
+                    NextValue(barrier2, 1),
+                    NextValue(valid2, 1),
                     NextState("BARRIER_SEND")
                 )
             )
@@ -146,9 +146,15 @@ class Apply(Module):
         self.fsm.act("BARRIER_SEND",
             apply_interface_in_fifo.dout.ack.eq(0),
             rd_port.adr.eq(addresslayout.local_adr(node_idx)),
-            If(apply_ready,
-                NextValue(apply_barrier2, 0),
-                NextState("BARRIER_WAIT")
+            If(ready,
+                NextValue(barrier2, 0),
+                NextValue(valid2, 0),
+                If(state_barrier,
+                    NextValue(self.level, self.level+1),
+                    NextState("GATHER")
+                ).Else(
+                    NextState("BARRIER_WAIT")
+                )
             )
         )
         self.fsm.act("BARRIER_WAIT",
@@ -163,76 +169,39 @@ class Apply(Module):
 
         self.comb += [
             self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),
-            self.collisiondetector.read_adr_valid.eq(valid & collision_en),
+            self.collisiondetector.read_adr_valid.eq(valid & collision_en), # can't be rd_port.re because that uses collisiondetector.re -> comb loop
             self.collisiondetector.write_adr.eq(local_wr_port.adr),
-            self.collisiondetector.write_adr_valid.eq(local_wr_port.we & gather_en),
+            self.collisiondetector.write_adr_valid.eq(local_wr_port.we),
             collision_re.eq(self.collisiondetector.re),
             gather_done.eq(self.collisiondetector.all_clear)
         ]
 
-        ## Stage 3
-        dest_node_id3 = Signal(nodeidsize)
-        sender3 = Signal(nodeidsize)
-        payload3 = Signal(addresslayout.payloadsize)
-        self.roundpar = Signal(config.addresslayout.channel_bits)
-        valid3 = Signal()
-        data3 = Signal(len(rd_port.dat_r))
-
-        self.submodules.applykernel = config.applykernel(config)
-        state_in = Record(addresslayout.node_storage_layout)
-
-        self.sync += [
-            If(ready,
-                valid3.eq(valid2),
-                dest_node_id3.eq(dest_node_id2),
-                sender3.eq(sender2),
-                payload3.eq(payload2),
-                self.roundpar.eq(roundpar2),
-                data3.eq(rd_port.dat_r)
-            ),
-            If(apply_ready,
-                self.applykernel.nodeid_in.eq(dest_node_id2),
-                self.applykernel.state_in.raw_bits().eq(rd_port.dat_r),
-                self.applykernel.round_in.eq(roundpar2),
-                self.applykernel.valid_in.eq(state_in.active & apply_valid2),
-                self.applykernel.barrier_in.eq(apply_barrier2),
-            )
-        ]
-
-        downstream_ack = Signal()
-
-        self.comb += [
-            state_in.raw_bits().eq(rd_port.dat_r),
-            apply_ready.eq(self.applykernel.ready),
-            self.applykernel.update_ack.eq(downstream_ack),
-            state_barrier.eq(self.applykernel.state_barrier)
-        ]
-
         # User code
-        self.submodules.gatherkernel = config.gatherkernel(config)
+        self.submodules.gatherapplykernel = config.gatherapplykernel(config)
 
         self.comb += [
-            self.gatherkernel.nodeid_in.eq(dest_node_id3),
-            self.gatherkernel.sender_in.eq(sender3),
-            self.gatherkernel.message_in.raw_bits().eq(payload3),
-            self.gatherkernel.state_in.raw_bits().eq(data3),
-            self.gatherkernel.valid_in.eq(valid3),
-            self.gatherkernel.level_in.eq(self.level),
-            ready.eq(self.gatherkernel.ready),
-            upstream_ack.eq(self.gatherkernel.ready & collision_re),
-            self.gatherkernel.state_ack.eq(gather_en)
+            self.gatherapplykernel.level_in.eq(self.level),
+            self.gatherapplykernel.nodeid_in.eq(dest_node_id2),
+            self.gatherapplykernel.sender_in.eq(sender2),
+            self.gatherapplykernel.message_in.raw_bits().eq(payload2),
+            self.gatherapplykernel.message_in_valid.eq(msgvalid2),
+            self.gatherapplykernel.state_in.raw_bits().eq(rd_port.dat_r),
+            self.gatherapplykernel.state_in_valid.eq(statevalid2),
+            self.gatherapplykernel.round_in.eq(roundpar2),
+            self.gatherapplykernel.barrier_in.eq(barrier2),
+            self.gatherapplykernel.valid_in.eq(valid2),
+            ready.eq(self.gatherapplykernel.ready),
+            upstream_ack.eq(self.gatherapplykernel.ready & collision_re)
         ]
 
         # write state updates
-        self.comb += If(gather_en,
-            local_wr_port.adr.eq(addresslayout.local_adr(self.gatherkernel.nodeid_out)),
-            local_wr_port.dat_w.eq(self.gatherkernel.state_out.raw_bits()),
-            local_wr_port.we.eq(self.gatherkernel.state_valid)
-        ).Else(
-            local_wr_port.adr.eq(addresslayout.local_adr(self.applykernel.nodeid_out)),
-            local_wr_port.dat_w.eq(self.applykernel.state_out.raw_bits()),
-            local_wr_port.we.eq(self.applykernel.state_valid)
-        )
+        self.comb += [
+            local_wr_port.adr.eq(addresslayout.local_adr(self.gatherapplykernel.nodeid_out)),
+            local_wr_port.dat_w.eq(self.gatherapplykernel.state_out.raw_bits()),
+            state_barrier.eq(self.gatherapplykernel.state_barrier),
+            local_wr_port.we.eq(self.gatherapplykernel.state_valid),
+            self.gatherapplykernel.state_ack.eq(1)
+        ]
 
         # output handling
         _layout = [
@@ -243,24 +212,21 @@ class Apply(Module):
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
-        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
-        # self.submodules.outfifo = RecordFIFOBuffered(layout=, depth=len(config.adj_idx[pe_id])*2)
+        # self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
+        self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=len(config.adj_idx[pe_id])*2)
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),
             outfifo_out.raw_bits().eq(self.outfifo.dout)
         ]
 
-
-        # stall if fifo full or if collision
-        self.comb += downstream_ack.eq(self.outfifo.writable)
-
         self.comb += [
-            self.outfifo.we.eq(self.applykernel.update_valid | self.applykernel.barrier_out),
-            outfifo_in.msg.eq(self.applykernel.update_out.raw_bits()),
-            If(self.applykernel.barrier_out, outfifo_in.sender.eq(pe_id << log2_int(num_nodes_per_pe))
-            ).Else(outfifo_in.sender.eq(self.applykernel.update_sender)),
-            outfifo_in.roundpar.eq(self.applykernel.update_round),
-            outfifo_in.barrier.eq(self.applykernel.barrier_out)
+            outfifo_in.msg.eq(self.gatherapplykernel.update_out.raw_bits()),
+            If(self.gatherapplykernel.barrier_out, outfifo_in.sender.eq(pe_id << log2_int(num_nodes_per_pe))
+            ).Else(outfifo_in.sender.eq(self.gatherapplykernel.update_sender)),
+            self.outfifo.we.eq(self.gatherapplykernel.update_valid),
+            outfifo_in.roundpar.eq(self.gatherapplykernel.update_round),
+            outfifo_in.barrier.eq(self.gatherapplykernel.barrier_out),
+            self.gatherapplykernel.update_ack.eq(self.outfifo.writable)
         ]
 
         payload4 = Signal(addresslayout.payloadsize)

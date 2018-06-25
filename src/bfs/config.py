@@ -2,8 +2,9 @@ from migen import *
 
 from core_address import AddressLayout
 from bfs.interfaces import node_storage_layout
-from bfs.gatherkernel import GatherKernel
-from bfs.applykernel import ApplyKernel
+from bfs.gatherapplykernel import GatherApplyKernel
+# from bfs.gatherkernel import GatherKernel
+# from bfs.applykernel import ApplyKernel
 from bfs.scatterkernel import ScatterKernel
 
 import logging
@@ -22,8 +23,9 @@ class Config:
 
         self.has_edgedata = False
 
-        self.gatherkernel = GatherKernel
-        self.applykernel = ApplyKernel
+        self.gatherapplykernel = GatherApplyKernel
+        # self.gatherkernel = GatherKernel
+        # self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
         self.init_nodedata = None

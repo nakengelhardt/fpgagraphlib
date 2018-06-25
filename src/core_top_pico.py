@@ -78,9 +78,9 @@ class Core(Module):
                         logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(i))
                     # else:
                     #     logger.debug(str(num_cycles) + ": Message for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
-                if ((yield self.apply[i].gatherkernel.valid_in)
-                    and (yield self.apply[i].gatherkernel.ready)):
-                    if ((yield self.apply[i].level) - 1) % self.config.addresslayout.num_channels != (yield self.apply[i].roundpar):
+                if ((yield self.apply[i].gatherapplykernel.valid_in)
+                    and (yield self.apply[i].gatherapplykernel.ready)):
+                    if (yield self.apply[i].level) % self.config.addresslayout.num_channels != (yield self.apply[i].gatherapplykernel.round_in):
                         logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].roundpar), (yield self.apply[i].level)))
                 if ((yield self.apply[i].scatter_interface.barrier)
                     and (yield self.apply[i].scatter_interface.valid)
@@ -315,6 +315,8 @@ def sim(config):
 
     if config.use_hmc:
         generators.extend(config.platform.getSimGenerators(config.adj_val))
+    else:
+        generators.extend(config.platform.getSimGenerators([]))
 
     generators.extend([core.gen_barrier_monitor(tb) for core in tb.cores])
     generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
