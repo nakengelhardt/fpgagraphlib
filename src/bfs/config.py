@@ -1,10 +1,9 @@
 from migen import *
+from tbsupport import *
 
 from core_address import AddressLayout
 from bfs.interfaces import node_storage_layout
 from bfs.gatherapplykernel import GatherApplyKernel
-# from bfs.gatherkernel import GatherKernel
-# from bfs.applykernel import ApplyKernel
 from bfs.scatterkernel import ScatterKernel
 
 import logging
@@ -24,15 +23,11 @@ class Config:
         self.has_edgedata = False
 
         self.gatherapplykernel = GatherApplyKernel
-        # self.gatherkernel = GatherKernel
-        # self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
-
-        self.init_nodedata = None
 
         init_root = 0
         while not init_root in adj_dict:
             init_root += 1
 
-        self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
-        self.init_messages[self.addresslayout.pe_adr(init_root)].append({'dest_id':init_root, 'sender':init_root, 'payload':0})
+        max_node = self.addresslayout.max_node_per_pe(adj_dict)
+        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, parent=(init_root if self.addresslayout.global_adr(pe, node) == init_root else 0), active=(1 if self.addresslayout.global_adr(pe, node) == init_root else 0)) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]

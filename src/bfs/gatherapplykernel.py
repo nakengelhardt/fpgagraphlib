@@ -85,11 +85,11 @@ class GatherApplyKernel(Module):
             if (yield self.barrier_out) and (yield self.update_ack):
                 level += 1
                 logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, level))
-            if (yield self.valid_in) and (yield self.ready) and not (yield self.barrier_in):
+            if (yield self.valid_in) and (yield self.ready) and (yield self.message_in_valid):
                 num_messages_in += 1
             if (yield self.update_valid) and (yield self.update_ack) and not (yield self.barrier_out):
                 num_messages_out += 1
                 logger.debug(str(num_cycles) + ": Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
-        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
-        logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
+        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} updates sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
+        logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/update".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))
