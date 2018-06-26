@@ -81,7 +81,7 @@ class Core(Module):
                 if ((yield self.apply[i].gatherapplykernel.valid_in)
                     and (yield self.apply[i].gatherapplykernel.ready)):
                     if (yield self.apply[i].level) % self.config.addresslayout.num_channels != (yield self.apply[i].gatherapplykernel.round_in):
-                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].roundpar), (yield self.apply[i].level)))
+                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].gatherapplykernel.round_in), (yield self.apply[i].level)))
                 if ((yield self.apply[i].scatter_interface.barrier)
                     and (yield self.apply[i].scatter_interface.valid)
                     and (yield self.apply[i].scatter_interface.ack)):

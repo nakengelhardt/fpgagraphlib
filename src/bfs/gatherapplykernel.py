@@ -61,7 +61,7 @@ class GatherApplyKernel(Module):
             ).Else(
                 self.state_out.active.eq(self.state_in.active)
             ),
-            self.state_valid.eq(self.state_in_valid & self.valid_in), # ok to write multiple times if self.update_ack is 0
+            self.state_valid.eq(self.state_in_valid & self.valid_in & self.update_ack),
             self.state_barrier.eq(self.barrier_in),
             self.nodeid_out.eq(self.nodeid_in),
             self.update_out.dummy.eq(0),

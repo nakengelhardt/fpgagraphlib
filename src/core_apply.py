@@ -102,9 +102,11 @@ class Apply(Module):
             rd_port.re.eq(upstream_ack),
             apply_interface_in_fifo.dout.ack.eq(upstream_ack),
             rd_port.adr.eq(addresslayout.local_adr(dest_node_id)),
-            NextValue(valid2, valid & collision_re), # insert bubble if collision
             NextValue(collision_en, 1),
-            If(upstream_ack,
+            If(~collision_re,
+                NextValue(valid2, 0) # insert bubble if collision
+            ).Elif(upstream_ack,
+                NextValue(valid2, valid),
                 NextValue(dest_node_id2, dest_node_id),
                 NextValue(sender2, sender),
                 NextValue(payload2, payload),
@@ -169,7 +171,7 @@ class Apply(Module):
 
         self.comb += [
             self.collisiondetector.read_adr.eq(addresslayout.local_adr(dest_node_id)),
-            self.collisiondetector.read_adr_valid.eq(valid & collision_en), # can't be rd_port.re because that uses collisiondetector.re -> comb loop
+            self.collisiondetector.read_adr_valid.eq(ready & valid & collision_en), # can't be rd_port.re because that uses collisiondetector.re -> comb loop
             self.collisiondetector.write_adr.eq(local_wr_port.adr),
             self.collisiondetector.write_adr_valid.eq(local_wr_port.we),
             collision_re.eq(self.collisiondetector.re),
@@ -191,7 +193,7 @@ class Apply(Module):
             self.gatherapplykernel.barrier_in.eq(barrier2),
             self.gatherapplykernel.valid_in.eq(valid2),
             ready.eq(self.gatherapplykernel.ready),
-            upstream_ack.eq(self.gatherapplykernel.ready & collision_re)
+            upstream_ack.eq((self.gatherapplykernel.ready | ~valid2) & collision_re)
         ]
 
         # write state updates
@@ -212,8 +214,8 @@ class Apply(Module):
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
-        # self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
-        self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=len(config.adj_idx[pe_id])*2)
+        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
+        # self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=len(config.adj_idx[pe_id])*2)
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),
             outfifo_out.raw_bits().eq(self.outfifo.dout)

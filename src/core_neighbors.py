@@ -30,7 +30,7 @@ class Neighbors(Module):
         self.specials.wr_port_val = self.mem_val.get_port(write_capable=True)
 
         if config.has_edgedata:
-            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, len(adj_val) + 2, init=config.init_edgedata[pe_id])
+            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, len(config.adj_val[pe_id]) + 2, init=config.init_edgedata[pe_id])
             self.specials.rd_port_edge = rd_port_edge = self.mem_edge.get_port(has_re=True)
             self.specials.wr_port_edge = self.mem_edge.get_port(write_capable=True)
 
