@@ -51,7 +51,7 @@ class GatherApplyKernel(Module):
             ).Else(
                 do_update.eq(self.state_in.active)
             ),
-            If(visit,
+            If(self.message_in_valid & visit,
                 self.state_out.parent.eq(self.sender_in),
             ).Else(
                 self.state_out.parent.eq(self.state_in.parent),
@@ -61,7 +61,7 @@ class GatherApplyKernel(Module):
             ).Else(
                 self.state_out.active.eq(self.state_in.active)
             ),
-            self.state_valid.eq(self.state_in_valid), # ok to write multiple times if self.update_ack is 0
+            self.state_valid.eq(self.state_in_valid & self.valid_in), # ok to write multiple times if self.update_ack is 0
             self.state_barrier.eq(self.barrier_in),
             self.nodeid_out.eq(self.nodeid_in),
             self.update_out.dummy.eq(0),
