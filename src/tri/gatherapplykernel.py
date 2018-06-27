@@ -74,12 +74,13 @@ class GatherApplyKernel(Module):
         num_messages_out = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.barrier_out) and (yield self.update_ack):
+            if (yield self.update_valid) and (yield self.update_ack) and (yield self.barrier_out):
                 level += 1
                 logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, level))
             if (yield self.valid_in) and (yield self.ready) and (yield self.message_in_valid):
                 num_messages_in += 1
             if (yield self.update_valid) and (yield self.update_ack) and not (yield self.barrier_out):
+                logger.debug("{}: PE {} update out (sender={} origin={} hops={})".format(num_cycles, pe_id, (yield self.update_sender), (yield self.update_out.origin), (yield self.update_out.hops)))
                 num_messages_out += 1
             yield
         logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} updates sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
