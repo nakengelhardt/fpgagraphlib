@@ -57,7 +57,7 @@ class Arbiter(Module):
                     logger.debug("{}: Barrier passed to apply".format(num_cycles))
                 else:
                     if (level-1) % tb.config.addresslayout.num_channels != (yield self.apply_interface_out.msg.roundpar):
-                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply_interface_out.msg.roundpar), level))
+                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply_interface_out.msg.roundpar), (level-1) % tb.config.addresslayout.num_channels))
             yield
 
 class MuxTree(Module):

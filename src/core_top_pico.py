@@ -65,6 +65,12 @@ class Core(Module):
         self.global_inactive = Signal()
         self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
 
+        self.kernel_error = Signal()
+        self.comb += self.kernel_error.eq(reduce(or_, [pe.gatherapplykernel.kernel_error for pe in self.apply]))
+
+        self.deadlock = Signal()
+        self.comb += self.deadlock.eq(reduce(or_, [pe.deadlock for pe in self.apply]))
+
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
@@ -108,8 +114,9 @@ class UnCore(Module):
 
         self.submodules.cores = [Core(config)]
 
-        self.global_inactive = Signal()
-        self.comb += self.global_inactive.eq(self.cores[0].global_inactive)
+        self.global_inactive = self.cores[0].global_inactive
+        self.kernel_error = self.cores[0].kernel_error
+        self.deadlock = self.cores[0].deadlock
 
         start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
         # layout = Message(**config.addresslayout.get_params()).layout
@@ -168,6 +175,7 @@ class UnCore(Module):
             yield
         logger = logging.getLogger('simulation.start')
         logger.info("Total number of messages: {}".format((yield self.total_num_messages)))
+        logger.info("Kernel error: {}".format((yield self.kernel_error)))
 
 
     def gen_network_stats(self):
@@ -274,6 +282,18 @@ class Top(Module):
             MultiReg(self.uncore.done, done_pico, odomain="pico")
         ]
 
+        kernel_error_pico = Signal()
+        self.uncore.kernel_error.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(self.uncore.kernel_error, kernel_error_pico, odomain="pico")
+        ]
+
+        deadlock_pico = Signal()
+        self.uncore.deadlock.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(self.uncore.deadlock, deadlock_pico, odomain="pico")
+        ]
+
         self.bus = config.platform.getBus()
 
         self.sync.pico += [
@@ -281,7 +301,7 @@ class Top(Module):
                 self.bus.PicoDataOut.eq(cycle_count_pico)
             ),
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
-                self.bus.PicoDataOut.eq(done_pico)
+                self.bus.PicoDataOut.eq(Cat(done_pico, kernel_error_pico, deadlock_pico))
             ),
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10008),
                 self.bus.PicoDataOut.eq(total_num_messages_pico)

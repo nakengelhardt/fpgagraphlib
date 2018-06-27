@@ -196,6 +196,7 @@ def init_parse(args=None):
     algo_config.adj_idx = adj_idx
     algo_config.adj_val = adj_val
     algo_config.start_addr = (1<<34)
+    algo_config.hmc_fifo_bits = 20 if args.command=='sim' else 29
 
     for pe in range(algo_config.addresslayout.num_pe):
         assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe

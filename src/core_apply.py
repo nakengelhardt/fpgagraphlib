@@ -8,6 +8,8 @@ from core_interfaces import ApplyInterface, ScatterInterface, Message
 from core_collision import CollisionDetector
 from hmc_backed_fifo import HMCBackedFIFO
 
+import logging
+
 class Apply(Module):
     def __init__(self, config, pe_id):
         self.config = config
@@ -23,6 +25,8 @@ class Apply(Module):
         # send self.update message to all neighbors
         # message format (sending_node_id) (normally would be (sending_node_id, weight), but for PR weight = sending_node_id)
         self.scatter_interface = ScatterInterface(name="apply_out", **addresslayout.get_params())
+
+        self.deadlock = Signal()
 
         ####
 
@@ -214,7 +218,9 @@ class Apply(Module):
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
-        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<20), end_addr=(pe_id + 1)*(1<<20), port=config.platform.getHMCPort(pe_id))
+        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
+        self.sync += If(self.outfifo.full, self.deadlock.eq(1))
+
         # self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=len(config.adj_idx[pe_id])*2)
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),
@@ -255,3 +261,15 @@ class Apply(Module):
 
         # send from fifo when receiver ready
         self.comb += self.outfifo.re.eq(self.scatter_interface.ack)
+
+    def gen_simulation(self, tb):
+        while not (yield tb.global_inactive):
+            yield
+        if self.pe_id == 0:
+            print("State at end of computation:")
+        for node in range(len(tb.config.adj_idx[self.pe_id])):
+            p = str(tb.config.addresslayout.global_adr(self.pe_id, node))
+            p += ": "
+            state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
+            p += str(state)
+            print(p)

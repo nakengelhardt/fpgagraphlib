@@ -18,6 +18,8 @@ class HMCBackedFIFO(Module):
         self.readable = Signal()
         self.re = Signal()
 
+        self.full = Signal()
+
         word_offset = log2_int(len(self.port.rd_data)) - 3
 
         # storage area
@@ -25,6 +27,10 @@ class HMCBackedFIFO(Module):
         rd_ptr = Signal(len(self.port.addr)-word_offset)
         wr_ptr = Signal(len(self.port.addr)-word_offset)
         level = Signal(max=mem_area_size+1)
+
+        self.comb += [
+            self.full.eq(level == mem_area_size)
+        ]
 
         # tags
         tag_sz = self.port.effective_max_tag_size - 1
@@ -56,12 +62,15 @@ class HMCBackedFIFO(Module):
                 self.port.cmd_valid.eq(no_hazard),
                 self.writable.eq(0),
                 self.data.we.eq(0)
-            ).Elif((level != mem_area_size),
+            ).Elif(~self.full,
                 self.port.cmd.eq(HMC_CMD_WR_NP),
                 self.port.addr[word_offset:].eq(start_addr + wr_ptr),
                 self.port.cmd_valid.eq(self.we & no_hazard),
                 self.writable.eq(self.data.writable & no_hazard & self.port.cmd_ready),
                 self.data.we.eq(self.we & no_hazard & self.port.cmd_ready)
+            ).Else(
+                self.port.cmd_valid.eq(0),
+                self.writable.eq(0)
             ),
             self.port.tag.eq(Cat(do_rd, tag)),
             self.port.wr_data.eq(self.data.dout),
