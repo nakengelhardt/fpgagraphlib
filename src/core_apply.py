@@ -62,7 +62,7 @@ class Apply(Module):
         collision_en = Signal()
 
         # count levels
-        self.level = Signal(8)
+        self.level = Signal(32)
 
         ## Stage 1
         # rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
@@ -221,7 +221,6 @@ class Apply(Module):
         self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
         self.sync += If(self.outfifo.full, self.deadlock.eq(1))
 
-        # self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=len(config.adj_idx[pe_id])*2)
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),
             outfifo_out.raw_bits().eq(self.outfifo.dout)

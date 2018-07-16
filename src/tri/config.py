@@ -5,6 +5,7 @@ from core_address import AddressLayout
 from tri.interfaces import *
 from tri.gatherapplykernel import GatherApplyKernel
 from tri.scatterkernel import ScatterKernel
+from tri.preprocess import count_triangles
 
 import logging
 
@@ -19,6 +20,7 @@ class Config:
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.adj_dict = adj_dict
+        logger.info("Graph has {} triangles".format(count_triangles(adj_dict)))
 
         self.has_edgedata = True
         self.addresslayout.edgedatasize = layout_len(set_layout_parameters(edge_storage_layout, **kwargs))
@@ -46,10 +48,11 @@ class Config:
                     if active:
                         num_neighbors = len(adj_dict[nodeid])
                         current_round_edges += num_neighbors
-                        if current_round_edges > 1024:
+                        if current_round_edges > (1<<10):
                             current_round_edges = 0
                             current_round += 1
 
+        logger.info("Activation spread over {} supersteps.".format(current_round+1))
 
 
 

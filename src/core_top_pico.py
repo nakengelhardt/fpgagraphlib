@@ -119,18 +119,6 @@ class UnCore(Module):
         self.deadlock = self.cores[0].deadlock
 
         start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-        # layout = Message(**config.addresslayout.get_params()).layout
-        # initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in init_message] for init_message in config.init_messages]
-        # for i in initdata:
-        #     i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
-        # initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
-
-        # for i in range(num_pe):
-        #     initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
-        #     initfifos[i].re.name_override = "initfifos{}_re".format(i)
-        #     initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-
-        # self.submodules += initfifos
 
         injected = [Signal() for i in range(num_pe)]
 
@@ -200,21 +188,6 @@ class Top(Module):
 
         self.submodules += config.platform
 
-        self.clock_domains.cd_sys = ClockDomain()
-        sys_clk, _, sys_rst, _ = config.platform.getHMCClkEtc()
-        # extra_clk = config.platform.getExtraClk()
-        self.comb += [ self.cd_sys.clk.eq(sys_clk), self.cd_sys.rst.eq(sys_rst) ]
-        for port in config.platform.picoHMCports:
-            self.comb += port.clk.eq(sys_clk)
-
-        # self.clock_domains.cd_pcie = ClockDomain()
-        # clk, rst = config.platform.getStreamClkRst()
-        # self.comb += [ self.cd_pcie.clk.eq(clk), self.cd_pcie.rst.eq(rst) ]
-
-        self.clock_domains.cd_pico = ClockDomain()
-        bus_clk, bus_rst = config.platform.getBusClkRst()
-        self.comb += [ self.cd_pico.clk.eq(bus_clk), self.cd_pico.rst.eq(bus_rst) ]
-
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = config.platform.picoHMCports[i]
@@ -224,51 +197,44 @@ class Top(Module):
             ]
 
         hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
-        self.submodules.perf_counter_transfer = BusSynchronizer(len(hmc_perf_counters)*len(hmc_perf_counters[0]), "sys", "pico")
-        self.comb += [
-            self.perf_counter_transfer.i.eq(Cat(*hmc_perf_counters)),
-            Cat(*hmc_perf_counters_pico).eq(self.perf_counter_transfer.o)
-        ]
+        for i in range(len(hmc_perf_counters)):
+            self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
+
         if config.use_hmc:
             if not config.share_mem_port:
-                status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
-                self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-                self.comb += [
-                    self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired))),
-                    # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-                    Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-                ]
+                status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
             else:
-                status_regs_pico = [Signal(32) for _ in range(4*9)]
-                self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-                self.comb += [
-                    self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued))),
-                    # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-                    Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-                ]
+                status_regs = [sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued)]
         else:
-            status_regs_pico = [Signal(32) for _ in range(4*num_pe)]
-            self.submodules.status_regs_transfer = BusSynchronizer(len(status_regs_pico)*len(status_regs_pico[0]), "sys", "pico")
-            self.comb += [
-                self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_neighbors_issued))),
-                # self.status_regs_transfer.i.eq(Cat(sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in n.num_reqs + n.wrongs)),
-                Cat(*status_regs_pico).eq(self.status_regs_transfer.o)
-            ]
+            status_regs = []
+            for core in self.uncore.cores:
+                for i in range(num_pe):
+                    status_regs.extend([
+                        # core.scatter[i].barrierdistributor.total_num_messages_in,
+                        core.scatter[i].barrierdistributor.total_num_messages,
+                        core.apply[i].level,
+                        core.apply[i].gatherapplykernel.num_triangles
+                        # core.scatter[i].get_neighbors.num_neighbors_issued,
+                        # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
+                        # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
+                        # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
+                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
+                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
+                        # *core.network.arbiter[i].barriercounter.num_from_pe,
+                        # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
+                        # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
+                        # core.network.arbiter[i].barriercounter.round_accepting
+                    ])
 
+        status_regs_pico = [Signal(32) for _ in status_regs]
+        for i in range(len(status_regs)):
+            self.specials += MultiReg(status_regs[i], status_regs_pico[i], odomain="bus")
 
         cycle_count_pico = Signal(len(self.uncore.cycle_count))
-        self.submodules.cycle_count_transfer = BusSynchronizer(len(self.uncore.cycle_count), "sys", "pico")
-        self.comb += [
-            self.cycle_count_transfer.i.eq(self.uncore.cycle_count),
-            cycle_count_pico.eq(self.cycle_count_transfer.o)
-        ]
+        self.specials += MultiReg(self.uncore.cycle_count, cycle_count_pico, odomain="bus")
 
         total_num_messages_pico = Signal(len(self.uncore.total_num_messages))
-        self.submodules.total_num_messages_transfer = BusSynchronizer(len(self.uncore.total_num_messages), "sys", "pico")
-        self.comb += [
-            self.total_num_messages_transfer.i.eq(self.uncore.total_num_messages),
-            total_num_messages_pico.eq(self.total_num_messages_transfer.o)
-        ]
+        self.specials += MultiReg(self.uncore.total_num_messages, total_num_messages_pico, odomain="bus")
 
         start_pico = Signal()
         start_pico.attr.add("no_retiming")
@@ -279,24 +245,24 @@ class Top(Module):
         done_pico = Signal()
         self.uncore.done.attr.add("no_retiming")
         self.specials += [
-            MultiReg(self.uncore.done, done_pico, odomain="pico")
+            MultiReg(self.uncore.done, done_pico, odomain="bus")
         ]
 
         kernel_error_pico = Signal()
         self.uncore.kernel_error.attr.add("no_retiming")
         self.specials += [
-            MultiReg(self.uncore.kernel_error, kernel_error_pico, odomain="pico")
+            MultiReg(self.uncore.kernel_error, kernel_error_pico, odomain="bus")
         ]
 
         deadlock_pico = Signal()
         self.uncore.deadlock.attr.add("no_retiming")
         self.specials += [
-            MultiReg(self.uncore.deadlock, deadlock_pico, odomain="pico")
+            MultiReg(self.uncore.deadlock, deadlock_pico, odomain="bus")
         ]
 
         self.bus = config.platform.getBus()
 
-        self.sync.pico += [
+        self.sync.bus += [
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
                 self.bus.PicoDataOut.eq(cycle_count_pico)
             ),
@@ -324,7 +290,7 @@ def export(config, filename='top.v'):
 
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     verilog.convert(m,
-                    name="echo",
+                    name="top",
                     ios=config.platform.get_ios(),
                     special_overrides=so,
                     create_clock_domains=False
@@ -335,23 +301,22 @@ def export(config, filename='top.v'):
                 f.write(struct.pack('=I', x))
 
 def sim(config):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
+    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32)
     tb = UnCore(config)
     tb.submodules += config.platform
-    generators = []
 
     if config.use_hmc:
-        generators.extend(config.platform.getSimGenerators(config.adj_val))
+        generators = config.platform.getSimGenerators(config.adj_val)
     else:
-        generators.extend(config.platform.getSimGenerators([]))
+        generators = config.platform.getSimGenerators()
 
-    generators.extend([core.gen_barrier_monitor(tb) for core in tb.cores])
-    generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
-    generators.extend(get_simulators(tb, 'gen_simulation', tb))
+    generators["sys"].extend([core.gen_barrier_monitor(tb) for core in tb.cores])
+    generators["sys"].extend(get_simulators(tb, 'gen_selfcheck', tb))
+    generators["sys"].extend(get_simulators(tb, 'gen_simulation', tb))
 
     # generators.extend([a.gen_stats(tb) for a in tb.apply])
     # generators.extend([tb.gen_network_stats()])
-    run_simulation(tb, generators, vcd_name="tb.vcd")
+    run_simulation(tb, generators, clocks={"sys": 10, "bus": 480, "stream": 8}, vcd_name="tb.vcd")
 
 
 def main():

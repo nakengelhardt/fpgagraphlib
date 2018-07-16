@@ -148,7 +148,7 @@ def init_parse(args=None):
 
     if graphfile:
         logger.info("Reading graph from file {}".format(graphfile.name))
-        adj_dict = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph)
+        adj_dict = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph, connected=False)
     else:
         logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
         adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)

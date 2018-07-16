@@ -6,11 +6,11 @@ from pico import *
 
 class HMCBackedFIFO(Module):
     def __init__(self, width, start_addr, end_addr, port):
-        self.port = port
+        self.submodules.port = HMCPortWriteUnifier(port)
         assert width <= len(self.port.rd_data)
-        self.submodules.data = SyncFIFO(width=len(self.port.wr_data), depth=8)
+        print("Using memory region {:x} to {:x}".format(start_addr, end_addr))
 
-        self.din = self.data.din
+        self.din = Signal(width)
         self.writable = Signal()
         self.we = Signal()
 
@@ -19,17 +19,29 @@ class HMCBackedFIFO(Module):
         self.re = Signal()
 
         self.full = Signal()
+        self.num_writes = Signal(32)
+        self.num_reads = Signal(32)
 
         word_offset = log2_int(len(self.port.rd_data)) - 3
 
         # storage area
-        mem_area_size = (end_addr-start_addr) >> word_offset
+        word_start_addr = start_addr >> word_offset
+        word_end_addr = end_addr >> word_offset
+        mem_area_size = word_end_addr - word_start_addr
         rd_ptr = Signal(len(self.port.addr)-word_offset)
         wr_ptr = Signal(len(self.port.addr)-word_offset)
         level = Signal(max=mem_area_size+1)
 
         self.comb += [
             self.full.eq(level == mem_area_size)
+        ]
+        self.sync += [
+            If(self.writable & self.we,
+                self.num_writes.eq(self.num_writes + 1)
+            ),
+            If(self.readable & self.re,
+                self.num_reads.eq(self.num_reads + 1)
+            )
         ]
 
         # tags
@@ -52,30 +64,26 @@ class HMCBackedFIFO(Module):
 
         # choose read or write; only one port so no simultaneous access
         do_rd = Signal()
-        self.comb += do_rd.eq((level > 0) & ~reorderbuffer_valid[rd_ptr[word_offset:word_offset+tag_sz]] & ~self.tag_in_use[rd_ptr[word_offset:word_offset+tag_sz]]) # read if (a) there is something to read (b) the place to store the return value is free and (c) not going to be filled by an in-flight read
+        self.sync += do_rd.eq(~do_rd & (level > 0) & ~reorderbuffer_valid[rd_ptr[word_offset:word_offset+tag_sz]] & ~self.tag_in_use[rd_ptr[word_offset:word_offset+tag_sz]]) # read if (a) there is something to read (b) the place to store the return value is free and (c) not going to be filled by an in-flight read
 
         # issue commands
         self.comb += [
             If(do_rd,
                 self.port.cmd.eq(HMC_CMD_RD),
-                self.port.addr[word_offset:].eq(start_addr + rd_ptr),
+                self.port.addr[word_offset:].eq(word_start_addr + rd_ptr),
                 self.port.cmd_valid.eq(no_hazard),
-                self.writable.eq(0),
-                self.data.we.eq(0)
+                self.writable.eq(0)
             ).Elif(~self.full,
                 self.port.cmd.eq(HMC_CMD_WR_NP),
-                self.port.addr[word_offset:].eq(start_addr + wr_ptr),
+                self.port.addr[word_offset:].eq(word_start_addr + wr_ptr),
                 self.port.cmd_valid.eq(self.we & no_hazard),
-                self.writable.eq(self.data.writable & no_hazard & self.port.cmd_ready),
-                self.data.we.eq(self.we & no_hazard & self.port.cmd_ready)
+                self.writable.eq(no_hazard & self.port.cmd_ready)
             ).Else(
                 self.port.cmd_valid.eq(0),
                 self.writable.eq(0)
             ),
             self.port.tag.eq(Cat(do_rd, tag)),
-            self.port.wr_data.eq(self.data.dout),
-            self.port.wr_data_valid.eq(self.data.readable),
-            self.data.re.eq(self.port.wr_data_ready),
+            self.port.wr_data.eq(self.din),
             self.port.size.eq(1)
         ]
 

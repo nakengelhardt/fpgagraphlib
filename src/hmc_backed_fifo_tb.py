@@ -19,30 +19,31 @@ class HMCBackedFIFOCase(SimCase, unittest.TestCase):
 
             pico = PicoPlatform(1, bus_width=32, stream_width=128)
 
-            self.submodules.dut = HMCBackedFIFO(width=32, start_addr=0x0, end_addr=0x10000, port=pico.getHMCPort(0))
+            num_dut = 2
+            self.submodules.dut = [HMCBackedFIFO(width=32, start_addr=i*0x10000, end_addr=(i+1)*0x10000, port=pico.getHMCPort(i)) for i in range(num_dut)]
 
     def test_rw(self):
-        def gen_write():
+        def gen_write(i):
             for x in self.tb.data:
-                yield self.tb.dut.din.eq(x)
-                yield self.tb.dut.we.eq(1)
+                yield self.tb.dut[i].din.eq(x+i*32)
+                yield self.tb.dut[i].we.eq(1)
                 yield
-                while not (yield self.tb.dut.writable):
+                while not (yield self.tb.dut[i].writable):
                     yield
-            yield self.tb.dut.we.eq(0)
+            yield self.tb.dut[i].we.eq(0)
 
-        def gen_read():
-            yield self.tb.dut.re.eq(1)
+        def gen_read(i):
+            yield self.tb.dut[i].re.eq(1)
             for x in self.tb.data:
                 yield
-                while not (yield self.tb.dut.readable):
+                while not (yield self.tb.dut[i].readable):
                     yield
-                self.assertEqual(x, (yield self.tb.dut.dout))
-                print(x)
+                self.assertEqual(x+i*32, (yield self.tb.dut[i].dout))
+                print(i, x+i*32)
             for _ in range(3):
                 yield
-                self.assertEqual(0, (yield self.tb.dut.readable))
-            yield self.tb.dut.re.eq(0)
+                self.assertEqual(0, (yield self.tb.dut[i].readable))
+            yield self.tb.dut[i].re.eq(0)
 
         @passive
         def gen_timeout(cycles):
@@ -52,7 +53,10 @@ class HMCBackedFIFOCase(SimCase, unittest.TestCase):
                 time += 1
             self.fail("Timeout")
 
-        self.run_with([gen_write(), gen_read(), gen_timeout(1000), self.tb.dut.port.gen_responses([])], vcd_name="test_hmc_rw.vcd")
+        generators = [gen_timeout(1000)]
+        for i, dut in enumerate(self.tb.dut):
+            generators.extend([dut.port.gen_responses(), gen_write(i), gen_read(i)])
+        self.run_with(generators, vcd_name="test_hmc_rw.vcd")
 
 
 

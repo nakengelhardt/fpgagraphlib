@@ -24,10 +24,11 @@ class ScatterKernel(Module):
         self.message_ack = Signal()
         self.barrier_out = Signal()
 
-        out_edge = Signal()
-        wedge_hop = Signal()
+        dest_island = Signal()
         send_home = Signal()
         smaller = Signal()
+        break_tie = Signal()
+        pass_filter = Signal()
 
         self.comb += [
             self.ready.eq(self.message_ack),
@@ -37,9 +38,14 @@ class ScatterKernel(Module):
             self.sender_out.eq(self.sender_in),
             self.round_out.eq(self.round_in),
             self.barrier_out.eq(self.barrier_in),
-            out_edge.eq(self.edgedata_in.degree >= 2),
-            wedge_hop.eq(self.update_in.hops < 2),
+            dest_island.eq(self.edgedata_in.degree < 2),
+            smaller.eq(self.num_neighbors_in < self.edgedata_in.degree),
+            break_tie.eq((self.num_neighbors_in == self.edgedata_in.degree) & (self.sender_in > self.neighbor_in)),
             send_home.eq(self.neighbor_in == self.update_in.origin),
-            smaller.eq((self.num_neighbors_in < self.edgedata_in.degree) | ((self.num_neighbors_in == self.edgedata_in.degree) & (self.sender_in > self.neighbor_in))),
-            self.valid_out.eq(self.valid_in & out_edge & ((wedge_hop & ~smaller & ~send_home ) | (~wedge_hop & send_home)))
+            pass_filter.eq(~dest_island & ~smaller & ~break_tie & ~send_home),
+            If(self.update_in.hops < 2,
+                self.valid_out.eq(self.valid_in & pass_filter)
+            ).Else(
+                self.valid_out.eq(self.valid_in & send_home)
+            )
         ]

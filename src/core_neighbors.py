@@ -88,12 +88,18 @@ class Neighbors(Module):
         ]
 
         # stats
-        self.num_requests_accepted = Signal(32)
+        self.num_updates_accepted = Signal(32)
+        self.num_neighbors_requested = Signal(32)
         self.num_neighbors_issued = Signal(32)
 
         self.sync += [
-            If(self.neighbor_in.valid & self.neighbor_in.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+            If(self.neighbor_in.valid & self.neighbor_in.ack,
+                self.num_updates_accepted.eq(self.num_updates_accepted + 1),
+                self.num_neighbors_requested.eq(self.num_neighbors_requested + self.neighbor_in.num_neighbors)
+            ),
+            If(self.neighbor_out.valid & self.neighbor_out.ack,
+                self.num_neighbors_issued.eq(self.num_neighbors_issued + 1)
+            )
         ]
 
 
@@ -112,9 +118,7 @@ class Neighbors(Module):
             if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
                 num_mem_reads += 1
                 neighbor = (yield self.neighbor_out.neighbor)
-                logger.debug("{}: Message from node {} for node {}".format(num_cycles, curr_sender, neighbor))
-                if tb.config.has_edgedata:
-                    logger.debug("Edgedata: " + str((yield self.edgedata_out)))
+                logger.debug("{}: Message from node {} for node {}.{}".format(num_cycles, curr_sender, neighbor, " Edgedata: " + str((yield self.edgedata_out)) if tb.config.has_edgedata else ""))
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))

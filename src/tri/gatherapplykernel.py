@@ -45,8 +45,13 @@ class GatherApplyKernel(Module):
             self.update_sender.eq(self.nodeid_in),
             self.update_round.eq(self.round_in),
             self.barrier_out.eq(self.barrier_in),
+
             If(self.message_in_valid,
-                self.state_out.num_triangles.eq(self.state_in.num_triangles + (self.message_in.hops == 2)),
+                If((self.message_in.hops == 2),
+                    self.state_out.num_triangles.eq(self.state_in.num_triangles + 1)
+                ).Else(
+                    self.state_out.num_triangles.eq(self.state_in.num_triangles)
+                ),
                 self.state_out.active.eq(self.state_in.active),
 
                 self.update_out.origin.eq(self.message_in.origin),
@@ -55,14 +60,24 @@ class GatherApplyKernel(Module):
                 self.update_valid.eq(self.valid_in & (self.message_in.hops < 2) & self.state_ack)
             ).Else(
                 self.state_out.num_triangles.eq(self.state_in.num_triangles),
-                self.state_out.active.eq(0),
-
+                self.state_out.active.eq(self.state_in.active & ~self.update_valid),
                 self.update_out.origin.eq(self.nodeid_in),
                 self.update_out.hops.eq(0),
 
-                self.update_valid.eq(self.valid_in & ((self.state_in_valid & self.state_in.active & (self.round_in == self.state_in.send_in_level) & self.state_ack) | self.barrier_in))
+                self.update_valid.eq(self.valid_in & self.state_ack & ((self.state_in_valid & self.state_in.active & (self.level_in == self.state_in.send_in_level)) | self.barrier_in))
             )
         ]
+
+        self.num_triangles = Signal(32)
+        self.num_triangles_running = Signal(32)
+        self.sync += If(self.valid_in & self.ready,
+            If(self.barrier_in,
+                self.num_triangles.eq(self.num_triangles_running),
+                self.num_triangles_running.eq(0)
+            ).Elif(self.state_in_valid & ~self.message_in_valid,
+                self.num_triangles_running.eq(self.num_triangles_running + self.state_in.num_triangles)
+            )
+        )
 
     def gen_selfcheck(self, tb):
         logger = logging.getLogger("simulation.applykernel")

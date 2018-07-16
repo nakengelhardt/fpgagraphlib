@@ -112,7 +112,28 @@ class MuxTree(Module):
                 self.mux.apply_interface_out.connect(self.apply_interface_out)
             ]
 
+class SimpleRoundrobin(Module):
+    def __init__(self, config, in_array):
+        self.apply_interface_out = ApplyInterface(name="mux_apply_interface_out", **config.addresslayout.get_params())
+        self.current_round = Signal(config.addresslayout.channel_bits)
 
+        if len(in_array) == 1:
+            self.comb += in_array[0].connect(self.apply_interface_out)
+        else:
+            self.submodules.roundrobin = RoundRobin(len(in_array), switch_policy=SP_CE)
+            # arrays for choosing incoming fifo to use
+            array_msg = Array(interface.msg.raw_bits() for interface in in_array)
+            array_ack = Array(interface.ack for interface in in_array)
+            array_valid = Array(interface.valid for interface in in_array)
+            array_round = Array(interface.msg.roundpar for interface in in_array)
+
+            self.comb += [
+                self.apply_interface_out.msg.raw_bits().eq(array_msg[self.roundrobin.grant]),
+                self.apply_interface_out.valid.eq(array_valid[self.roundrobin.grant] & (array_round[self.roundrobin.grant] == self.current_round)),
+                array_ack[self.roundrobin.grant].eq(self.apply_interface_out.ack & (array_round[self.roundrobin.grant] == self.current_round)),
+                [self.roundrobin.request[i].eq(array_valid[i] & (array_round[i] == self.current_round)) for i in range(len(in_array))],
+                self.roundrobin.ce.eq(1)
+            ]
 
 class Network(Module):
     def __init__(self, config):
@@ -128,7 +149,7 @@ class Network(Module):
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_pe)]
 
-        self.submodules.muxtree = [MuxTree(config, [fifos[sink][source].dout for source in range(num_pe)]) for sink in range(num_pe)]
+        self.submodules.muxtree = [SimpleRoundrobin(config, [fifos[sink][source].dout for source in range(num_pe)]) for sink in range(num_pe)]
 
         # connect PE incoming ports
         for sink in range(num_pe):

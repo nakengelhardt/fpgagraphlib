@@ -78,14 +78,15 @@ class Scatter(Module):
         scatter_msg_valid1 = Signal()
         scatter_barrier1 = Signal()
         # valid1 requests get_neighbors, so don't set for barrier
-        self.sync += \
-        If( upstream_ack,
-            scatter_msg1.eq(self.scatter_interface.payload),
-            scatter_sender1.eq(self.scatter_interface.sender),
-            scatter_round1.eq(self.scatter_interface.roundpar),
-            scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier),
-            scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier)
-        )
+        self.sync += [
+            If( upstream_ack,
+                scatter_msg1.eq(self.scatter_interface.payload),
+                scatter_sender1.eq(self.scatter_interface.sender),
+                scatter_round1.eq(self.scatter_interface.roundpar),
+                scatter_msg_valid1.eq(self.scatter_interface.valid & ~self.scatter_interface.barrier),
+                scatter_barrier1.eq(self.scatter_interface.valid & self.scatter_interface.barrier)
+            )
+        ]
 
         ## stage 2
 
@@ -109,15 +110,19 @@ class Scatter(Module):
 
         self.submodules.scatterkernel = config.scatterkernel(config)
 
+        self.submodules.neighbor_out_fifo = InterfaceFIFO(layout=self.get_neighbors.neighbor_out.layout, depth=8)
+
         self.comb += [
-            self.scatterkernel.update_in.raw_bits().eq(self.get_neighbors.neighbor_out.message),
-            self.scatterkernel.num_neighbors_in.eq(self.get_neighbors.neighbor_out.num_neighbors),
-            self.scatterkernel.neighbor_in.eq(self.get_neighbors.neighbor_out.neighbor),
-            self.scatterkernel.sender_in.eq(self.get_neighbors.neighbor_out.sender),
-            self.scatterkernel.round_in.eq(self.get_neighbors.neighbor_out.round),
-            self.scatterkernel.barrier_in.eq(self.get_neighbors.neighbor_out.barrier),
-            self.scatterkernel.valid_in.eq(self.get_neighbors.neighbor_out.valid),
-            self.get_neighbors.neighbor_out.ack.eq(self.scatterkernel.ready)
+            self.get_neighbors.neighbor_out.connect(self.neighbor_out_fifo.din, omit={"valid"}),
+            self.neighbor_out_fifo.din.valid.eq(self.get_neighbors.neighbor_out.valid | self.get_neighbors.neighbor_out.barrier),
+            self.scatterkernel.update_in.raw_bits().eq(self.neighbor_out_fifo.dout.message),
+            self.scatterkernel.num_neighbors_in.eq(self.neighbor_out_fifo.dout.num_neighbors),
+            self.scatterkernel.neighbor_in.eq(self.neighbor_out_fifo.dout.neighbor),
+            self.scatterkernel.sender_in.eq(self.neighbor_out_fifo.dout.sender),
+            self.scatterkernel.round_in.eq(self.neighbor_out_fifo.dout.round),
+            self.scatterkernel.barrier_in.eq(self.neighbor_out_fifo.dout.valid & self.neighbor_out_fifo.dout.barrier),
+            self.scatterkernel.valid_in.eq(self.neighbor_out_fifo.dout.valid & ~self.neighbor_out_fifo.dout.barrier),
+            self.neighbor_out_fifo.dout.ack.eq(self.scatterkernel.ready)
         ]
 
         if config.has_edgedata:
@@ -125,17 +130,22 @@ class Scatter(Module):
 
         # scatterkernel output
 
+
+
         self.submodules.barrierdistributor = BarrierDistributor(config)
 
+        self.submodules.scatterkerneloutfifo = InterfaceFIFO(layout=self.barrierdistributor.network_interface_in.layout, depth=8)
+
         self.comb += [
-            self.barrierdistributor.network_interface_in.msg.dest_id.eq(self.scatterkernel.neighbor_out),
-            self.barrierdistributor.network_interface_in.msg.payload.eq(self.scatterkernel.message_out.raw_bits()),
-            self.barrierdistributor.network_interface_in.msg.sender.eq(self.scatterkernel.sender_out),
-            self.barrierdistributor.network_interface_in.msg.roundpar.eq(self.scatterkernel.round_out),
-            self.barrierdistributor.network_interface_in.msg.barrier.eq(self.scatterkernel.barrier_out),
-            self.barrierdistributor.network_interface_in.dest_pe.eq(addresslayout.pe_adr(self.scatterkernel.neighbor_out)),
-            self.barrierdistributor.network_interface_in.valid.eq(self.scatterkernel.valid_out | self.scatterkernel.barrier_out),
-            self.scatterkernel.message_ack.eq(self.barrierdistributor.network_interface_in.ack)
+            self.scatterkerneloutfifo.din.msg.dest_id.eq(self.scatterkernel.neighbor_out),
+            self.scatterkerneloutfifo.din.msg.payload.eq(self.scatterkernel.message_out.raw_bits()),
+            self.scatterkerneloutfifo.din.msg.sender.eq(self.scatterkernel.sender_out),
+            self.scatterkerneloutfifo.din.msg.roundpar.eq(self.scatterkernel.round_out),
+            self.scatterkerneloutfifo.din.msg.barrier.eq(self.scatterkernel.barrier_out),
+            self.scatterkerneloutfifo.din.dest_pe.eq(addresslayout.pe_adr(self.scatterkernel.neighbor_out)),
+            self.scatterkerneloutfifo.din.valid.eq(self.scatterkernel.valid_out | self.scatterkernel.barrier_out),
+            self.scatterkernel.message_ack.eq(self.scatterkerneloutfifo.din.ack),
+            self.scatterkerneloutfifo.dout.connect(self.barrierdistributor.network_interface_in)
         ]
 
         # buffer output
