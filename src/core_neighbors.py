@@ -118,7 +118,7 @@ class Neighbors(Module):
             if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
                 num_mem_reads += 1
                 neighbor = (yield self.neighbor_out.neighbor)
-                logger.debug("{}: Message from node {} for node {}.{}".format(num_cycles, curr_sender, neighbor, " Edgedata: " + str((yield self.edgedata_out)) if tb.config.has_edgedata else ""))
+                logger.debug("{}: Edge {} -> {} read.{}".format(num_cycles, curr_sender, neighbor, " Edgedata: " + str((yield self.edgedata_out)) if tb.config.has_edgedata else ""))
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))

@@ -3,6 +3,7 @@ import sys
 import argparse
 import logging
 import configparser
+import os
 
 from migen import log2_int, bits_for
 
@@ -58,10 +59,15 @@ def init_parse(args=None):
     else:
         config = read_config_files()
 
+    graphfile_basename = os.path.basename(args.graphfile if args.graphfile else config['graph'].get('graphfile') if 'graphfile' in config['graph'] else args.nodes if args.nodes else config['graph'].get('nodes')).split(".", 1)[0]
+    log_file_basename = "{}_{}_{}".format(config['logging'].get('log_file_name', fallback='fpgagraphlib'), config['app']['algo'], graphfile_basename)
+    i = 0
+    while os.path.exists("{}_{}.log".format(log_file_basename, i)):
+        i += 1
     logging.basicConfig(level=config['logging'].get('file_log_level', fallback='DEBUG'),
                         format='%(name)-25s %(levelname)-8s %(message)s',
                         datefmt='%m-%d %H:%M',
-                        filename=config['logging'].get('log_file_name', fallback='fpgagraphlib.log'),
+                        filename="{}_{}.log".format(log_file_basename, i),
                         filemode='w')
     # define a Handler which writes INFO messages or higher to the sys.stderr
     console = logging.StreamHandler()
@@ -74,6 +80,7 @@ def init_parse(args=None):
     logging.getLogger('').addHandler(console)
 
     logger = logging.getLogger('config')
+    logger.info("Logging to file {}_{}.log".format(log_file_basename, i))
 
     if args.seed:
         s = args.seed
@@ -148,10 +155,10 @@ def init_parse(args=None):
 
     if graphfile:
         logger.info("Reading graph from file {}".format(graphfile.name))
-        adj_dict = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph, connected=False)
+        adj_dict, ids = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph, connected=False)
     else:
         logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        adj_dict = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
+        adj_dict, ids = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
 
     if args.graphsave:
         logger.info("Saving graph to file {}".format(args.graphsave))
@@ -181,6 +188,8 @@ def init_parse(args=None):
     algo = import_module(algo_config_module)
 
     algo_config = algo.Config(adj_dict, **kwargs)
+    algo_config.vertex_name = ids
+    algo_config.vcdname = "{}_{}".format(log_file_basename, i)
 
     algo_config.use_hmc = use_hmc
     algo_config.use_ddr = use_ddr

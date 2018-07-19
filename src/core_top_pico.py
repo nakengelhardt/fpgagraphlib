@@ -316,7 +316,7 @@ def sim(config):
 
     # generators.extend([a.gen_stats(tb) for a in tb.apply])
     # generators.extend([tb.gen_network_stats()])
-    run_simulation(tb, generators, clocks={"sys": 10, "bus": 480, "stream": 8}, vcd_name="tb.vcd")
+    run_simulation(tb, generators, clocks={"sys": 10, "bus": 480, "stream": 8}, vcd_name="{}.vcd".format(config.vcdname))
 
 
 def main():

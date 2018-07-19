@@ -262,6 +262,7 @@ class Apply(Module):
         self.comb += self.outfifo.re.eq(self.scatter_interface.ack)
 
     def gen_simulation(self, tb):
+        logger = logging.getLogger('sim.apply')
         while not (yield tb.global_inactive):
             yield
         if self.pe_id == 0:
@@ -271,4 +272,4 @@ class Apply(Module):
             p += ": "
             state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
             p += str(state)
-            print(p)
+            logger.info(p)

@@ -8,6 +8,7 @@ logger = logging.getLogger('config')
 def read_graph(f, digraph=False, connected=True):
     d = {}
     numbers = {}
+    ids = {}
     next_number = 1
     for line in f:
         match = re.match("(\w+)\s(\w+)", line)
@@ -21,7 +22,9 @@ def read_graph(f, digraph=False, connected=True):
                 numbers[sink_txt] = next_number
                 next_number += 1
             source = numbers[source_txt]
+            ids[source] = source_txt
             sink = numbers[sink_txt]
+            ids[sink] = sink_txt
             if source == sink:
                 print("Node", source_txt, "linking to itself!")
                 continue
@@ -35,7 +38,7 @@ def read_graph(f, digraph=False, connected=True):
     if connected:
         make_connected(d, digraph=digraph)
     logger.info("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
-    return d
+    return d, ids
 
 def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=True):
     if num_pe == 1:
@@ -44,6 +47,7 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
     numbers = {}
     next_number = 0
     next_pe = 1
+    ids = {}
     for line in f:
         match = re.match("(\w+)\s(\w+)", line)
         if match:
@@ -65,7 +69,9 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
                 logger.error("Graph too big for PE configuration!")
                 raise ValueError
             source = numbers[source_txt]
+            ids[source] = source_txt
             sink = numbers[sink_txt]
+            ids[sink] = sink_txt
             if source == sink:
                 logger.warning("Node", source_txt, "linking to itself!")
                 continue
@@ -79,7 +85,9 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
     if connected:
         make_connected(d, digraph=digraph)
     logger.info("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
-    return d
+    for node in d:
+        logger.info("Vertex {} has {} neighbors: {}".format(ids[node], len(d[node]), [ids[x] for x in d[node]]))
+    return d, ids
 
 def quick_read_num_nodes_edges(f, digraph=False):
     numbers = {}

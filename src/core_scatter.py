@@ -110,10 +110,11 @@ class Scatter(Module):
 
         self.submodules.scatterkernel = config.scatterkernel(config)
 
-        self.submodules.neighbor_out_fifo = InterfaceFIFO(layout=self.get_neighbors.neighbor_out.layout, depth=8)
+        self.submodules.neighbor_out_fifo = InterfaceFIFO(layout=self.get_neighbors.neighbor_out.layout+([("edgedata", len(self.get_neighbors.edgedata_out), DIR_M_TO_S)] if config.has_edgedata else []), depth=8)
+
 
         self.comb += [
-            self.get_neighbors.neighbor_out.connect(self.neighbor_out_fifo.din, omit={"valid"}),
+            self.get_neighbors.neighbor_out.connect(self.neighbor_out_fifo.din, omit={"valid", "edgedata"}),
             self.neighbor_out_fifo.din.valid.eq(self.get_neighbors.neighbor_out.valid | self.get_neighbors.neighbor_out.barrier),
             self.scatterkernel.update_in.raw_bits().eq(self.neighbor_out_fifo.dout.message),
             self.scatterkernel.num_neighbors_in.eq(self.neighbor_out_fifo.dout.num_neighbors),
@@ -122,11 +123,14 @@ class Scatter(Module):
             self.scatterkernel.round_in.eq(self.neighbor_out_fifo.dout.round),
             self.scatterkernel.barrier_in.eq(self.neighbor_out_fifo.dout.valid & self.neighbor_out_fifo.dout.barrier),
             self.scatterkernel.valid_in.eq(self.neighbor_out_fifo.dout.valid & ~self.neighbor_out_fifo.dout.barrier),
-            self.neighbor_out_fifo.dout.ack.eq(self.scatterkernel.ready)
+            self.neighbor_out_fifo.dout.ack.eq(self.scatterkernel.ready),
+            self.scatterkernel.edgedata_in.raw_bits().eq(self.get_neighbors.edgedata_out)
         ]
-
         if config.has_edgedata:
-            self.comb += self.scatterkernel.edgedata_in.raw_bits().eq(self.get_neighbors.edgedata_out)
+            self.comb += [
+                self.neighbor_out_fifo.din.edgedata.eq(self.get_neighbors.edgedata_out),
+                self.scatterkernel.edgedata_in.raw_bits().eq(self.neighbor_out_fifo.dout.edgedata)
+            ]
 
         # scatterkernel output
 
