@@ -69,13 +69,9 @@ class GatherApplyKernel(Module):
         ]
 
         self.num_triangles = Signal(32)
-        self.num_triangles_running = Signal(32)
         self.sync += If(self.valid_in & self.ready,
-            If(self.barrier_in,
-                self.num_triangles.eq(self.num_triangles_running),
-                self.num_triangles_running.eq(0)
-            ).Elif(self.state_in_valid & ~self.message_in_valid,
-                self.num_triangles_running.eq(self.num_triangles_running + self.state_in.num_triangles)
+            If(self.message_in_valid & (self.message_in.hops == 2),
+                self.num_triangles.eq(self.num_triangles + 1),
             )
         )
 

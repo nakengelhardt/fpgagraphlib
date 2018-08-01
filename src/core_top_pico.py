@@ -213,8 +213,9 @@ class Top(Module):
                         # core.scatter[i].barrierdistributor.total_num_messages_in,
                         core.scatter[i].barrierdistributor.total_num_messages,
                         core.apply[i].level,
-                        core.apply[i].gatherapplykernel.num_triangles
-                        # core.scatter[i].get_neighbors.num_neighbors_issued,
+                        core.apply[i].gatherapplykernel.num_triangles,
+                        core.scatter[i].get_neighbors.num_neighbors_issued,
+                        core.apply[i].outfifo.max_level,
                         # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
                         # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
                         # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),

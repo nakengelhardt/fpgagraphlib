@@ -21,6 +21,7 @@ class HMCBackedFIFO(Module):
         self.full = Signal()
         self.num_writes = Signal(32)
         self.num_reads = Signal(32)
+        self.max_level = Signal(32)
 
         word_offset = log2_int(len(self.port.rd_data)) - 3
 
@@ -41,6 +42,9 @@ class HMCBackedFIFO(Module):
             ),
             If(self.readable & self.re,
                 self.num_reads.eq(self.num_reads + 1)
+            ),
+            If(level > self.max_level,
+                self.max_level.eq(level)
             )
         ]
 

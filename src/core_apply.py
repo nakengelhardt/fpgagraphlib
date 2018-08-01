@@ -218,8 +218,12 @@ class Apply(Module):
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
+        
         self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
-        self.sync += If(self.outfifo.full, self.deadlock.eq(1))
+        
+        self.sync += [
+            If(self.outfifo.full, self.deadlock.eq(1))
+        ]
 
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),

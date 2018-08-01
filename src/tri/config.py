@@ -20,7 +20,7 @@ class Config:
         self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
 
         self.adj_dict = adj_dict
-        logger.info("Graph has {} triangles".format(count_triangles(adj_dict)))
+        # logger.info("Graph has {} triangles".format(count_triangles(adj_dict)))
 
         self.has_edgedata = True
         self.addresslayout.edgedatasize = layout_len(set_layout_parameters(edge_storage_layout, **kwargs))
@@ -29,9 +29,36 @@ class Config:
         self.scatterkernel = ScatterKernel
 
         self.init_nodedata = [[] for _ in range(self.addresslayout.num_pe)]
+
+
+        def edge_dir(i,j, adj_dict):
+            if j not in adj_dict[i]:
+                return False
+            if len(adj_dict[j]) < 2:
+                return False
+            if len(adj_dict[i]) < len(adj_dict[j]):
+                return False
+            if len(adj_dict[i]) == len(adj_dict[j]) and i >= j:
+                return False
+            return True
+
+        def num_active_edges(i, adj_dict):
+            num_edges = 0
+            for j in adj_dict[i]:
+                if edge_dir(i, j, adj_dict):
+                    num_edges += 1
+            return num_edges
+
+        def sum_active_edges(k, adj_dict):
+            num_edges = 0
+            for i in adj_dict[k]:
+                if edge_dir(k, i, adj_dict):
+                    num_edges += num_active_edges(i, adj_dict)
+            return num_edges
+
         current_round = 0
         current_round_edges = 0
-
+        max_round_edges = 0
         max_node = self.addresslayout.max_node_per_pe(adj_dict)
         for node in range(max(max_node) + 1):
             for pe in range(self.addresslayout.num_pe):
@@ -46,11 +73,16 @@ class Config:
                     ))
 
                     if active:
-                        num_neighbors = len(adj_dict[nodeid])
-                        current_round_edges += num_neighbors
+                        # active_edges = len(adj_dict[nodeid])
+                        active_edges = sum_active_edges(nodeid, self.adj_dict)
+                        current_round_edges += active_edges
                         if current_round_edges > (1<<10):
                             current_round_edges = 0
                             current_round += 1
+                        if max_round_edges < active_edges:
+                            max_round_edges = active_edges
+        print(max_round_edges)
+
 
         logger.info("Activation spread over {} supersteps.".format(current_round+1))
 
