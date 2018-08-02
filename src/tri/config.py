@@ -89,4 +89,7 @@ class Config:
 
 
         adj_idx, adj_val = self.addresslayout.generate_partition(adj_dict)
+        print(adj_idx)
+        print(adj_val)
         self.init_edgedata = [[len(adj_dict[j]) for j in adj_val[i]] for i in range(self.addresslayout.num_pe)]
+        print(self.init_edgedata)

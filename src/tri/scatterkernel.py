@@ -3,6 +3,8 @@ from migen.genlib.record import *
 
 from tri.interfaces import payload_layout, edge_storage_layout
 
+import logging
+
 class ScatterKernel(Module):
     def __init__(self, config):
 
@@ -49,3 +51,23 @@ class ScatterKernel(Module):
                 self.valid_out.eq(self.valid_in & send_home)
             )
         ]
+
+    def gen_selfcheck(self, tb):
+        logger = logging.getLogger("simulation.scatterkernel")
+        num_pe = tb.config.addresslayout.num_pe
+        pe_id = [s.scatterkernel for core in tb.cores for s in core.scatter].index(self)
+        level = 0
+        num_cycles = 0
+        num_neighbors_in = 0
+        num_messages_out = 0
+        while not (yield tb.global_inactive):
+            num_cycles += 1
+            if (yield self.valid_out) and (yield self.message_ack) and (yield self.barrier_out):
+                level += 1
+                logger.info("{}: PE {} raised to level {}".format(num_cycles, pe_id, level))
+            if (yield self.valid_in) and (yield self.ready):
+                num_neighbors_in += 1
+            if (yield self.valid_out) and (yield self.message_ack) and not (yield self.barrier_out):
+                logger.debug("{}: PE {} message out (dest={} sender={} origin={} hops={})".format(num_cycles, pe_id, tb.config.vertex_name[(yield self.neighbor_out)], tb.config.vertex_name[(yield self.sender_out)], tb.config.vertex_name[(yield self.message_out.origin)], (yield self.message_out.hops)))
+                num_messages_out += 1
+            yield

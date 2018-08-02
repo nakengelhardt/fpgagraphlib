@@ -7,6 +7,7 @@ from tbsupport import *
 from core_interfaces import ApplyInterface, ScatterInterface, Message
 from core_collision import CollisionDetector
 from hmc_backed_fifo import HMCBackedFIFO
+from core_gatherapply_wrapper import GatherApplyWrapper
 
 import logging
 
@@ -183,7 +184,10 @@ class Apply(Module):
         ]
 
         # User code
-        self.submodules.gatherapplykernel = config.gatherapplykernel(config)
+        if hasattr(config, "gatherapplykernel"):
+            self.submodules.gatherapplykernel = config.gatherapplykernel(config)
+        else:
+            self.submodules.gatherapplykernel = GatherApplyWrapper(config.gatherkernel(config), config.applykernel(config))
 
         self.comb += [
             self.gatherapplykernel.level_in.eq(self.level),
