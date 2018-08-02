@@ -227,6 +227,4 @@ def init_parse(args=None):
     if not algo_config.use_hmc and not algo_config.use_ddr:
         logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
 
-    print(adj_idx, adj_val)
-
     return args, algo_config
