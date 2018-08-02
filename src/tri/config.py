@@ -81,15 +81,8 @@ class Config:
                             current_round += 1
                         if max_round_edges < active_edges:
                             max_round_edges = active_edges
-        print(max_round_edges)
-
 
         logger.info("Activation spread over {} supersteps.".format(current_round+1))
 
-
-
         adj_idx, adj_val = self.addresslayout.generate_partition(adj_dict)
-        print(adj_idx)
-        print(adj_val)
         self.init_edgedata = [[len(adj_dict[j]) for j in adj_val[i]] for i in range(self.addresslayout.num_pe)]
-        print(self.init_edgedata)

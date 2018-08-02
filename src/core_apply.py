@@ -18,6 +18,7 @@ class Apply(Module):
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
         num_nodes_per_pe = addresslayout.num_nodes_per_pe
+        num_valid_nodes = max(2, len(config.adj_idx[pe_id])+1)
 
         # input Q interface
         self.apply_interface = ApplyInterface(name="apply_in", **addresslayout.get_params())
@@ -36,7 +37,7 @@ class Apply(Module):
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
         # local node data storage
-        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), max(2, len(config.adj_idx[pe_id])+1), init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
+        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), num_valid_nodes, init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
@@ -222,12 +223,16 @@ class Apply(Module):
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
-        
-        self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
-        
-        self.sync += [
-            If(self.outfifo.full, self.deadlock.eq(1))
-        ]
+
+        if config.updates_in_hmc:
+            self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
+
+            self.sync += [
+                If(self.outfifo.full, self.deadlock.eq(1))
+            ]
+        else:
+            self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=num_valid_nodes)
+            self.comb += self.deadlock.eq(~self.outfifo.writable)
 
         self.comb += [
             self.outfifo.din.eq(outfifo_in.raw_bits()),
@@ -274,10 +279,13 @@ class Apply(Module):
         while not (yield tb.global_inactive):
             yield
         if self.pe_id == 0:
-            print("State at end of computation:")
+            logger.info("State at end of computation:")
         for node in range(len(tb.config.adj_idx[self.pe_id])):
             p = str(tb.config.addresslayout.global_adr(self.pe_id, node))
             p += ": "
             state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
             p += str(state)
-            logger.info(p)
+            if node < 32:
+                logger.info(p)
+            else:
+                logger.debug(p)

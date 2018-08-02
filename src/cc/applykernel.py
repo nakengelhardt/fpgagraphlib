@@ -11,6 +11,7 @@ class ApplyKernel(Module):
 
         self.nodeid_in = Signal(nodeidsize)
         self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
+        self.state_in_valid = Signal()
         self.valid_in = Signal()
         self.round_in = Signal(config.addresslayout.channel_bits)
         self.barrier_in = Signal()
@@ -20,6 +21,7 @@ class ApplyKernel(Module):
         self.state_out = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_valid = Signal()
         self.state_barrier = Signal()
+        self.state_ack = Signal()
 
         self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
@@ -36,38 +38,34 @@ class ApplyKernel(Module):
             self.nodeid_out.eq(self.nodeid_in),
             self.state_out.color.eq(self.state_in.color),
             self.state_out.active.eq(0),
-            self.state_valid.eq(self.valid_in),
+            self.state_valid.eq(self.valid_in & self.state_in_valid & self.update_ack),
             self.state_barrier.eq(self.barrier_in),
 
             self.update_out.color.eq(self.state_in.color),
             self.update_sender.eq(self.nodeid_in),
             self.update_round.eq(self.round_in),
             self.barrier_out.eq(self.barrier_in),
-            self.update_valid.eq(self.valid_in & self.state_in.active),
+            self.update_valid.eq(self.valid_in & (self.state_in.active | self.barrier_in) & self.state_ack),
 
-            self.ready.eq(self.update_ack)
+            self.ready.eq(self.update_ack & self.state_ack)
         ]
 
     def gen_selfcheck(self, tb, quiet=False):
         logger = logging.getLogger("simulation.applykernel")
         num_pe = tb.config.addresslayout.num_pe
-        pe_id = [a.applykernel for core in tb.cores for a in core.apply].index(self)
+        pe_id = [a.gatherapplykernel.applykernel for core in tb.cores for a in core.apply].index(self)
         level = 0
         num_cycles = 0
         num_messages_out = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
-            if (yield self.barrier_out) and (yield self.update_ack):
-                level += 1
-            if (yield self.valid_in) and (yield self.ready):
-                if (yield self.barrier_in):
-                    logger.warning("Warning: Simultaneous valid / barrier!")
-                if not quiet:
-                    logger.debug("Vertex {} : update to {}".format((yield self.nodeid_in), (yield self.state_in.color)))
             if (yield self.update_valid) and (yield self.update_ack):
-                num_messages_out += 1
-                if not quiet:
-                    logger.debug("Node " + str((yield self.nodeid_out)) + " updated in round " + str(level) +". New color: " + str((yield self.update_out.color)))
+                if (yield self.barrier_out):
+                    level += 1
+                else:
+                    num_messages_out += 1
+                    if not quiet:
+                        logger.debug("Node " + str((yield self.nodeid_out)) + " updated in round " + str(level) +". New color: " + str((yield self.update_out.color)))
             yield
         logger.info("PE {}: {} cycles taken for {} supersteps. {} messages sent.".format(pe_id, num_cycles, level, num_messages_out))
         logger.info("Average throughput: Out: {:.1f} cycles/message".format(num_cycles/num_messages_out if num_messages_out!=0 else 0))

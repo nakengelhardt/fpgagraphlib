@@ -48,10 +48,7 @@ class Scatter(Module):
         # resides in submodule
 
         if config.use_hmc:
-            if config.share_mem_port:
-                self.submodules.get_neighbors = NeighborsDummy(config=config, adj_val=config.adj_val[pe_id])
-            else:
-                self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=config.adj_val[pe_id], hmc_port=hmc_port)
+            self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=config.adj_val[pe_id], hmc_port=hmc_port)
         elif config.use_ddr:
             self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=hmc_port)
         else:
@@ -123,8 +120,7 @@ class Scatter(Module):
             self.scatterkernel.round_in.eq(self.neighbor_out_fifo.dout.round),
             self.scatterkernel.barrier_in.eq(self.neighbor_out_fifo.dout.valid & self.neighbor_out_fifo.dout.barrier),
             self.scatterkernel.valid_in.eq(self.neighbor_out_fifo.dout.valid & ~self.neighbor_out_fifo.dout.barrier),
-            self.neighbor_out_fifo.dout.ack.eq(self.scatterkernel.ready),
-            self.scatterkernel.edgedata_in.raw_bits().eq(self.get_neighbors.edgedata_out)
+            self.neighbor_out_fifo.dout.ack.eq(self.scatterkernel.ready)
         ]
         if config.has_edgedata:
             self.comb += [

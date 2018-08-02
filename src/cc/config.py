@@ -29,7 +29,3 @@ class Config:
 
         max_node = self.addresslayout.max_node_per_pe(adj_dict)
         self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, color=self.addresslayout.global_adr(pe, node), active=(1 if self.addresslayout.global_adr(pe, node) in adj_dict else 0)) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
-
-        self.init_messages = [list() for _ in range(self.addresslayout.num_pe)]
-        # for node in self.adj_dict:
-        #     self.init_messages[self.addresslayout.pe_adr(node)].append(({'dest_id':node, 'sender':0, 'payload':node}))

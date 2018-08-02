@@ -147,7 +147,7 @@ def init_parse(args=None):
 
     use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
     use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
-    share_mem_port = kwargs["share_mem_port"] if "share_mem_port" in kwargs else False
+    updates_in_hmc = kwargs["updates_in_hmc"] if "updates_in_hmc" in kwargs else False
 
     if "num_nodes_per_pe" not in kwargs:
         kwargs["num_nodes_per_pe"] = 2**bits_for((num_nodes + kwargs["num_pe"] - 1)//kwargs["num_pe"])
@@ -193,7 +193,7 @@ def init_parse(args=None):
 
     algo_config.use_hmc = use_hmc
     algo_config.use_ddr = use_ddr
-    algo_config.share_mem_port = share_mem_port
+    algo_config.updates_in_hmc = updates_in_hmc
     if use_hmc:
         assert not algo_config.has_edgedata
         adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=4)
@@ -226,5 +226,7 @@ def init_parse(args=None):
     logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
     if not algo_config.use_hmc and not algo_config.use_ddr:
         logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
+
+    print(adj_idx, adj_val)
 
     return args, algo_config

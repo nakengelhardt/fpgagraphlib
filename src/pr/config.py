@@ -38,12 +38,11 @@ class Config:
 
         max_node = self.addresslayout.max_node_per_pe(adj_dict)
 
-        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, nneighbors=(len(self.adj_dict[self.addresslayout.global_adr(pe_adr=pe, local_adr=node)]) if self.addresslayout.global_adr(pe_adr=pe, local_adr=node) in self.adj_dict else 0), sum=0, nrecvd=0, active=0)  for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        self.init_nodedata = [[0  for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        for node in adj_dict:
+            pe_adr = self.addresslayout.pe_adr(node)
+            local_adr  = self.addresslayout.local_adr(node)
+            nneighbors=len(self.adj_dict[node])
+            self.init_nodedata[pe_adr][local_adr] = convert_record_to_int(self.addresslayout.node_storage_layout, nneighbors=nneighbors, nrecvd=nneighbors, sum=self.addresslayout.const_base, active=1)
 
         self.has_edgedata = False
-
-        init_messages = [list() for _ in range(self.addresslayout.num_pe)]
-        for node in self.adj_dict:
-            init_messages[self.addresslayout.pe_adr(node)].append(({'dest_id':node, 'sender':0, 'payload':self.addresslayout.const_base}))
-
-        self.init_messages = init_messages

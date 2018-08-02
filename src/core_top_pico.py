@@ -36,21 +36,7 @@ class Core(Module):
 
 
         if config.use_hmc:
-            if not config.share_mem_port:
-                self.submodules.scatter = [Scatter(i, config, hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
-            else:
-                assert(num_pe <= 36)
-                # assert((num_pe % 4) == 0)
-                self.submodules.scatter = [Scatter(i, config, adj_mat=(config.adj_idx[i], config.adj_val[i]), edge_data=init_edgedata[i]) for i in range(num_pe)]
-                self.submodules.neighbors_hmc = [Neighborsx4(pe_id=i*4, config=config, hmc_port=config.platform.getHMCPort(i)) for i in range(9)]
-                for j in range(4):
-                    for i in range(9):
-                        n = j*4 + i
-                        if n < num_pe:
-                            self.comb += [
-                                self.scatter[n].get_neighbors.neighbor_in.connect(self.neighbors_hmc[i].neighbor_in[j]),
-                                self.neighbors_hmc[i].neighbor_out[j].connect(self.scatter[n].get_neighbors.neighbor_out)
-                            ]
+            self.submodules.scatter = [Scatter(i, config, hmc_port=config.platform.getHMCPort(i)) for i in range(num_pe)]
         else:
             self.submodules.scatter = [Scatter(i, config) for i in range(num_pe)]
 
@@ -201,10 +187,7 @@ class Top(Module):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
         if config.use_hmc:
-            if not config.share_mem_port:
-                status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
-            else:
-                status_regs = [sr for core in self.uncore.cores for n in core.neighbors_hmc for sr in (n.num_requests_accepted, n.num_hmc_commands_issued)]
+            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
         else:
             status_regs = []
             for core in self.uncore.cores:
@@ -213,9 +196,9 @@ class Top(Module):
                         # core.scatter[i].barrierdistributor.total_num_messages_in,
                         core.scatter[i].barrierdistributor.total_num_messages,
                         core.apply[i].level,
-                        core.apply[i].gatherapplykernel.num_triangles,
-                        core.scatter[i].get_neighbors.num_neighbors_issued,
-                        core.apply[i].outfifo.max_level,
+                        #core.apply[i].gatherapplykernel.num_triangles,
+                        #core.scatter[i].get_neighbors.num_neighbors_issued,
+                        #core.apply[i].outfifo.max_level,
                         # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
                         # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
                         # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
@@ -302,14 +285,11 @@ def export(config, filename='top.v'):
                 f.write(struct.pack('=I', x))
 
 def sim(config):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32)
+    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.use_hmc else []))
     tb = UnCore(config)
     tb.submodules += config.platform
 
-    if config.use_hmc:
-        generators = config.platform.getSimGenerators(config.adj_val)
-    else:
-        generators = config.platform.getSimGenerators()
+    generators = config.platform.getSimGenerators()
 
     generators["sys"].extend([core.gen_barrier_monitor(tb) for core in tb.cores])
     generators["sys"].extend(get_simulators(tb, 'gen_selfcheck', tb))
