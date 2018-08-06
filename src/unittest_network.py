@@ -8,7 +8,7 @@ from tbsupport import *
 from bfs.config import Config
 from graph_generate import generate_graph
 
-from torus_network import Network
+from fifo_network import Network
 
 class NetworkCase(SimCase, unittest.TestCase):
     class TestBench(Module):
@@ -18,7 +18,7 @@ class NetworkCase(SimCase, unittest.TestCase):
             self.graph = generate_graph(num_nodes=31, num_edges=60)
             # print(self.graph)
 
-            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=2, num_pe=4, num_nodes_per_pe=8, max_edges_per_pe=64, pe_groups=1, inter_pe_delay=0, use_hmc=False, share_mem_port=False, num_channels=4, channel_bits=2)
+            self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=3, num_pe=4, num_nodes_per_pe=8, max_edges_per_pe=64, num_channels=4, channel_bits=2)
             self.submodules.dut = Network(self.config)
 
     def test_network(self):

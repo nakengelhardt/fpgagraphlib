@@ -28,7 +28,10 @@ class NeighborCase(SimCase, unittest.TestCase):
 
             self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=1, num_pe=1, num_nodes_per_pe=16, max_edges_per_pe=64, use_hmc=False, use_ddr=True, num_channels=3, channel_bits=2)
 
-            self.adj_idx = self.config.adj_idx[0]
+            adj_idx, adj_val = self.config.addresslayout.generate_partition_flat(self.config.adj_dict, edges_per_burst=16)
+            self.config.adj_idx = adj_idx
+            self.config.adj_val = adj_val
+            self.adj_idx = adj_idx[0]
             self.port = Record(set_layout_parameters(_ddr_layout, ID_WIDTH=4, ADDR_WIDTH=33, DATA_WIDTH=64*8))
             self.edges_per_burst = 64*8//32
             self.submodules.dut = NeighborsDDR(pe_id=0, config=self.config, port=self.port)

@@ -19,8 +19,11 @@ class NeighborCase(SimCase, unittest.TestCase):
             self.config = Config(self.graph, nodeidsize=32, edgeidsize=32, peidsize=1, num_pe=1, num_nodes_per_pe=16, max_edges_per_pe=64, num_channels=4, channel_bits=2)
 
             adj_idx, adj_val = self.config.addresslayout.generate_partition(self.graph)
-            self.adj_idx = adj_idx[0]
-            self.submodules.dut = Neighbors(pe_id=0, config=self.config, adj_val=adj_val[0])
+            self.config.adj_idx = adj_idx
+            self.config.adj_val = adj_val
+
+            self.adj_idx = self.config.adj_idx[0]
+            self.submodules.dut = Neighbors(pe_id=0, config=self.config)
 
 
 

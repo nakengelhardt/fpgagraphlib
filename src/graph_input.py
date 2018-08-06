@@ -86,7 +86,8 @@ def read_graph_balance_pe(f, num_pe, num_nodes_per_pe, digraph=False, connected=
         make_connected(d, digraph=digraph)
     logger.info("Loading input graph with {} nodes and {} edges".format(len(d), sum(len(d[x]) for x in d)))
     for node in d:
-        logger.debug("Vertex {} has {} neighbors: {}".format(ids[node], len(d[node]), [ids[x] for x in d[node]]))
+        # logger.debug("Vertex {} has {} neighbors: {}".format(ids[node], len(d[node]), [ids[x] for x in d[node]]))
+        logger.debug("Vertex {} has {} neighbors: {}".format(node, len(d[node]), d[node]))
     return d, ids
 
 def quick_read_num_nodes_edges(f, digraph=False):
