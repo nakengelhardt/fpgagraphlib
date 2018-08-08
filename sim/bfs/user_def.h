@@ -10,6 +10,7 @@ struct edge_t {
 
 struct VertexData {
     vertexid_t parent;
+    bool active;
 };
 
 struct MessagePayload {

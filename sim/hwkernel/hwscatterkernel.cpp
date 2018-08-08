@@ -1,9 +1,6 @@
 #include "hwscatterkernel.h"
 
 HWScatterKernel::HWScatterKernel(int pe_id, vertexid_t num_vertices) : num_vertices(num_vertices) {
-    last_input_time = new int[num_vertices];
-    latency = 5 + scatter_latency;
-
     scatter_hw = new Vscatter;
 
     scatter_hw->valid_in = 0;
@@ -36,7 +33,6 @@ Message* HWScatterKernel::tick() {
         scatter_hw->barrier_in = input.update->barrier;
     	scatter_hw->valid_in = !input.update->barrier;
         setInput(input);
-        timestamp_in.updateTime(inputQ.front().update->timestamp);
     }
 
     if (scatter_hw->ready && (scatter_hw->valid_in || scatter_hw->barrier_in)) {
@@ -53,7 +49,6 @@ Message* HWScatterKernel::tick() {
     scatter_hw->eval();
 
     if(scatter_hw->valid_out || scatter_hw->barrier_out){
-        timestamp_in.incrementTime(1);
         Message* message = new Message();
         getOutput(message);
         message->dest_id = scatter_hw->neighbor_out;
@@ -61,7 +56,6 @@ Message* HWScatterKernel::tick() {
         message->sender = scatter_hw->sender_out;
         message->roundpar = scatter_hw->round_out;
         message->barrier = scatter_hw->barrier_out;
-        message->timestamp = timestamp_in.getTime() + latency;
         return message;
     }
 

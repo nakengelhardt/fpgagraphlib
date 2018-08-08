@@ -25,8 +25,7 @@ public:
     VertexEntry* getLocalVertexEntry(int vertex);
     void queueInput(Message* message, VertexEntry* vertex, int level);
     Update* getUpdate();
-    virtual void gather_tick() = 0;
-    virtual void apply_tick() = 0;
+    virtual void tick() = 0;
     virtual void barrier(Message* bm) = 0;
     virtual void printState();
 };

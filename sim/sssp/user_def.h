@@ -12,6 +12,7 @@ struct edge_t {
 struct VertexData {
     int dist;
     vertexid_t parent;
+    bool active;
 };
 
 struct MessagePayload {

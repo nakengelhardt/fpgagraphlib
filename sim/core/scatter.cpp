@@ -28,6 +28,9 @@ Message* Scatter::receiveUpdate(Update* update) {
                 bool last = (i == (num_neighbors - 1));
                 scatterkernel->queue(update, edge, num_neighbors, last);
             }
+            if (num_neighbors == 0){
+                delete update;
+            }
         }
     }
     Message* message = scatterkernel->tick();

@@ -1,22 +1,29 @@
-#include "swapplykernel.h"
+#include "relaxedswapplykernel.h"
 
 #include <iostream>
 
-SWApplyKernel::SWApplyKernel(int pe_id, vertexid_t num_vertices, Graph* graph) : BaseApplyKernel(pe_id, num_vertices, graph){
+RelaxedSWApplyKernel::RelaxedSWApplyKernel(int pe_id, vertexid_t num_vertices, Graph* graph) : BaseApplyKernel(pe_id, num_vertices, graph){
     level = 0;
 }
 
-SWApplyKernel::~SWApplyKernel() {
+RelaxedSWApplyKernel::~RelaxedSWApplyKernel() {
 }
 
-void SWApplyKernel::tick() {
+void RelaxedSWApplyKernel::tick() {
     if(!inputQ.empty()) {
         ApplyKernelInput input = inputQ.front();
 
-        gather(input.message, input.vertex, input.level);
+        Update* update = gatherapply(input.message, input.vertex, input.level);
 
         if (input.level != level) {
             std::cout << "Message for level " << input.level << " received in level " << level << "!\n";
+        }
+
+        if (update) {
+            update->sender = input.vertex->id;
+            update->roundpar = (input.message->roundpar + 1) % num_channels;
+            update->barrier = false;
+            outputQ.push(update);
         }
 
         delete input.message;
@@ -24,7 +31,7 @@ void SWApplyKernel::tick() {
     }
 }
 
-void SWApplyKernel::barrier(Message* bm) {
+void RelaxedSWApplyKernel::barrier(Message* bm) {
     while (!inputQ.empty()) {
         tick();
     }
@@ -36,7 +43,8 @@ void SWApplyKernel::barrier(Message* bm) {
     int i = 0;
     while (i < num_vertices) {
         VertexEntry* vertex = getLocalVertexEntry(i);
-        update = apply(vertex, level);
+
+        update = gatherapply(bm, vertex, level);
 
         if (update) {
             update->sender = vertex->id;
@@ -44,6 +52,7 @@ void SWApplyKernel::barrier(Message* bm) {
             update->barrier = false;
             outputQ.push(update);
         }
+
 
         i++;
     }

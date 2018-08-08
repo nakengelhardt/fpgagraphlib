@@ -34,8 +34,9 @@ Graph::Graph(const char* dumpname, int64_t nedge) {
 }
 
 Graph::~Graph(){
-    delete xoff;
-    delete xadj;
+    delete partition;
+    delete[] xoff;
+    delete[] xadj;
 }
 
 void Graph::find_nv (const packed_edge* IJ, const int64_t nedge) {

@@ -12,6 +12,7 @@ struct VertexData {
     vertexid_t nneighbors;
     vertexid_t nrecvd;
     float sum;
+    bool active;
 };
 
 struct MessagePayload {

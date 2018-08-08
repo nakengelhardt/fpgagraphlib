@@ -8,14 +8,13 @@ BaseApplyKernel::BaseApplyKernel(int pe_id, vertexid_t num_vertices, Graph* grap
     vertex_data = new VertexEntry[num_vertices];
 
     for(int i = 0; i < num_vertices; i++){
-        vertexid_t vertex = graph->partition->origin(pe_id, i);
         vertex_data[i].id = 0;
         vertex_data[i].in_use = false;
-        vertex_data[i].active = false;
+        vertexid_t vertex = graph->partition->origin(pe_id, i);
         if ( vertex < graph->nv && vertex >= 0 ) {
             vertex_data[i].id = graph->partition->placement(vertex);
-            initVertexData(&vertex_data[i], i, graph);
         }
+        initVertexData(&vertex_data[i], vertex, graph);
     }
 }
 
@@ -24,10 +23,7 @@ BaseApplyKernel::~BaseApplyKernel() {
 }
 
 VertexEntry* BaseApplyKernel::getVertexEntry(vertexid_t vertex){
-    if (vertex == 0){
-        std::cout << "***Accessing Vertex 0***" << std::endl;
-    }
-    if (vertex >> PEID_SHIFT != pe_id) {
+    if (vertex != 0 && vertex >> PEID_SHIFT != pe_id) {
         std::cout << "***Accessing data of vertex at wrong PE***" << std::endl;
     }
     return &vertex_data[graph->partition->local_id(vertex)];
@@ -43,12 +39,11 @@ void BaseApplyKernel::queueInput(Message* message, VertexEntry* vertex, int leve
     input.vertex = vertex;
     input.level = level;
     inputQ.push(input);
-    gather_tick();
+    tick();
 }
 
 Update* BaseApplyKernel::getUpdate(){
-    gather_tick();
-    apply_tick();
+    tick();
     Update* update = NULL;
     if(!outputQ.empty()){
         update = outputQ.front();
@@ -60,12 +55,7 @@ Update* BaseApplyKernel::getUpdate(){
 void BaseApplyKernel::printState(){
     for(int i = 0; i < num_vertices; i++){
         if (pe_id != 0 or i != 0) {
-            std::cout << vertex_data[i].id ;
-            if(vertex_data[i].active){
-                std::cout << "*";
-            } else {
-                std::cout << " ";
-            }
+            std::cout << vertex_data[i].id;
             std::cout << std::endl;
         }
     }

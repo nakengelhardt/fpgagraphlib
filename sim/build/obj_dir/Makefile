@@ -46,8 +46,9 @@ VM_USER_DIR = \
 
 ### Default rules...
 # Include list of all generated classes
-include Vgather_classes.mk
-include Vapply_classes.mk
+-include Vgatherapply_classes.mk
+-include Vgather_classes.mk
+-include Vapply_classes.mk
 include Vscatter_classes.mk
 # Include global rules
 include $(VERILATOR_ROOT)/include/verilated.mk

@@ -17,6 +17,7 @@ int main(int argc, char **argv, char **env) {
         gname = argv[1];
         sz = std::stoi(argv[2]);
     }
+    std::cout << "Loading graph from "<< gname << '\n';
 
     // Graph* graph = new Graph("../../data/s11e16", 32768);
     // Graph* graph = new Graph("../../data/s13e16", 131072);
@@ -59,24 +60,20 @@ int main(int argc, char **argv, char **env) {
 
     Network* network = new Network();
 
-    int sent[num_pe];
-    for (int i = 0; i < num_pe; i++){
-        sent[i] = 0;
-    }
-    sendInitMessages(graph, pe, sent);
-
     Message* message;
     for(int i = 0; i < num_pe; i++){
         message = new Message();
         message->sender = i;
-        message->dest_id = sent[i];
+        message->dest_id = 0;
         message->dest_pe = i;
-        message->roundpar = 3;
+        message->roundpar = num_channels - 1;
         message->barrier = true;
         pe[i]->putMessageToReceive(message);
     }
 
     int num_messages = 0;
+    int total_num_messages = 0;
+    int max_updates_per_pe = 0;
     int cycles = 0;
     int supersteps = 0;
     int barrier[num_pe];
@@ -115,7 +112,8 @@ int main(int argc, char **argv, char **env) {
                             total_updates += j_updates;
                             std::cout << " " << j_updates;
                         }
-                        std::cout << " updates (imbalance " << (total_updates==0 ? 0 : 100*(max_updates - min_updates)/total_updates) << "%) and";
+                        max_updates_per_pe = std::max(max_updates_per_pe, max_updates);
+                        std::cout << " updates (imbalance " << (total_updates==0 ? 0 : 100*(max_updates - min_updates)/total_updates) << "%) total " << total_updates << " and";
 
                         int min_messages = pe[0]->last_completed_superstep_messages;
                         int max_messages = pe[0]->last_completed_superstep_messages;
@@ -128,11 +126,12 @@ int main(int argc, char **argv, char **env) {
                             total_messages += j_messages;
                             std::cout << " " << j_messages;
                         }
-                        std::cout << " messages (imbalance " << (total_messages==0 ? 0 : 100*(max_messages - min_messages)/total_messages) << "%)\n";
+                        std::cout << " messages (imbalance " << (total_messages==0 ? 0 : 100*(max_messages - min_messages)/total_messages) << "%) total "<< total_messages <<"\n";
 
                         if(num_messages == 0){
                             inactive = true;
                         }
+                        total_num_messages += num_messages;
                         num_messages = 0;
                         for (int j = 0; j < num_pe; j++) {
                             barrier[j] = 0;
@@ -157,7 +156,10 @@ int main(int argc, char **argv, char **env) {
     std::cout << "Simulation cycles: " << cycles << std::endl;
 
     std::cout << "Messages transported between FPGAs: " << network->interFPGAtransports
-    << " out of " << network->numMessagesSent << std::endl;
+    << " out of " << network->numMessagesSent << " (" << total_num_messages << " without barriers)" << std::endl;
+
+    std::cout << "Minimum enries in update queue for execution: " << max_updates_per_pe << std::endl;
+
 
     std::cout << "Final time: ";
     int total_time = 0;
@@ -169,6 +171,8 @@ int main(int argc, char **argv, char **env) {
         // std::cout << "PE " << i << ": " << pe_time << std::endl;
         delete pe[i];
     }
+    delete network;
+    delete graph;
     std::cout << total_time << std::endl;
 
     printFinalResult();

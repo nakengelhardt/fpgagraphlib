@@ -34,7 +34,9 @@ Update* Apply::receiveMessage(Message* message) {
         if (message->barrier){
             applykernel->barrier(message);
             level++;
-            // std::cout << "Increasing level to " << level << std::endl;
+#ifdef SIM_DEBUG
+            std::cout << "Increasing level to " << level << std::endl;
+#endif
         } else {
             applykernel->queueInput(message, applykernel->getVertexEntry(message->dest_id), level);
         }

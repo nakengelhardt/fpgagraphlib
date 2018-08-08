@@ -4,6 +4,7 @@
 void ApplyKernel::setStateInputGather(VertexData* vertex){
     gather_hw->state_in_dist = vertex->dist;
     gather_hw->state_in_parent = vertex->parent;
+    gather_hw->state_in_active = vertex->active;
 }
 
 void ApplyKernel::setMessageInputGather(Message* message){
@@ -13,16 +14,19 @@ void ApplyKernel::setMessageInputGather(Message* message){
 void ApplyKernel::getStateOutputGather(VertexData* vertex){
     vertex->dist = gather_hw->state_out_dist;
     vertex->parent = gather_hw->state_out_parent;
+    vertex->active = gather_hw->state_out_active;
 }
 
 void ApplyKernel::setStateInputApply(VertexData* vertex){
     apply_hw->state_in_dist = vertex->dist;
     apply_hw->state_in_parent = vertex->parent;
+    apply_hw->state_in_active = vertex->active;
 }
 
 void ApplyKernel::resetStateInputApply(){
     apply_hw->state_in_dist = 0;
     apply_hw->state_in_parent = 0;
+    apply_hw->state_in_active = 0;
 }
 
 void ApplyKernel::getStateOutputApply(VertexData* vertex){
@@ -36,6 +40,7 @@ void ApplyKernel::getStateOutputApply(VertexData* vertex){
         << ", apply_hw->state_out_active = " << apply_hw->state_out_active
         << std::endl;
     }
+    vertex->active = apply_hw->state_out_active;
 }
 
 void ApplyKernel::getUpdatePayload(Update* update){
@@ -63,7 +68,7 @@ void ApplyKernel::printState(){
     for(int i = 0; i < num_vertices; i++){
         if (pe_id != 0 or i != 0) {
             std::cout << vertex_data[i].id;
-            if(vertex_data[i].active){
+            if(vertex_data[i].data.active){
                 std::cout << "*";
             } else {
                 std::cout << " ";

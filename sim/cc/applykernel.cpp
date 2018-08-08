@@ -4,6 +4,7 @@
 
 void ApplyKernel::setStateInputGather(VertexData* vertex){
     gather_hw->state_in_color = vertex->color;
+    gather_hw->state_in_active = vertex->active;
 }
 
 void ApplyKernel::setMessageInputGather(Message* message){
@@ -12,14 +13,17 @@ void ApplyKernel::setMessageInputGather(Message* message){
 
 void ApplyKernel::getStateOutputGather(VertexData* vertex){
     vertex->color = gather_hw->state_out_color;
+    vertex->active = gather_hw->state_out_active;
 }
 
 void ApplyKernel::setStateInputApply(VertexData* vertex){
     apply_hw->state_in_color = vertex->color;
+    apply_hw->state_in_active = vertex->active;
 }
 
 void ApplyKernel::resetStateInputApply(){
     apply_hw->state_in_color = 0;
+    apply_hw->state_in_active = 0;
 }
 
 void ApplyKernel::getStateOutputApply(VertexData* vertex){
@@ -32,6 +36,7 @@ void ApplyKernel::getStateOutputApply(VertexData* vertex){
         << std::endl;
     }
     vertex->color = apply_hw->state_out_color;
+    vertex->active = apply_hw->state_out_active;
 }
 
 void ApplyKernel::getUpdatePayload(Update* update){
@@ -57,7 +62,7 @@ void ApplyKernel::printState(){
     for(int i = 0; i < num_vertices; i++){
         if (pe_id != 0 or i != 0) {
             std::cout << i ;
-            if(vertex_data[i].active){
+            if(vertex_data[i].data.active){
                 std::cout << "*";
             } else {
                 std::cout << " ";

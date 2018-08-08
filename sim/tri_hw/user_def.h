@@ -17,16 +17,9 @@ struct VertexData {
 
 struct MessagePayload {
     vertexid_t origin;
-    vertexid_t via_1;
-    vertexid_t via_2;
     int hops;
 };
 
 typedef MessagePayload UpdatePayload;
-// struct UpdatePayload {
-//     vertexid_t origin;
-//     vertexid_t via_1;
-//     vertexid_t via_2;
-// };
 
 const bool has_edgedata = true;

@@ -7,7 +7,6 @@
 struct VertexEntry {
     int id;
     bool in_use;
-    bool active;
     VertexData data;
 };
 
