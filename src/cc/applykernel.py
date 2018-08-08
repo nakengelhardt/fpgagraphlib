@@ -39,7 +39,7 @@ class ApplyKernel(Module):
             self.state_out.color.eq(self.state_in.color),
             self.state_out.active.eq(0),
             self.state_valid.eq(self.valid_in & self.state_in_valid & self.update_ack),
-            self.state_barrier.eq(self.barrier_in),
+            self.state_barrier.eq(self.barrier_in & self.valid_in),
 
             self.update_out.color.eq(self.state_in.color),
             self.update_sender.eq(self.nodeid_in),

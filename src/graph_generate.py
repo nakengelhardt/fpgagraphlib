@@ -11,7 +11,8 @@ def generate_graph(num_nodes, num_edges, approach="random_walk", digraph=False):
     nodes = list(range(1, num_nodes+1))
     graph = fn(nodes, num_edges, digraph=digraph)
     d = convert_graph(graph, digraph=digraph)
-    return d
+    ids = {node: node for node in d}
+    return d, ids
 
 def convert_graph(graph, digraph=False):
     d = {}
