@@ -76,10 +76,15 @@ class NeighborsHMC(Module):
         assert(edgeidsize <= 32)
 
         if not hmc_port:
-            hmc_port = config.platform.getHMCPort(0)
+            hmc_port = config.platform.getHMCPort(pe_id)
 
         self.hmc_port = hmc_port
         effective_max_tag_size = self.hmc_port.effective_max_tag_size
+
+        self.comb += [
+            hmc_port.wr_data.eq(0),
+            hmc_port.wr_data_valid.eq(0)
+        ]
 
         num_injected = Signal(7)
         inject = Signal()
