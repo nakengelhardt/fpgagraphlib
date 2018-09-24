@@ -68,6 +68,6 @@ class ScatterKernel(Module):
             if (yield self.valid_in) and (yield self.ready):
                 num_neighbors_in += 1
             if (yield self.valid_out) and (yield self.message_ack) and not (yield self.barrier_out):
-                logger.debug("{}: PE {} message out (dest={} sender={} origin={} hops={})".format(num_cycles, pe_id, tb.config.vertex_name[(yield self.neighbor_out)], tb.config.vertex_name[(yield self.sender_out)], tb.config.vertex_name[(yield self.message_out.origin)], (yield self.message_out.hops)))
+                logger.debug("{}: PE {} message out (dest={} sender={} origin={} hops={})".format(num_cycles, pe_id, (yield self.neighbor_out), (yield self.sender_out), (yield self.message_out.origin), (yield self.message_out.hops)))
                 num_messages_out += 1
             yield

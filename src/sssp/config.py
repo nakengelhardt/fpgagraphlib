@@ -33,7 +33,7 @@ class Config:
             init_root += 1
 
         max_node = self.addresslayout.max_node_per_pe(adj_dict)
-        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, dist=2**self.addresslayout.edgedatasize - 1, parent=0, active=(1 if node==init_root else 0)) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, dist=(0 if self.addresslayout.global_adr(pe, node)==init_root else 2**self.addresslayout.edgedatasize - 1), parent=0, active=(1 if self.addresslayout.global_adr(pe, node)==init_root else 0)) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
 
         self.has_edgedata = True
 

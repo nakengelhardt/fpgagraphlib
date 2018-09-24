@@ -53,7 +53,7 @@ class ApplyKernel(Module):
     def gen_selfcheck(self, tb):
         logger = logging.getLogger("simulation.applykernel")
         num_pe = tb.config.addresslayout.num_pe
-        pe_id = [a.applykernel for core in tb.cores for a in core.apply].index(self)
+        pe_id = [a.gatherapplykernel.applykernel for core in tb.cores for a in core.apply].index(self)
         level = 0
         num_cycles = 0
         num_messages_in = 0

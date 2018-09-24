@@ -7,8 +7,7 @@ import os
 
 from migen import log2_int, bits_for
 
-from graph_input import read_graph_balance_pe, quick_read_num_nodes_edges
-from graph_generate import generate_graph, export_graph
+from graph_manage import *
 
 from importlib import import_module
 
@@ -30,15 +29,6 @@ def parse_cmd_args(args=None):
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-s', '--seed', type=int,
                         help='seed to initialise random number generator')
-    parser.add_argument('--random-walk', action='store_const',
-                        const='random_walk', dest='approach',
-                        help='use a random-walk generation algorithm (default)')
-    parser.add_argument('--naive', action='store_const',
-                        const='naive', dest='approach',
-                        help='use a naive generation algorithm (slower)')
-    parser.add_argument('--partition', action='store_const',
-                        const='partition', dest='approach',
-                        help='use a partition-based generation algorithm (biased)')
     parser.add_argument('--save-graph', dest='graphsave', help='save graph to a file')
     parser.add_argument('command', help="one of 'sim' or 'export'")
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
@@ -116,21 +106,16 @@ def init_parse(args=None):
 
     graphfile = None
     if args.graphfile:
-        graphfile = open(args.graphfile)
-        num_nodes, num_edges = quick_read_num_nodes_edges(graphfile, digraph=args.digraph)
+        graphfile = args.graphfile
     elif args.nodes:
         num_nodes = args.nodes
         if args.edges:
             num_edges = args.edges
         else:
             num_edges = num_nodes - 1
-        if args.approach:
-            approach = args.approach
-        else:
-            approach = "random_walk"
+        approach = "random_walk"
     elif 'graphfile' in config['graph']:
-        graphfile = open(config['graph'].get('graphfile'))
-        num_nodes, num_edges = quick_read_num_nodes_edges(graphfile)
+        graphfile = config['graph'].get('graphfile')
     elif 'nodes' in config['graph']:
         num_nodes = eval(config['graph'].get('nodes'))
         if 'edges' in config['graph']:
@@ -145,24 +130,36 @@ def init_parse(args=None):
         parser.print_help()
         exit(-1)
 
+    if graphfile:
+        logger.info("Reading graph from file {}".format(graphfile))
+        g = read_graph(graphfile, digraph=args.digraph, connected=True)
+        num_nodes = nx.number_of_nodes(g)
+        num_edges = nx.number_of_edges(g)
+    else:
+        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
+        g = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
+
+    if args.graphsave:
+        logger.info("Saving graph to file {}".format(args.graphsave))
+        export_graph(g, args.graphsave)
+
     use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
     use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
     updates_in_hmc = kwargs["updates_in_hmc"] if "updates_in_hmc" in kwargs else False
 
-    if "num_nodes_per_pe" not in kwargs:
-        kwargs["num_nodes_per_pe"] = 2**bits_for((num_nodes + kwargs["num_pe"] - 1)//kwargs["num_pe"])
-    assert kwargs["num_nodes_per_pe"]*kwargs["num_pe"] > num_nodes #strictly greater to account for 0 not being valid id
+    if "num_nodes_per_pe" in kwargs:
+        logger.warning("No longer supporting setting num_nodes_per_pe manually! Value ignored.")
 
-    if graphfile:
-        logger.info("Reading graph from file {}".format(graphfile.name))
-        adj_dict, ids = read_graph_balance_pe(graphfile, kwargs["num_pe"], kwargs["num_nodes_per_pe"], digraph=args.digraph, connected=False)
+    if 'partition' in config['graph'] and config['graph'].get('partition') == "metis":
+        if 'partition_ufactor' in config['graph']:
+            ufactor = config['graph'].getint('partition_ufactor')
+        else:
+            ufactor = 20
+        g, kwargs["num_nodes_per_pe"] = partition_metis(g, kwargs["num_pe"], ufactor=ufactor)
     else:
-        logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        adj_dict, ids = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
+        g, kwargs["num_nodes_per_pe"] = partition_random(g, kwargs["num_pe"])
 
-    if args.graphsave:
-        logger.info("Saving graph to file {}".format(args.graphsave))
-        export_graph(adj_dict, args.graphsave)
+    adj_dict = make_adj_dict(g)
 
     if "max_edges_per_pe" not in kwargs:
         if not use_ddr and not use_hmc:
@@ -188,7 +185,8 @@ def init_parse(args=None):
     algo = import_module(algo_config_module)
 
     algo_config = algo.Config(adj_dict, **kwargs)
-    algo_config.vertex_name = ids
+    algo_config.graph = g
+
     algo_config.vcdname = "{}_{}".format(log_file_basename, i)
 
     algo_config.use_hmc = use_hmc

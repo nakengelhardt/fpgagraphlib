@@ -5,7 +5,6 @@ from core_interfaces import ScatterInterface, NetworkInterface, _msg_layout
 
 from core_neighbors import Neighbors
 from core_neighbors_hmc import NeighborsHMC
-from core_neighbors_dummy import NeighborsDummy
 from core_neighbors_ddr import NeighborsDDR
 
 from core_address import AddressLayout

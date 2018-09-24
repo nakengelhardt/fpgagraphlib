@@ -281,11 +281,12 @@ class Apply(Module):
         if self.pe_id == 0:
             logger.info("State at end of computation:")
         for node in range(len(tb.config.adj_idx[self.pe_id])):
-            p = str(tb.config.addresslayout.global_adr(self.pe_id, node))
-            p += ": "
-            state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
-            p += str(state)
-            if node < 32:
-                logger.info(p)
-            else:
-                logger.debug(p)
+            vertexid = tb.config.addresslayout.global_adr(self.pe_id, node)
+            if vertexid in tb.config.graph:
+                p = "{} (origin={}): ".format(vertexid, tb.config.graph.node[vertexid]["origin"])
+                state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
+                p += str(state)
+                if node < 32:
+                    logger.info(p)
+                else:
+                    logger.debug(p)

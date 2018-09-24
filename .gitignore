@@ -2,6 +2,7 @@ __pycache__
 *.pyc
 *.egg-info/
 *.o
+*.d
 *.v
 *.vvp
 *.vcd
@@ -20,3 +21,6 @@ build/*
 !build/config.ini
 run/*
 !run/config.ini
+sim/build/*
+!sim/build/Makefile
+!sim/build/obj_dir/Makefile

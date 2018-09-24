@@ -67,8 +67,8 @@ class Core(Module):
                 if ((yield a.apply_interface.valid) and (yield a.apply_interface.ack)):
                     if (yield a.apply_interface.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(a.pe_id))
-                if (yield a.gatherkernel.valid_in) and (yield a.gatherkernel.ready):
-                    if ((yield a.level) - 1) % self.config.addresslayout.num_channels != (yield a.roundpar):
+                if (yield a.gatherapplykernel.valid_in) and (yield a.gatherapplykernel.ready):
+                    if (yield a.level) % self.config.addresslayout.num_channels != (yield a.gatherapplykernel.round_in):
                         logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield a.roundpar), (yield a.level)))
                 if ((yield a.scatter_interface.barrier) and (yield a.scatter_interface.valid) and (yield a.scatter_interface.ack)):
                     logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(a.pe_id))
@@ -109,7 +109,7 @@ class Core(Module):
                 r = convert_int_to_record(data, self.config.addresslayout.node_storage_layout)
                 vertexid = self.config.addresslayout.global_adr(pe_id, addr)
                 if vertexid != 0:
-                    print("Data of Vertex {}:\t {}".format(vertexid, [(f[0], r[f[0]]) for f in self.config.addresslayout.node_storage_layout]))
+                    print("Data of Vertex {}:\t {}".format(self.config.graph.node[vertexid]["origin"], [(f[0], r[f[0]]) for f in self.config.addresslayout.node_storage_layout]))
             start_addr += addr_spacing
 
 class UnCore(Module):
@@ -123,18 +123,8 @@ class UnCore(Module):
         self.comb += self.global_inactive.eq(self.cores[0].global_inactive)
 
         start_message = [a.start_message for core in self.cores for a in core.network.arbiter]
-        layout = Message(**config.addresslayout.get_params()).layout
-        initdata = [[convert_record_to_int(layout, barrier=0, roundpar=config.addresslayout.num_channels-1, dest_id=msg['dest_id'], sender=msg['sender'], payload=msg['payload'], halt=0) for msg in sorted(init_message, key=lambda x: x["dest_id"])] for init_message in config.init_messages]
-        for i in initdata:
-            i.append(convert_record_to_int(layout, barrier=1, roundpar=config.addresslayout.num_channels-1))
-        initfifos = [RecordFIFO(layout=layout, depth=len(ini)+1, init=ini) for ini in initdata]
+        injected = [Signal() for i in range(num_pe)]
 
-        for i in range(num_pe):
-            initfifos[i].readable.name_override = "initfifos{}_readable".format(i)
-            initfifos[i].re.name_override = "initfifos{}_re".format(i)
-            initfifos[i].dout.name_override = "initfifos{}_dout".format(i)
-
-        self.submodules += initfifos
 
         self.start = Signal()
         init = Signal()
@@ -143,7 +133,7 @@ class UnCore(Module):
         self.total_num_messages = self.cores[0].total_num_messages
 
         self.sync += [
-            init.eq(self.start & reduce(or_, [i.readable for i in initfifos]))
+            init.eq(self.start & ~reduce(and_, injected))
         ]
 
         self.comb += [
@@ -153,13 +143,14 @@ class UnCore(Module):
         for i in range(num_pe):
             self.comb += [
                 start_message[i].select.eq(init),
-                start_message[i].msg.eq(initfifos[i].dout),
-                start_message[i].valid.eq(initfifos[i].readable),
-                initfifos[i].re.eq(start_message[i].ack)
+                start_message[i].msg.barrier.eq(1),
+                start_message[i].msg.roundpar.eq(config.addresslayout.num_channels-1),
+                start_message[i].valid.eq(~injected[i])
             ]
 
         self.sync += [
-            If(~self.start,
+            [If(start_message[i].ack, injected[i].eq(1)) for i in range(num_pe)],
+            If(~reduce(and_, injected),
                 self.cycle_count.eq(0)
             ).Elif(~self.global_inactive,
                 self.cycle_count.eq(self.cycle_count + 1)
