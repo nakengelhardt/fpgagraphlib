@@ -347,7 +347,7 @@ class BRAMIO(Module):
                 raise NotImplementedError()
             assert start_addr & (2**len(l.adr) - 1) == 0
             end_addr = start_addr + addr_spacing
-            print(l, hex(start_addr), hex(end_addr))
+            logger.debug("{} assigned to memory region {} - {}".format(l, hex(start_addr), hex(end_addr)))
             select = Signal()
             select_r = Signal()
             self.comb += [

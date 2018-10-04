@@ -5,7 +5,7 @@ import random_connected_graph
 from migen import bits_for
 import logging
 
-logger = logging.getLogger('config')
+logger = logging.getLogger('graph_generate')
 
 def read_graph(path, digraph=False, connected=True):
     g = nx.read_edgelist(path, create_using=nx.DiGraph())
@@ -53,7 +53,6 @@ def make_connected(g, digraph=False):
                     g.add_edge(v, u)
 
 def generate_graph(num_nodes, num_edges, approach="random_walk", digraph=False):
-    logger = logging.getLogger('graph_generate')
     logger.debug("Generating {}directed graph with {} nodes and {} edges".format("" if digraph else "un", num_nodes, num_edges))
     fn = getattr(random_connected_graph, approach)
     nodes = list(range(1, num_nodes+1))
@@ -69,7 +68,7 @@ def convert_graph(graph, digraph=False):
         g.add_edge(n1, n2)
         if not digraph:
             g.add_edge(n2, n1)
-    return d
+    return g
 
 def export_graph(g, filename):
     write_edgelist(g, filename, data=False)
@@ -95,6 +94,7 @@ def partition_metis(g, pe, ufactor=20):
             assert idx < 2**peid_offset
             relabel_d[n] = (i << peid_offset) | idx
     g = nx.relabel_nodes(g, relabel_d)
+    log_stats(g)
     return g, 2**peid_offset
 
 def partition_random(g, pe):
@@ -104,14 +104,15 @@ def partition_random(g, pe):
     next_pe = 1
     relabel_d = {}
     for n in g.nodes():
-        assert next_number < 2**peid_offset
-        relabel_d[n] = (next_pe << peid_offset) | next_number
-        next_pe += 1
         if next_pe == pe:
             next_pe = 0
             next_number += 1
+        assert next_number < 2**peid_offset
+        relabel_d[n] = (next_pe << peid_offset) | next_number
+        next_pe += 1
 
     g = nx.relabel_nodes(g, relabel_d)
+    log_stats(g)
     return g, 2**peid_offset
 
 def make_adj_dict(g):
@@ -125,6 +126,12 @@ def print_stats(g):
     if nx.number_of_nodes(g) < 30:
         print("Nodes: ", sorted(g.nodes(data=True)))
         print("Edges: ", sorted(g.edges()))
+
+def log_stats(g):
+    logger.debug(nx.info(g))
+    if nx.number_of_nodes(g) < 30:
+        logger.debug("Nodes: {}".format(sorted(g.nodes(data=True))))
+        logger.debug("Edges: {}".format(sorted(g.edges())))
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

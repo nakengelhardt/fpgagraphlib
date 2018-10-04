@@ -122,6 +122,8 @@ class Neighbors(Module):
                 if not neighbor in to_be_sent:
                     if not neighbor in graph[curr_sender]:
                         logger.warning("{}: sending message to node {} which is not a neighbor of {}!".format(num_cycles, neighbor, curr_sender))
+                    elif tb.config.inverted and tb.config.addresslayout.pe_adr(neighbor) != self.pe_id:
+                        logger.warning("{}: sending message to node {} which is not located on this PE (from node {})".format(num_cycles, neighbor, curr_sender))
                     else:
                         logger.warning("{}: sending message to node {} more than once from node {}".format(num_cycles, neighbor, curr_sender))
                 else:
@@ -134,6 +136,9 @@ class Neighbors(Module):
                     logger.warning("{}: invalid sender ({})".format(num_cycles, curr_sender))
                     to_be_sent = []
                 else:
-                    to_be_sent = list(graph[curr_sender])
+                    if tb.config.inverted:
+                        to_be_sent = [n for n in graph[curr_sender] if tb.config.addresslayout.pe_adr(n) == self.pe_id]
+                    else:
+                        to_be_sent = list(graph[curr_sender])
             yield
         logger.info("{} memory reads.".format(num_mem_reads))

@@ -11,6 +11,8 @@ from graph_manage import *
 
 from importlib import import_module
 
+logger = logging.getLogger('config')
+
 def read_config_files(configfiles='config.ini'):
     config = configparser.ConfigParser()
     config.read(configfiles)
@@ -41,7 +43,7 @@ def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
         max_pe[pe] += len(adj_dict[node])
     return max(max_pe)
 
-def init_parse(args=None):
+def init_parse(args=None, inverted=False):
     args = parse_cmd_args(args)
 
     if args.configfiles:
@@ -49,28 +51,47 @@ def init_parse(args=None):
     else:
         config = read_config_files()
 
+    args, algo_config = resolve_defaults(args, config, inverted)
+
+
+
+    logger.info("Algorithm: " + algo_config.name)
+    logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
+    logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
+    logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
+    logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
+    logger.info("num_fpga = " + str(algo_config.addresslayout.num_fpga))
+    logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
+    logger.info("num_pe_per_fpga = " + str(algo_config.addresslayout.num_pe_per_fpga))
+    logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
+    logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
+    logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
+    if not algo_config.use_hmc and not algo_config.use_ddr:
+        logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
+
+    return args, algo_config
+
+
+def resolve_defaults(args, config, inverted):
     graphfile_basename = os.path.basename(args.graphfile if args.graphfile else config['graph'].get('graphfile') if 'graphfile' in config['graph'] else args.nodes if args.nodes else config['graph'].get('nodes')).split(".", 1)[0]
     log_file_basename = "{}_{}_{}".format(config['logging'].get('log_file_name', fallback='fpgagraphlib'), config['app']['algo'], graphfile_basename)
     i = 0
     while os.path.exists("{}_{}.log".format(log_file_basename, i)):
         i += 1
-    logging.basicConfig(level=config['logging'].get('file_log_level', fallback='DEBUG'),
-                        format='%(name)-25s %(levelname)-8s %(message)s',
-                        datefmt='%m-%d %H:%M',
-                        filename="{}_{}.log".format(log_file_basename, i),
-                        filemode='w')
-    # define a Handler which writes INFO messages or higher to the sys.stderr
-    console = logging.StreamHandler()
-    console.setLevel(config['logging'].get('console_log_level', fallback='INFO'))
-    # set a format which is simpler for console use
-    formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
-    # tell the handler to use this format
-    console.setFormatter(formatter)
-    # add the handler to the root logger
-    logging.getLogger('').addHandler(console)
-
-    logger = logging.getLogger('config')
-    logger.info("Logging to file {}_{}.log".format(log_file_basename, i))
+    logging.basicConfig(level=config['logging'].get('console_log_level', fallback='INFO'),
+                        format='%(name)-25s %(levelname)-8s %(message)s')
+    if not config['logging'].get('disable_logfile', fallback=False):
+        logger.info("Logging to file {}_{}.log".format(log_file_basename, i))
+        # define a Handler which writes INFO messages or higher to the sys.stderr
+        logfile = logging.FileHandler(filename="{}_{}.log".format(log_file_basename, i),
+        mode='w')
+        logfile.setLevel(config['logging'].get('file_log_level', fallback='DEBUG'))
+        # set a format which is simpler for console use
+        formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
+        # tell the handler to use this format
+        logfile.setFormatter(formatter)
+        # add the handler to the root logger
+        logging.getLogger('').addHandler(logfile)
 
     if args.seed:
         s = args.seed
@@ -192,37 +213,28 @@ def init_parse(args=None):
     algo_config.use_hmc = use_hmc
     algo_config.use_ddr = use_ddr
     algo_config.updates_in_hmc = updates_in_hmc
-    if use_hmc:
-        assert not algo_config.has_edgedata
-        adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=4)
-    elif use_ddr:
-        assert not algo_config.has_edgedata
-        adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=16)
+    algo_config.inverted = inverted
+    if inverted:
+        adj_idx, adj_val = algo_config.addresslayout.generate_partition_inverted(adj_dict)
     else:
-        adj_idx, adj_val = algo_config.addresslayout.generate_partition(adj_dict)
+        if use_hmc:
+            assert not algo_config.has_edgedata
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=4)
+        elif use_ddr:
+            assert not algo_config.has_edgedata
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=16)
+        else:
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition(adj_dict)
     algo_config.adj_idx = adj_idx
     algo_config.adj_val = adj_val
     algo_config.start_addr = (1<<34)
     algo_config.hmc_fifo_bits = 20 if args.command=='sim' else 32-bits_for(algo_config.addresslayout.num_pe-1)
 
     for pe in range(algo_config.addresslayout.num_pe):
-        assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe
-        assert len(algo_config.adj_idx[pe]) <= 2**(algo_config.addresslayout.nodeidsize - algo_config.addresslayout.peidsize)
+        if not inverted:
+            assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe
+            assert len(algo_config.adj_idx[pe]) <= 2**(algo_config.addresslayout.nodeidsize - algo_config.addresslayout.peidsize)
         if not algo_config.use_hmc and not algo_config.use_ddr:
             assert len(algo_config.adj_val[pe]) <= algo_config.addresslayout.max_edges_per_pe
-
-    logger.info("Algorithm: " + algo_config.name)
-    logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
-    logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
-    logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
-    logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
-    logger.info("num_fpga = " + str(algo_config.addresslayout.num_fpga))
-    logger.info("num_pe = " + str(algo_config.addresslayout.num_pe))
-    logger.info("num_pe_per_fpga = " + str(algo_config.addresslayout.num_pe_per_fpga))
-    logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
-    logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
-    logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
-    if not algo_config.use_hmc and not algo_config.use_ddr:
-        logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
 
     return args, algo_config

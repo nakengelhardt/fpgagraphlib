@@ -54,6 +54,13 @@ class AddressLayout:
                 max_node[pe] = localnode
         return max_node
 
+    def max_node(self, adj_dict):
+        max_node = 0
+        for node in adj_dict:
+            if max_node < node:
+                max_node = node
+        return max_node
+
     def generate_partition(self, adj_dict):
         logger = logging.getLogger('config')
         max_node = self.max_node_per_pe(adj_dict)
@@ -85,6 +92,25 @@ class AddressLayout:
             adj_val.extend(neighbors)
             if len(neighbors) % edges_per_burst != 0:
                 adj_val.extend(0 for _ in range(edges_per_burst-(len(neighbors) % edges_per_burst)))
+
+        return adj_idx, adj_val
+
+    def generate_partition_inverted(self, adj_dict):
+        logger = logging.getLogger('config')
+        len_nodes = self.max_node(adj_dict) + 1
+        adj_idx = [[(0,0) for _ in range(len_nodes)] for pe in range(self.num_pe)]
+        adj_val = [[] for _ in range(self.num_pe)]
+
+        for node, neighbors in adj_dict.items():
+            subneighbors = [list() for _ in range(self.num_pe)]
+            for n in neighbors:
+                pe = self.pe_adr(n)
+                subneighbors[pe].append(n)
+            for pe in range(self.num_pe):
+                idx = len(adj_val[pe])
+                n = len(subneighbors[pe])
+                adj_idx[pe][node] = (idx, n)
+                adj_val[pe].extend(subneighbors[pe])
 
         return adj_idx, adj_val
 
