@@ -16,7 +16,7 @@ from core_init import init_parse
 
 from recordfifo import RecordFIFO
 from core_interfaces import *
-from inverted_network import UpdateNetwork
+from inverted_network_multi import UpdateNetwork
 from inverted_apply import Apply
 from inverted_scatter import Scatter
 
