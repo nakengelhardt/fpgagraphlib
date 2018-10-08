@@ -31,25 +31,56 @@ class SimpleRoundrobin(Module):
                 self.roundrobin.ce.eq(1)
             ]
 
+class Broadcaster(Module):
+    def __init__(self, config, out_array):
+        self.apply_interface_in = ApplyInterface(name="mux_apply_interface_in", **config.addresslayout.get_params())
+        if len(out_array) == 1:
+            self.comb += self.apply_interface_in.connect(out_array[0])
+        else:
+            transaction_ok = Signal()
+            self.comb += [
+                transaction_ok.eq(reduce(and_, [out.ack for out in out_array])),
+                [self.apply_interface_in.connect(out, omit={'valid', 'ack'}) for out in out_array],
+                [out.valid.eq(self.apply_interface_in.valid & transaction_ok) for out in out_array],
+                self.apply_interface_in.ack.eq(transaction_ok)
+            ]
+
 class UpdateNetwork(Module):
     def __init__(self, config):
-        num_pe = config.addresslayout.num_pe
+        num_pe = config.addresslayout.num_pe_per_fpga
+        num_fpga = config.addresslayout.num_fpga
         self.apply_interface_in = [ApplyInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_pe)]
         self.scatter_interface_out = [ScatterInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_pe)]
 
+        self.external_network_interface_in = [ApplyInterface(name="ext_network_in", **config.addresslayout.get_params()) for _ in range(num_fpga - 1)]
+        self.external_network_interface_out = [ApplyInterface(name="ext_network_out", **config.addresslayout.get_params()) for _ in range(num_fpga - 1)]
+
         self.submodules.srr = SimpleRoundrobin(config, self.apply_interface_in)
+        self.submodules.ext_srr = SimpleRoundrobin(config, self.external_network_interface_in)
 
         self.submodules.fifos = [InterfaceFIFO(layout=self.apply_interface_in[0].layout, depth=8, name="link_{}".format(sink)) for sink in range(num_pe)]
 
+        self.submodules.ext_fifos = [InterfaceFIFO(layout=self.apply_interface_in[0].layout, depth=8, name="ext_link_{}".format(sink)) for sink in range(num_fpga - 1)]
 
+        self.submodules.broadcaster = Broadcaster(config, [fifo.din for fifo in self.fifos])
+        self.submodules.ext_broadcaster = Broadcaster(config, [fifo.din for fifo in self.ext_fifos])
 
+        # Two inputs and two outputs (internal and external)
+        # inputs from internal PEs are sent to both internal and external
+        # inputs from external PEs are only sent to internal (otherwise broadcast loop occurs)
         transaction_ok = Signal()
-
         self.comb += [
-            transaction_ok.eq(reduce(and_, [fifo.din.ack for fifo in self.fifos])),
-            [self.srr.apply_interface_out.connect(fifo.din, omit={'valid', 'ack'}) for fifo in self.fifos],
-            [fifo.din.valid.eq(self.srr.apply_interface_out.valid & transaction_ok) for fifo in self.fifos],
-            self.srr.apply_interface_out.ack.eq(transaction_ok)
+            transaction_ok.eq(self.broadcaster.apply_interface_in.ack & self.ext_broadcaster.apply_interface_in.ack),
+            # prioritize receiving over sending on FPGA level
+            If(self.ext_srr.apply_interface_out.valid,
+                self.ext_srr.apply_interface_out.connect(self.broadcaster.apply_interface_in)
+            ).Else(
+                self.srr.apply_interface_out.connect(self.broadcaster.apply_interface_in, omit={'valid', 'ack'}),
+                self.srr.apply_interface_out.connect(self.ext_broadcaster.apply_interface_in, omit={'valid', 'ack'}),
+                self.broadcaster.apply_interface_in.valid.eq(self.srr.apply_interface_out.valid & transaction_ok),
+                self.ext_broadcaster.apply_interface_in.valid.eq(self.srr.apply_interface_out.valid & transaction_ok),
+                self.srr.apply_interface_out.ack.eq(transaction_ok)
+            )
         ]
 
         # connect end of fifo to barriercounter and barriercounter to local output
@@ -74,6 +105,11 @@ class UpdateNetwork(Module):
                 computation_end[i].eq(1)
             )
 
+        for i in range(num_fpga - 1):
+            self.comb += [
+                self.ext_fifos[i].dout.connect(self.external_network_interface_out[i])
+            ]
+
         # do switchover to next round
         network_round = Signal(config.addresslayout.channel_bits)
         next_round = Signal(config.addresslayout.channel_bits)
@@ -93,7 +129,8 @@ class UpdateNetwork(Module):
         )
 
         self.comb += [
-            self.srr.current_round.eq(network_round)
+            self.srr.current_round.eq(network_round),
+            self.ext_srr.current_round.eq(network_round)
         ]
 
         # detect end of computation

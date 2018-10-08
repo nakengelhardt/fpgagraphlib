@@ -16,14 +16,15 @@ from core_init import init_parse
 
 from recordfifo import RecordFIFO
 from core_interfaces import *
-from inverted_network import UpdateNetwork
+from inverted_network_multi import UpdateNetwork
 from inverted_apply import Apply
 from inverted_scatter import Scatter
 
 class Core(Module):
-    def __init__(self, config):
+    def __init__(self, config, pe_start, pe_end):
         self.config = config
-        num_pe = self.config.addresslayout.num_pe
+        self.pe_start = pe_start
+        num_pe = pe_end - pe_start
 
         if config.has_edgedata:
             init_edgedata = config.init_edgedata
@@ -31,9 +32,9 @@ class Core(Module):
             init_edgedata = [None for _ in range(num_pe)]
 
 
-        self.submodules.apply = [Apply(config, i) for i in range(num_pe)]
+        self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
 
-        self.submodules.scatter = [Scatter(i, config) for i in range(num_pe)]
+        self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
 
         self.submodules.network = UpdateNetwork(config)
 
@@ -57,9 +58,47 @@ class Core(Module):
                 self.network.scatter_interface_out[i].connect(self.scatter[i].scatter_interface)
             ]
 
-
         # state of calculation
+
+        injected = [Signal() for i in range(num_pe)]
+
+        self.start = Signal()
+        init = Signal()
+        self.done = Signal()
+        self.cycle_count = Signal(32)
         self.global_inactive = self.network.inactive
+
+        self.sync += [
+            init.eq(self.start & ~reduce(and_, injected))
+        ]
+
+        self.comb += [
+            self.done.eq(~init & self.global_inactive)
+        ]
+
+        for i in range(num_pe):
+            self.comb += [
+                self.start_message[i].select.eq(init),
+                self.start_message[i].msg.barrier.eq(1),
+                self.start_message[i].msg.roundpar.eq(config.addresslayout.num_channels-1),
+                self.start_message[i].valid.eq(~injected[i])
+            ]
+
+        self.sync += [
+            [If(self.start_message[i].ack, injected[i].eq(1)) for i in range(num_pe)],
+            If(~reduce(and_, injected),
+                self.cycle_count.eq(0)
+            ).Elif(~self.global_inactive,
+                self.cycle_count.eq(self.cycle_count + 1)
+            )
+        ]
+
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(a.barrierdistributor.total_num_updates for a in self.apply))
+        ]
+
+        # error reporting
 
         self.kernel_error = Signal()
         self.comb += self.kernel_error.eq(reduce(or_, [pe.gatherapplykernel.kernel_error for pe in self.apply]))
@@ -80,7 +119,7 @@ class Core(Module):
                         logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(a.pe_id))
                 if (yield a.gatherapplykernel.valid_in) and (yield a.gatherapplykernel.ready):
                     if (yield a.level) % self.config.addresslayout.num_channels != (yield a.gatherapplykernel.round_in):
-                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield a.roundpar), (yield a.level)))
+                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield a.gatherapplykernel.round_in), (yield a.level)))
                 if ((yield a.scatter_interface.msg.barrier) and (yield a.scatter_interface.valid) and (yield a.scatter_interface.ack)):
                     logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(a.pe_id))
             for s in self.scatter:
@@ -98,50 +137,40 @@ class UnCore(Module):
         self.config = config
         num_pe = config.addresslayout.num_pe
 
-        self.submodules.cores = [Core(config)]
-
-        self.global_inactive = self.cores[0].global_inactive
-        self.kernel_error = self.cores[0].kernel_error
-        self.deadlock = self.cores[0].deadlock
-
-        start_message = self.cores[0].start_message
-
-        injected = [Signal() for i in range(num_pe)]
+        self.submodules.cores = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
 
         self.start = Signal()
-        init = Signal()
         self.done = Signal()
-        self.cycle_count = Signal(32)
-
-        self.sync += [
-            init.eq(self.start & ~reduce(and_, injected))
-        ]
-
-        self.comb += [
-            self.done.eq(~init & self.global_inactive)
-        ]
-
-        for i in range(num_pe):
-            self.comb += [
-                start_message[i].select.eq(init),
-                start_message[i].msg.barrier.eq(1),
-                start_message[i].msg.roundpar.eq(config.addresslayout.num_channels-1),
-                start_message[i].valid.eq(~injected[i])
-            ]
-
-        self.sync += [
-            [If(start_message[i].ack, injected[i].eq(1)) for i in range(num_pe)],
-            If(~reduce(and_, injected),
-                self.cycle_count.eq(0)
-            ).Elif(~self.global_inactive,
-                self.cycle_count.eq(self.cycle_count + 1)
-            )
-        ]
-
+        self.kernel_error = Signal()
+        self.deadlock = Signal()
+        self.global_inactive = Signal()
         self.total_num_messages = Signal(32)
+        self.cycle_count = Signal(64)
+
         self.comb += [
-            self.total_num_messages.eq(sum(a.barrierdistributor.total_num_updates for a in self.cores[0].apply))
+            self.global_inactive.eq(reduce(and_, (core.global_inactive for core in self.cores))),
+            self.done.eq(reduce(and_, (core.done for core in self.cores))),
+            [core.start.eq(self.start) for core in self.cores],
+            self.kernel_error.eq(reduce(or_, (core.kernel_error for core in self.cores))),
+            self.deadlock.eq(reduce(or_, (core.deadlock for core in self.cores))),
+            self.total_num_messages.eq(sum(core.total_num_messages for core in self.cores)),
+            self.cycle_count.eq(self.cores[0].cycle_count)
         ]
+
+        # inter-core communication
+        for i in range(config.addresslayout.num_fpga):
+            core_idx = 0
+            for j in range(config.addresslayout.num_fpga - 1):
+                if i == j:
+                    core_idx += 1
+                if j < i:
+                    if_idx = i - 1
+                else:
+                    if_idx = i
+                print("Connecting core {} out {} to core {} in {}".format(i, j, core_idx, if_idx))
+                self.comb += self.cores[i].network.external_network_interface_out[j].connect(self.cores[core_idx].network.external_network_interface_in[if_idx])
+                core_idx += 1
+
 
     def gen_simulation(self, tb):
         yield self.start.eq(1)
@@ -191,7 +220,7 @@ class Top(Module):
         else:
             status_regs = []
             for core in self.uncore.cores:
-                for i in range(num_pe):
+                for i in range(config.addresslayout.num_pe_per_fpga):
                     status_regs.extend([
                         # core.scatter[i].barrierdistributor.total_num_messages_in,
                         # core.scatter[i].barrierdistributor.total_num_messages,
