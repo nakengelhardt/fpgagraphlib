@@ -215,7 +215,14 @@ def resolve_defaults(args, config, inverted):
     algo_config.updates_in_hmc = updates_in_hmc
     algo_config.inverted = inverted
     if inverted:
-        adj_idx, adj_val = algo_config.addresslayout.generate_partition_inverted(adj_dict)
+        if use_hmc:
+            assert not algo_config.has_edgedata
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat_inverted(adj_dict, edges_per_burst=4)
+        elif use_ddr:
+            assert not algo_config.has_edgedata
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat_inverted(adj_dict, edges_per_burst=16)
+        else:
+            adj_idx, adj_val = algo_config.addresslayout.generate_partition_inverted(adj_dict)
     else:
         if use_hmc:
             assert not algo_config.has_edgedata

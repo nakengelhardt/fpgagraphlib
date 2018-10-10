@@ -96,7 +96,6 @@ class AddressLayout:
         return adj_idx, adj_val
 
     def generate_partition_inverted(self, adj_dict):
-        logger = logging.getLogger('config')
         len_nodes = self.max_node(adj_dict) + 1
         adj_idx = [[(0,0) for _ in range(len_nodes)] for pe in range(self.num_pe)]
         adj_val = [[] for _ in range(self.num_pe)]
@@ -112,6 +111,25 @@ class AddressLayout:
                 adj_idx[pe][node] = (idx, n)
                 adj_val[pe].extend(subneighbors[pe])
 
+        return adj_idx, adj_val
+
+    def generate_partition_flat_inverted(self, adj_dict, edges_per_burst=1, bytes_per_edge=4):
+        len_nodes = self.max_node(adj_dict) + 1
+        adj_idx = [[(0,0) for _ in range(len_nodes)] for pe in range(self.num_pe)]
+        adj_val = []
+
+        for node, neighbors in adj_dict.items():
+            subneighbors = [list() for _ in range(self.num_pe)]
+            for n in neighbors:
+                pe = self.pe_adr(n)
+                subneighbors[pe].append(n)
+            for pe in range(self.num_pe):
+                idx = len(adj_val)
+                n = len(subneighbors[pe])
+                adj_idx[pe][node] = (idx*bytes_per_edge, n)
+                adj_val.extend(subneighbors[pe])
+                if len(subneighbors[pe]) % edges_per_burst != 0:
+                    adj_val.extend(0 for _ in range(edges_per_burst-(len(subneighbors[pe]) % edges_per_burst)))
         return adj_idx, adj_val
 
     def repack(self, l, wordsize, pcie_width):

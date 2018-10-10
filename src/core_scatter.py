@@ -13,7 +13,7 @@ from recordfifo import *
 from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
-    def __init__(self, pe_id, config, hmc_port=None):
+    def __init__(self, pe_id, config, port=None):
         self.pe_id = pe_id
         addresslayout = config.addresslayout
         nodeidsize = addresslayout.nodeidsize
@@ -47,9 +47,9 @@ class Scatter(Module):
         # resides in submodule
 
         if config.use_hmc:
-            self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, adj_val=config.adj_val[pe_id], hmc_port=hmc_port)
+            self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, hmc_port=port)
         elif config.use_ddr:
-            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=hmc_port)
+            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=port)
         else:
             self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config)
 
