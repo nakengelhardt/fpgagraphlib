@@ -203,6 +203,13 @@ class Top(Module):
 
         self.submodules += config.platform
 
+        if not config.use_hmc:
+            for port in config.platform.picoHMCports:
+                for field, _, dir in port.layout:
+                    if field != "clk" and dir == DIR_M_TO_S:
+                        s = getattr(port, field)
+                        self.comb += s.eq(0)
+
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = config.platform.picoHMCports[i]
