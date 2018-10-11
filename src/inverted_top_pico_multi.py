@@ -21,26 +21,28 @@ from inverted_apply import Apply
 from inverted_scatter import Scatter
 
 class Core(Module):
-    def __init__(self, config, pe_start, pe_end):
+    def __init__(self, config, fpga_id):
         self.config = config
+        pe_start = fpga_id*config.addresslayout.num_pe_per_fpga
+        pe_end = min((fpga_id+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)
         self.pe_start = pe_start
-        num_pe = pe_end - pe_start
+        num_local_pe = pe_end - pe_start
 
         if config.has_edgedata:
             init_edgedata = config.init_edgedata
         else:
-            init_edgedata = [None for _ in range(num_pe)]
+            init_edgedata = [None for _ in range(num_local_pe)]
 
 
         self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
 
         self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
 
-        self.submodules.network = UpdateNetwork(config)
+        self.submodules.network = UpdateNetwork(config, fpga_id)
 
         # choose between init and regular message channel
-        self.start_message = [ApplyInterface(name="start_message", **config.addresslayout.get_params()) for i in range(num_pe)]
-        for i in range(num_pe):
+        self.start_message = [ApplyInterface(name="start_message", **config.addresslayout.get_params()) for i in range(num_local_pe)]
+        for i in range(num_local_pe):
             self.start_message[i].select = Signal()
             self.comb += [
                 If(self.start_message[i].select,
@@ -52,7 +54,7 @@ class Core(Module):
 
         # connect among PEs
 
-        for i in range(num_pe):
+        for i in range(num_local_pe):
             self.comb += [
                 self.apply[i].scatter_interface.connect(self.network.apply_interface_in[i]),
                 self.network.scatter_interface_out[i].connect(self.scatter[i].scatter_interface)
@@ -60,7 +62,7 @@ class Core(Module):
 
         # state of calculation
 
-        injected = [Signal() for i in range(num_pe)]
+        injected = [Signal() for i in range(num_local_pe)]
 
         self.start = Signal()
         init = Signal()
@@ -76,7 +78,7 @@ class Core(Module):
             self.done.eq(~init & self.global_inactive)
         ]
 
-        for i in range(num_pe):
+        for i in range(num_local_pe):
             self.comb += [
                 self.start_message[i].select.eq(init),
                 self.start_message[i].msg.barrier.eq(1),
@@ -85,7 +87,7 @@ class Core(Module):
             ]
 
         self.sync += [
-            [If(self.start_message[i].ack, injected[i].eq(1)) for i in range(num_pe)],
+            [If(self.start_message[i].ack, injected[i].eq(1)) for i in range(num_local_pe)],
             If(~reduce(and_, injected),
                 self.cycle_count.eq(0)
             ).Elif(~self.global_inactive,
@@ -108,8 +110,6 @@ class Core(Module):
 
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('simulation.barriermonitor')
-        num_pe = self.config.addresslayout.num_pe
-
         num_cycles = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
@@ -137,7 +137,7 @@ class UnCore(Module):
         self.config = config
         num_pe = config.addresslayout.num_pe
 
-        self.submodules.cores = [Core(config, i*config.addresslayout.num_pe_per_fpga, min((i+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)) for i in range(config.addresslayout.num_fpga)]
+        self.submodules.cores = [Core(config, i) for i in range(config.addresslayout.num_fpga)]
 
         self.start = Signal()
         self.done = Signal()
@@ -167,7 +167,7 @@ class UnCore(Module):
                     if_idx = i - 1
                 else:
                     if_idx = i
-                print("Connecting core {} out {} to core {} in {}".format(i, j, core_idx, if_idx))
+                # print("Connecting core {} out {} to core {} in {}".format(i, j, core_idx, if_idx))
                 self.comb += self.cores[i].network.external_network_interface_out[j].connect(self.cores[core_idx].network.external_network_interface_in[if_idx])
                 core_idx += 1
 
@@ -197,8 +197,6 @@ class UnCore(Module):
 
 class Top(Module):
     def __init__(self, config):
-        num_pe = config.addresslayout.num_pe
-
         self.submodules.uncore = UnCore(config)
 
         self.submodules += config.platform

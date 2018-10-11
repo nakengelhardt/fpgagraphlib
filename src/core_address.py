@@ -45,6 +45,14 @@ class AddressLayout:
     def global_adr(self, pe_adr, local_adr):
         return (pe_adr << log2_int(self.num_nodes_per_pe)) | local_adr
 
+    def fpga_adr(self, nodeid):
+        pe = self.pe_adr(nodeid)
+        fpga = 0
+        while pe >= self.num_pe_per_fpga:
+            pe -= self.num_pe_per_fpga
+            fpga += 1
+        return fpga
+
     def max_node_per_pe(self, adj_dict):
         max_node = [0 for _ in range(self.num_pe)]
         for node in adj_dict:
