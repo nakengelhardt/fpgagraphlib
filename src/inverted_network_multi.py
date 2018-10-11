@@ -63,21 +63,21 @@ class RecipientFilter(Module):
                 if config.addresslayout.fpga_adr(neighbor) == dest_fpga:
                     neighbor_filter[node] = 0
 
-        print(dest_fpga, [x for x in enumerate(neighbor_filter)])
-
         self.specials.filter_store = Memory(width=1, depth=max_node + 1, init=neighbor_filter)
         self.specials.rd_port = self.filter_store.get_port(async_read=True)
 
         filter = Signal()
         self.comb += [
             self.rd_port.adr.eq(self.fifo.dout.msg.sender),
-            filter.eq(self.rd_port.dat_r & ~self.fifo.dout.msg.barrier),
+            filter.eq(self.rd_port.dat_r & self.fifo.dout.valid & ~self.fifo.dout.msg.barrier),
         ]
 
-        self.num_messages_filtered = Signal(32)
+        self.num_messages_filtered = Array(Signal(32) for _ in range(config.addresslayout.num_pe_per_fpga))
+        local_pe_adr = Signal(max=config.addresslayout.num_fpga)
         self.comb += [
+            local_pe_adr.eq(config.addresslayout.pe_adr(self.fifo.dout.msg.sender) - dest_fpga*config.addresslayout.num_pe_per_fpga),
             self.fifo.dout.connect(self.apply_interface_out, omit={'valid', 'ack', 'dest_id'}),
-            self.apply_interface_out.msg.dest_id.eq(self.fifo.dout.msg.dest_id - self.num_messages_filtered),
+            self.apply_interface_out.msg.dest_id.eq(self.fifo.dout.msg.dest_id - self.num_messages_filtered[local_pe_adr]),
             self.apply_interface_out.valid.eq(self.fifo.dout.valid & ~filter),
             self.fifo.dout.ack.eq(self.apply_interface_out.ack | filter)
         ]
@@ -86,9 +86,9 @@ class RecipientFilter(Module):
         self.sync += [
             If(self.fifo.dout.valid & self.fifo.dout.ack,
                 If(self.fifo.dout.msg.barrier,
-                    self.num_messages_filtered.eq(0)
+                    self.num_messages_filtered[local_pe_adr].eq(0)
                 ).Elif(filter,
-                    self.num_messages_filtered.eq(self.num_messages_filtered + 1)
+                    self.num_messages_filtered[local_pe_adr].eq(self.num_messages_filtered[local_pe_adr] + 1)
                 )
             )
         ]

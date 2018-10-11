@@ -25,15 +25,11 @@ class BarrierDistributorApply(Module):
 
         have_barrier = Signal()
         num_msgs_since_last_barrier = Signal(config.addresslayout.nodeidsize)
-        halt = Signal()
-
-        self.comb += [
-            have_barrier.eq(self.fifo.dout.msg.barrier & self.fifo.dout.valid),
-        ]
+        halt = Signal(reset=1)
 
         self.sync += [
-            If(self.apply_interface_out.valid & self.apply_interface_out.ack,
-                If(have_barrier,
+            If(self.fifo.dout.valid & self.fifo.dout.ack,
+                If(self.fifo.dout.msg.barrier,
                     num_msgs_since_last_barrier.eq(0),
                     halt.eq(1)
                 ).Else(
@@ -44,8 +40,7 @@ class BarrierDistributorApply(Module):
         ]
 
         self.comb += [
-            self.fifo.dout.connect(self.apply_interface_out, omit=["ack", "halt", "dest_id"]),
+            self.fifo.dout.connect(self.apply_interface_out, omit=["halt", "dest_id"]),
             self.apply_interface_out.msg.dest_id.eq(num_msgs_since_last_barrier),
-            self.apply_interface_out.msg.halt.eq(halt),
-            self.fifo.dout.ack.eq(self.apply_interface_out.ack)
+            self.apply_interface_out.msg.halt.eq(halt)
         ]
