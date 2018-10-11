@@ -42,6 +42,8 @@ class Barriercounter(Module):
 
         sender_pe = config.addresslayout.pe_adr(apply_interface_in_fifo.dout.msg.sender)
 
+        self.waiting_for_stragglers = Signal()
+
         self.submodules.fsm = FSM()
 
         self.fsm.act("DEFAULT",
@@ -100,6 +102,7 @@ class Barriercounter(Module):
         )
 
         self.fsm.act("WAIT_FOR_STRAGGLER",
+            self.waiting_for_stragglers.eq(1),
             If(self.apply_interface_out.ack,
                 apply_interface_in_fifo.dout.ack.eq(1),
                 NextValue(self.apply_interface_out.msg.raw_bits(), apply_interface_in_fifo.dout.msg.raw_bits()),
@@ -110,3 +113,16 @@ class Barriercounter(Module):
                 )
             )
         )
+
+    @passive
+    def gen_selfcheck(self, tb):
+        logger = logging.getLogger('sim.barriercounter')
+        while True:
+            if (yield self.waiting_for_stragglers):
+                logger.warning("Barriercounter is waiting for stragglers:")
+                for i in range(tb.config.addresslayout.num_pe):
+                    received = (yield self.num_from_pe[i])
+                    expected = (yield self.num_expected_from_pe[i])
+                    if received != expected:
+                        logger.warning("Only {} of {} updates received from PE {}".format(received, expected, i))
+            yield

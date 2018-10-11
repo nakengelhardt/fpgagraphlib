@@ -3,6 +3,7 @@ from migen.genlib.roundrobin import *
 
 from functools import reduce
 from operator import and_
+import logging
 
 from recordfifo import *
 from core_interfaces import *
@@ -46,7 +47,8 @@ class Broadcaster(Module):
             ]
 
 class RecipientFilter(Module):
-    def __init__(self, config, dest_fpga):
+    def __init__(self, config, fpga_id, dest_fpga):
+        self.fpga_id = fpga_id
         self.apply_interface_in = ApplyInterface(name="filter_in", **config.addresslayout.get_params())
         self.apply_interface_out = ApplyInterface(name="filter_out", **config.addresslayout.get_params())
 
@@ -66,20 +68,20 @@ class RecipientFilter(Module):
         self.specials.filter_store = Memory(width=1, depth=max_node + 1, init=neighbor_filter)
         self.specials.rd_port = self.filter_store.get_port(async_read=True)
 
-        filter = Signal()
+        self.filter = Signal()
         self.comb += [
             self.rd_port.adr.eq(self.fifo.dout.msg.sender),
-            filter.eq(self.rd_port.dat_r & self.fifo.dout.valid & ~self.fifo.dout.msg.barrier),
+            self.filter.eq(self.rd_port.dat_r & self.fifo.dout.valid & ~self.fifo.dout.msg.barrier),
         ]
 
         self.num_messages_filtered = Array(Signal(32) for _ in range(config.addresslayout.num_pe_per_fpga))
-        local_pe_adr = Signal(max=config.addresslayout.num_fpga)
+        self.filter_origin_pe = local_pe_adr = Signal(config.addresslayout.peidsize)
         self.comb += [
-            local_pe_adr.eq(config.addresslayout.pe_adr(self.fifo.dout.msg.sender) - dest_fpga*config.addresslayout.num_pe_per_fpga),
+            local_pe_adr.eq(config.addresslayout.pe_adr(self.fifo.dout.msg.sender) - fpga_id*config.addresslayout.num_pe_per_fpga),
             self.fifo.dout.connect(self.apply_interface_out, omit={'valid', 'ack', 'dest_id'}),
             self.apply_interface_out.msg.dest_id.eq(self.fifo.dout.msg.dest_id - self.num_messages_filtered[local_pe_adr]),
-            self.apply_interface_out.valid.eq(self.fifo.dout.valid & ~filter),
-            self.fifo.dout.ack.eq(self.apply_interface_out.ack | filter)
+            self.apply_interface_out.valid.eq(self.fifo.dout.valid & ~self.filter),
+            self.fifo.dout.ack.eq(self.apply_interface_out.ack | self.filter)
         ]
 
 
@@ -87,11 +89,19 @@ class RecipientFilter(Module):
             If(self.fifo.dout.valid & self.fifo.dout.ack,
                 If(self.fifo.dout.msg.barrier,
                     self.num_messages_filtered[local_pe_adr].eq(0)
-                ).Elif(filter,
+                ).Elif(self.filter,
                     self.num_messages_filtered[local_pe_adr].eq(self.num_messages_filtered[local_pe_adr] + 1)
                 )
             )
         ]
+
+    @passive
+    def gen_selfcheck(self, tb):
+        logger = logging.getLogger("sim.filter")
+        while True:
+            if (yield self.filter) and (yield self.fifo.dout.ack):
+                logger.debug("Filtering update from node {} which has no neighbors on FPGA {}. (self.num_messages_filtered[{}] += 1)".format((yield self.fifo.dout.msg.sender), self.fpga_id, (yield self.filter_origin_pe)))
+            yield
 
 class UpdateNetwork(Module):
     def __init__(self, config, fpga_id):
@@ -156,7 +166,7 @@ class UpdateNetwork(Module):
         other_fpgas = [x for x in range(num_fpga)]
         other_fpgas.remove(fpga_id)
         for i in range(num_fpga - 1):
-            filter = RecipientFilter(config, other_fpgas[i])
+            filter = RecipientFilter(config, fpga_id, other_fpgas[i])
             self.submodules += filter
             self.comb += [
                 self.ext_fifos[i].dout.connect(filter.apply_interface_in),
