@@ -47,7 +47,7 @@ class NetlistGatherKernelWrapper(Module):
         signals["o_state_valid"] = self.state_valid
         signals["i_state_ack"] = self.state_ack
 
-        self.specials += Instance("{}_gather".format(config.name), **signals)
+        self.specials += Instance("gather".format(config.name), **signals)
 
 class NetlistApplyKernelWrapper(Module):
     def __init__(self, config):
@@ -103,7 +103,7 @@ class NetlistApplyKernelWrapper(Module):
         signals["i_update_ack"] = self.update_ack
         signals["o_kernel_error"] = self.kernel_error
 
-        self.specials += Instance("{}_apply".format(config.name), **signals)
+        self.specials += Instance("apply".format(config.name), **signals)
 
 
 class NetlistScatterKernelWrapper(Module):
@@ -148,4 +148,4 @@ class NetlistScatterKernelWrapper(Module):
         signals["o_barrier_out"] = self.barrier_out
         signals["i_message_ack"] = self.message_ack
 
-        self.specials += Instance("{}_scatter".format(config.name), **signals)
+        self.specials += Instance("scatter".format(config.name), **signals)
