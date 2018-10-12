@@ -65,7 +65,7 @@ def init_parse(args=None, inverted=False):
     logger.info("num_pe_per_fpga = " + str(algo_config.addresslayout.num_pe_per_fpga))
     logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
     logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
-    logger.info("Nodes per PE: {}".format([len(algo_config.adj_idx[pe]) for pe in range(algo_config.addresslayout.num_pe)]))
+    logger.info("Nodes per PE: {}".format([x+1 for x in algo_config.addresslayout.max_node_per_pe(algo_config.adj_dict)]))
     if not algo_config.use_hmc and not algo_config.use_ddr:
         logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
 
