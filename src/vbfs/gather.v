@@ -1,5 +1,5 @@
 /* Machine-generated using Migen */
-module gather(
+module vbfs_gather(
 	input [31:0] level_in,
 	input [31:0] nodeid_in,
 	input [31:0] sender_in,

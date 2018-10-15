@@ -20,7 +20,7 @@ class NetlistGatherKernelWrapper(Module):
         self.level_in = Signal(32)
         self.nodeid_in = Signal(config.addresslayout.nodeidsize)
         self.sender_in = Signal(config.addresslayout.nodeidsize)
-        self.message_in = Record(set_layout_parameters(interfaces.payload_layout, **config.addresslayout.get_params()))
+        self.message_in = Record(set_layout_parameters(interfaces.message_layout, **config.addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(interfaces.node_storage_layout, **config.addresslayout.get_params()))
         self.valid_in = Signal()
         self.ready = Signal()
@@ -47,7 +47,7 @@ class NetlistGatherKernelWrapper(Module):
         signals["o_state_valid"] = self.state_valid
         signals["i_state_ack"] = self.state_ack
 
-        self.specials += Instance("gather".format(config.name), **signals)
+        self.specials += Instance("{}_gather".format(config.name), **signals)
 
 class NetlistApplyKernelWrapper(Module):
     def __init__(self, config):
@@ -67,7 +67,7 @@ class NetlistApplyKernelWrapper(Module):
         self.state_barrier = Signal()
         self.state_ack = Signal()
 
-        self.update_out = Record(set_layout_parameters(interfaces.payload_layout, **config.addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(interfaces.update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(config.addresslayout.nodeidsize)
         self.update_valid = Signal()
         self.update_round = Signal(config.addresslayout.channel_bits)
@@ -103,14 +103,14 @@ class NetlistApplyKernelWrapper(Module):
         signals["i_update_ack"] = self.update_ack
         signals["o_kernel_error"] = self.kernel_error
 
-        self.specials += Instance("apply".format(config.name), **signals)
+        self.specials += Instance("{}_apply".format(config.name), **signals)
 
 
 class NetlistScatterKernelWrapper(Module):
     def __init__(self, config):
         interfaces = import_module("{}.interfaces".format(config.name))
 
-        self.update_in = Record(set_layout_parameters(interfaces.payload_layout, **config.addresslayout.get_params()))
+        self.update_in = Record(set_layout_parameters(interfaces.update_layout, **config.addresslayout.get_params()))
         self.num_neighbors_in = Signal(config.addresslayout.edgeidsize)
         self.neighbor_in = Signal(config.addresslayout.nodeidsize)
         self.sender_in = Signal(config.addresslayout.nodeidsize)
@@ -119,13 +119,16 @@ class NetlistScatterKernelWrapper(Module):
         self.valid_in = Signal()
         self.ready = Signal()
 
-        self.message_out = Record(set_layout_parameters(interfaces.payload_layout, **config.addresslayout.get_params()))
+        self.message_out = Record(set_layout_parameters(interfaces.message_layout, **config.addresslayout.get_params()))
         self.neighbor_out = Signal(config.addresslayout.nodeidsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
         self.round_out = Signal(config.addresslayout.channel_bits)
         self.valid_out = Signal()
         self.message_ack = Signal()
         self.barrier_out = Signal()
+
+        if config.has_edgedata:
+            self.edgedata_in = Record(set_layout_parameters(interfaces.edge_storage_layout, **config.addresslayout.get_params()))
 
         signals = {}
         signals["i_sys_clk"] = ClockSignal()
@@ -148,4 +151,7 @@ class NetlistScatterKernelWrapper(Module):
         signals["o_barrier_out"] = self.barrier_out
         signals["i_message_ack"] = self.message_ack
 
-        self.specials += Instance("scatter".format(config.name), **signals)
+        if config.has_edgedata:
+            _add_fields(signals, self.edgedata_in, "i")
+
+        self.specials += Instance("{}_scatter".format(config.name), **signals)

@@ -6,13 +6,23 @@ from migen.genlib.record import *
 
 ## message payload format (user-defined)
 
-update_layout = message_layout = [
-    ("dummy", 1, DIR_M_TO_S)
+message_layout = [
+    ("dist", "edgedatasize", DIR_M_TO_S)
 ]
+
+update_layout = [
+    ("dist", "edgedatasize", DIR_M_TO_S)
+]
+
 
 ### Memory Interfaces ###
 
 node_storage_layout = [
+    ("dist", "edgedatasize"),
     ("parent", "nodeidsize"),
     ("active", 1)
+]
+
+edge_storage_layout = [
+    ("dist", "edgedatasize")
 ]

@@ -1,5 +1,5 @@
 /* Machine-generated using Migen */
-module scatter(
+module vbfs_scatter(
 	input update_in_dummy,
 	input [31:0] num_neighbors_in,
 	input [31:0] neighbor_in,
