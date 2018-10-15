@@ -57,7 +57,7 @@ class Core(Module):
         self.init_complete = Signal()
 
     def gen_barrier_monitor(self, tb):
-        logger = logging.getLogger('simulation.barriermonitor')
+        logger = logging.getLogger('sim.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
 
         num_cycles = 0
@@ -176,7 +176,7 @@ def sim(config):
     generators.extend(get_simulators(tb, 'gen_selfcheck', tb))
     generators.extend(get_simulators(tb, 'gen_simulation', tb))
 
-    run_simulation(tb, generators, vcd_name="tb.vcd")
+    run_simulation(tb, generators, vcd_name="{}.vcd".format(config.vcdname))
 
 def export(config, filename='top.v'):
 

@@ -71,27 +71,52 @@ def init_parse(args=None, inverted=False):
 
     return args, algo_config
 
+class ANSIColorFormatter(logging.Formatter):
+    LOG_COLORS = {
+        "DEBUG"   : "\033[36m",
+        "INFO"    : "\033[37m",
+        "WARNING" : "\033[1;33m",
+        "ERROR"   : "\033[1;31m",
+        "CRITICAL": "\033[1;41m",
+    }
+
+    def format(self, record):
+        color = self.LOG_COLORS.get(record.levelname, "")
+        return "{}{}\033[0m".format(color, super().format(record))
 
 def resolve_defaults(args, config, inverted):
     graphfile_basename = os.path.basename(args.graphfile if args.graphfile else config['graph'].get('graphfile') if 'graphfile' in config['graph'] else args.nodes if args.nodes else config['graph'].get('nodes')).split(".", 1)[0]
     log_file_basename = "{}_{}_{}".format(config['logging'].get('log_file_name', fallback='fpgagraphlib'), config['app']['algo'], graphfile_basename)
-    i = 0
-    while os.path.exists("{}_{}.log".format(log_file_basename, i)):
-        i += 1
-    logging.basicConfig(level=config['logging'].get('console_log_level', fallback='INFO'),
-                        format='%(name)-25s %(levelname)-8s %(message)s')
+
+    logger = logging.getLogger()
+    logger.setLevel(config['logging'].get('console_log_level', fallback='INFO'))
+    handler = logging.StreamHandler()
+    formatter_args = {"fmt": "{levelname:.1s}: {name:>20.20s}: {message:s}", "style": "{"}
+    if sys.stderr.isatty() and sys.platform != 'win32':
+        handler.setFormatter(ANSIColorFormatter(**formatter_args))
+    else:
+        handler.setFormatter(logging.Formatter(**formatter_args))
+    logger.addHandler(handler)
+
+    log_file_number = 0
+    while os.path.exists("{}_{}.log".format(log_file_basename, log_file_number)):
+        log_file_number += 1
+
     if not config['logging'].get('disable_logfile', fallback=False):
-        logger.info("Logging to file {}_{}.log".format(log_file_basename, i))
+        logger.info("Logging to file {}_{}.log".format(log_file_basename, log_file_number))
         # define a Handler which writes INFO messages or higher to the sys.stderr
-        logfile = logging.FileHandler(filename="{}_{}.log".format(log_file_basename, i),
+        logfile = logging.FileHandler(filename="{}_{}.log".format(log_file_basename, log_file_number),
         mode='w')
         logfile.setLevel(config['logging'].get('file_log_level', fallback='DEBUG'))
         # set a format which is simpler for console use
-        formatter = logging.Formatter('%(name)-25s: %(levelname)-8s %(message)s')
+        formatter = logging.Formatter('%(levelname)-8s: %(name)-25s: %(message)s')
         # tell the handler to use this format
         logfile.setFormatter(formatter)
         # add the handler to the root logger
-        logging.getLogger('').addHandler(logfile)
+        logger.addHandler(logfile)
+
+    # root is set up, now get logger for local logging
+    logger = logging.getLogger('config')
 
     if args.seed:
         s = args.seed
@@ -208,7 +233,10 @@ def resolve_defaults(args, config, inverted):
     algo_config = algo.Config(adj_dict, **kwargs)
     algo_config.graph = g
 
-    algo_config.vcdname = "{}_{}".format(log_file_basename, i)
+    if config['logging'].get('disable_logfile', fallback=False):
+        algo_config.vcdname = None
+    else:
+        algo_config.vcdname = "{}_{}".format(log_file_basename, log_file_number)
 
     algo_config.use_hmc = use_hmc
     algo_config.use_ddr = use_ddr

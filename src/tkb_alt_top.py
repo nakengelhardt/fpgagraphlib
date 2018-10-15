@@ -108,7 +108,7 @@ class Core(Module):
         self.network.nrs.local_proceed.attr.add("mark_debug")
 
     def gen_barrier_monitor(self, tb):
-        logger = logging.getLogger('simulation.barriermonitor')
+        logger = logging.getLogger('sim.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
         num_local_pe = len(self.apply)
 

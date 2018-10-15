@@ -1,0 +1,95 @@
+GraVF requires:
+ - Python 3.6
+ - Migen (https://github.com/m-labs/migen)
+ - NetworkX (https://networkx.github.io/)
+ - Metis (http://glaros.dtc.umn.edu/gkhome/metis/metis/overview)
+ - NetworkX-METIS (https://networkx-metis.readthedocs.io)
+ - repository 'util' (https://github.com/nakengelhardt/util)
+
+It is recommended to use pyenv to manage python environments. (https://github.com/pyenv/pyenv)
+
+Detailed installation instructions for Ubuntu:
+
+Pyenv:
+
+- get prerequisites
+
+$ sudo apt-get install -y make build-essential libssl-dev zlib1g-dev libbz2-dev \
+libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
+xz-utils tk-dev libffi-dev liblzma-dev
+
+- get pyenv
+
+$ git clone https://github.com/pyenv/pyenv.git ~/.pyenv
+
+- set up pyenv
+
+$ echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+$ echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+$ echo -e 'if command -v pyenv 1>/dev/null 2>&1; then\n  eval "$(pyenv init -)"\nfi' >> ~/.bashrc
+
+- restart shell
+
+$ exec "$SHELL"
+
+- get python version
+
+$ pyenv install 3.6.5
+
+- set local python version for GraVF
+
+$ cd <...>/fpgagraphlib
+$ pyenv local 3.6.5
+
+Migen:
+
+- get migen
+
+$ git clone https://github.com/m-labs/migen ~/migen
+
+- set up migen
+
+$ echo 'export PYTHONPATH="$HOME/migen:$PYTHONPATH"' >> ~/.bashrc
+
+NetworkX:
+
+- use pip within a folder where python-version is declared to be 3.6.5 (e.g. fpgagraphlib)
+- (to check, type pyenv version)
+
+$ pip install networkx
+
+METIS:
+
+- get METIS
+
+$ curl -O http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+$ tar xzf metis-5.1.0.tar.gz
+$ cd metis-5.1.0/
+
+- build with shared option
+
+$ make config shared=1
+$ cd build/Linux-x86_64
+$ make
+$ sudo make install
+
+NetworkX-METIS:
+
+- If it works, use pip within a folder where python-version is declared to be 3.6.5 (e.g. fpgagraphlib)
+- (to check, type pyenv version)
+
+$ pip install networkx-metis
+
+- If PyPI release is still broken, install from source:
+
+$ git clone https://github.com/networkx/networkx-metis.git
+$ cd networkx-metis
+$ pyenv local 3.6.5
+$ python setup.py install
+
+
+util:
+
+$ git clone https://github.com/nakengelhardt/util.git ~/util
+
+$ echo 'export PYTHONPATH="$HOME/util:$PYTHONPATH"' >> ~/.bashrc

@@ -46,7 +46,7 @@ class Arbiter(Module):
         ]
 
     def gen_selfcheck(self, tb):
-        logger = logging.getLogger("simulation.arbiter" + str(self.pe_id))
+        logger = logging.getLogger("sim.arbiter" + str(self.pe_id))
         level = 0
         num_cycles = 0
 

@@ -53,7 +53,7 @@ class ScatterKernel(Module):
         ]
 
     def gen_selfcheck(self, tb):
-        logger = logging.getLogger("simulation.scatterkernel")
+        logger = logging.getLogger("sim.scatterkernel")
         num_pe = tb.config.addresslayout.num_pe
         pe_id = [s.scatterkernel for core in tb.cores for s in core.scatter].index(self)
         level = 0

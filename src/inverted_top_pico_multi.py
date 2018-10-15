@@ -109,7 +109,7 @@ class Core(Module):
         self.comb += self.deadlock.eq(reduce(or_, [pe.deadlock for pe in self.apply]))
 
     def gen_barrier_monitor(self, tb):
-        logger = logging.getLogger('simulation.barriermonitor')
+        logger = logging.getLogger('sim.barriermonitor')
         num_cycles = 0
         while not (yield tb.global_inactive):
             num_cycles += 1
@@ -176,7 +176,7 @@ class UnCore(Module):
         yield self.start.eq(1)
         while not (yield self.global_inactive):
             yield
-        logger = logging.getLogger('simulation.start')
+        logger = logging.getLogger('sim.start')
         logger.info("Total number of messages: {}".format((yield self.total_num_messages)))
         logger.info("Kernel error: {}".format((yield self.kernel_error)))
 

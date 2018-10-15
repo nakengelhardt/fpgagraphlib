@@ -280,7 +280,7 @@ class NeighborsHMC(Module):
         ]
 
     def gen_selfcheck(self, tb):
-        logger = logging.getLogger("simulation.get_neighbors" + str(self.pe_id))
+        logger = logging.getLogger("sim.get_neighbors" + str(self.pe_id))
         graph = tb.config.adj_dict
         to_be_sent = dict()
         level = 0
