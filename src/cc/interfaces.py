@@ -6,7 +6,7 @@ from migen.genlib.record import *
 
 ## message payload format (user-defined)
 
-payload_layout = [
+message_layout = update_layout = [
     ("color", "nodeidsize", DIR_M_TO_S)
 ]
 

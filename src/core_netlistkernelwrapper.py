@@ -106,6 +106,69 @@ class NetlistApplyKernelWrapper(Module):
         self.specials += Instance("{}_apply".format(config.name), **signals)
 
 
+class NetlistGatherApplyKernelWrapper(Module):
+    def __init__(self, config):
+        interfaces = import_module("{}.interfaces".format(config.name))
+
+        self.level_in = Signal(32)
+        self.nodeid_in = Signal(config.addresslayout.nodeidsize)
+        self.sender_in = Signal(config.addresslayout.nodeidsize)
+        self.message_in = Record(set_layout_parameters(interfaces.message_layout, **config.addresslayout.get_params()))
+        self.message_in_valid = Signal()
+        self.state_in = Record(set_layout_parameters(interfaces.node_storage_layout, **config.addresslayout.get_params()))
+        self.state_in_valid = Signal()
+        self.round_in = Signal(config.addresslayout.channel_bits)
+        self.barrier_in = Signal()
+        self.valid_in = Signal()
+        self.ready = Signal()
+
+        self.nodeid_out = Signal(config.addresslayout.nodeidsize)
+        self.state_out = Record(set_layout_parameters(interfaces.node_storage_layout, **config.addresslayout.get_params()))
+        self.state_valid = Signal()
+        self.state_barrier = Signal()
+        self.state_ack = Signal()
+
+        self.update_out = Record(set_layout_parameters(interfaces.update_layout, **config.addresslayout.get_params()))
+        self.update_sender = Signal(config.addresslayout.nodeidsize)
+        self.update_valid = Signal()
+        self.update_round = Signal(config.addresslayout.channel_bits)
+        self.barrier_out = Signal()
+        self.update_ack = Signal()
+
+        self.kernel_error = Signal()
+
+        signals = {}
+        signals["i_sys_clk"] = ClockSignal()
+        # signals["i_sys_rst"] = ResetSignal()
+
+        signals["i_level_in"] = self.level_in
+        signals["i_nodeid_in"] = self.nodeid_in
+        signals["i_sender_in"] = self.sender_in
+        _add_fields(signals, self.message_in, "i")
+        signals["i_message_in_valid"] = self.message_in_valid
+        _add_fields(signals, self.state_in, "i")
+        signals["i_state_in_valid"] = self.state_in_valid
+        signals["i_round_in"] = self.round_in
+        signals["i_barrier_in"] = self.barrier_in
+        signals["i_valid_in"] = self.valid_in
+        signals["o_ready"] = self.ready
+
+        signals["o_nodeid_out"] = self.nodeid_out
+        _add_fields(signals, self.state_out, "o")
+        signals["o_state_valid"] = self.state_valid
+        signals["o_state_barrier"] = self.state_barrier
+        signals["i_state_ack"] = self.state_ack
+
+        _add_fields(signals, self.update_out, "o")
+        signals["o_update_sender"] = self.update_sender
+        signals["o_update_valid"] = self.update_valid
+        signals["o_update_round"] = self.update_round
+        signals["o_barrier_out"] = self.barrier_out
+        signals["i_update_ack"] = self.update_ack
+        signals["o_kernel_error"] = self.kernel_error
+
+        self.specials += Instance("{}_gatherapply".format(config.name), **signals)
+
 class NetlistScatterKernelWrapper(Module):
     def __init__(self, config):
         interfaces = import_module("{}.interfaces".format(config.name))

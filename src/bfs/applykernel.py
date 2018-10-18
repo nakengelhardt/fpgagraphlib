@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 
-from bfs.interfaces import payload_layout, node_storage_layout
+from bfs.interfaces import *
 
 import logging
 
@@ -23,7 +23,7 @@ class ApplyKernel(Module):
         self.state_barrier = Signal()
         self.state_ack = Signal()
 
-        self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
         self.update_round = Signal(config.addresslayout.channel_bits)
@@ -41,7 +41,6 @@ class ApplyKernel(Module):
             self.state_valid.eq(self.valid_in & self.state_in_valid & self.update_ack),
             self.state_barrier.eq(self.barrier_in & self.valid_in),
 
-            self.update_out.dummy.eq(0),
             self.update_sender.eq(self.nodeid_in),
             self.update_round.eq(self.round_in),
             self.update_valid.eq(self.valid_in & ((self.state_in_valid & self.state_in.active) | self.barrier_in) & self.state_ack),
@@ -70,5 +69,5 @@ class ApplyKernel(Module):
                     num_messages_out += 1
                     logger.debug(str(num_cycles) + ": Node " + str((yield self.nodeid_out)) + " visited in round " + str(level) +". Parent: " + str((yield self.state_out.parent)))
             yield
-        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} messages sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
+        logger.info("PE {}: {} cycles taken for {} supersteps. {} messages received, {} updates sent.".format(pe_id, num_cycles, level, num_messages_in, num_messages_out))
         logger.info("Average throughput: In: {:.1f} cycles/message Out: {:.1f} cycles/message".format(num_cycles/num_messages_in if num_messages_in!=0 else 0, num_cycles/num_messages_out if num_messages_out!=0 else 0))

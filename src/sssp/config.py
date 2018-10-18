@@ -1,41 +1,39 @@
 from migen import *
 from tbsupport import *
+from core_config import *
 
-from core_address import AddressLayout
-from sssp.interfaces import node_storage_layout
+from sssp.interfaces import *
 from sssp.gatherkernel import GatherKernel
 from sssp.applykernel import ApplyKernel
 from sssp.scatterkernel import ScatterKernel
 
 import random
-import logging
 
-class Config:
-    def __init__(self, adj_dict, **kwargs):
+class Config(CoreConfig):
+    def __init__(self, graph, **kwargs):
         self.name = "sssp"
-
-        logger = logging.getLogger('config')
-
-        payloadsize = kwargs['nodeidsize']
-
-        self.addresslayout = AddressLayout(payloadsize=payloadsize, **kwargs)
-        self.addresslayout.edgedatasize = 8
-        self.addresslayout.node_storage_layout = set_layout_parameters(node_storage_layout, **self.addresslayout.get_params())
-
-        self.adj_dict = adj_dict
 
         self.gatherkernel = GatherKernel
         self.applykernel = ApplyKernel
         self.scatterkernel = ScatterKernel
 
-        init_root = 0
-        while not init_root in adj_dict:
-            init_root += 1
+        first_node = True
+        for node in graph:
+            graph.nodes[node]['parent'] = 0
+            if first_node:
+                graph.nodes[node]['dist'] = 0
+                graph.nodes[node]['active'] = 1
+            else:
+                graph.nodes[node]['dist'] = 255
+                graph.nodes[node]['active'] = 0
+            first_node = False
 
-        max_node = self.addresslayout.max_node_per_pe(adj_dict)
-        self.init_nodedata = [[convert_record_to_int(self.addresslayout.node_storage_layout, dist=(0 if self.addresslayout.global_adr(pe, node)==init_root else 2**self.addresslayout.edgedatasize - 1), parent=0, active=(1 if self.addresslayout.global_adr(pe, node)==init_root else 0)) for node in range(max_node[pe] + 1)] for pe in range(self.addresslayout.num_pe)]
+        for u,v in graph.edges():
+            graph.get_edge_data(u, v)['dist'] = random.randrange(1,10)
+            graph.get_edge_data(v, u)['dist'] = graph.get_edge_data(u, v)['dist']
 
-        self.has_edgedata = True
-
-        adj_idx, adj_val = self.addresslayout.generate_partition(adj_dict)
-        self.init_edgedata = [[random.randrange(1,10) for _ in range(len(adj_val[i]))] for i in range(self.addresslayout.num_pe)]
+        super().__init__(graph, node_storage_layout, update_layout, message_layout,
+            has_edgedata = True, # Does this algorithm associate data with edges? (Defaults to false.)
+            edge_storage_layout=edge_storage_layout, # Mandatory if has_edgedata is True.
+            edgedatasize = 8,
+            **kwargs)

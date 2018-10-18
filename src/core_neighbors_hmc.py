@@ -5,7 +5,7 @@ from migen.genlib.fifo import SyncFIFO
 import logging
 
 _data_layout = [
-    ("message", "payloadsize"),
+    ("message", "updatepayloadsize"),
     ("sender", "nodeidsize"),
     ("round", "channel_bits"),
     ("num_neighbors", "edgeidsize"),
@@ -23,7 +23,7 @@ class getAnswer(Module):
         self.tag_out = Signal(6)
         self.burst_out = Signal(128)
         self.burst_valid = Signal(2)
-        self.message_out = Signal(config.addresslayout.payloadsize)
+        self.message_out = Signal(config.addresslayout.updatepayloadsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
         self.round_out = Signal(config.addresslayout.channel_bits)
         self.num_neighbors_out = Signal(config.addresslayout.edgeidsize)
@@ -124,7 +124,7 @@ class NeighborsHMC(Module):
         end_node_idx = Signal(edgeidsize)
         last_neighbor = Signal()
 
-        message = Signal(config.addresslayout.payloadsize)
+        message = Signal(config.addresslayout.updatepayloadsize)
         sender = Signal(config.addresslayout.nodeidsize)
         roundpar = Signal(config.addresslayout.channel_bits)
         num_neighbors = Signal(edgeidsize)

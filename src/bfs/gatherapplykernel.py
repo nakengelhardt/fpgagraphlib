@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 
-from bfs.interfaces import payload_layout, node_storage_layout
+from bfs.interfaces import *
 
 import logging
 
@@ -12,7 +12,7 @@ class GatherApplyKernel(Module):
         self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.message_in = Record(set_layout_parameters(message_layout, **config.addresslayout.get_params()))
         self.message_in_valid = Signal()
         self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_in_valid = Signal()
@@ -27,7 +27,7 @@ class GatherApplyKernel(Module):
         self.state_valid = Signal()
         self.state_ack = Signal()
 
-        self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
         self.update_round = Signal(config.addresslayout.channel_bits)

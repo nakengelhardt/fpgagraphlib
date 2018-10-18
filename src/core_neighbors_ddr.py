@@ -8,7 +8,7 @@ from recordfifo import *
 from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 _data_layout = [
-    ("message", "payloadsize"),
+    ("message", "updatepayloadsize"),
     ("sender", "nodeidsize"),
     ("round", "channel_bits"),
     ("num_neighbors", "edgeidsize"),
@@ -69,7 +69,7 @@ class NeighborsDDR(Module):
         end_node_idx = Signal(edgeidsize)
         last_neighbor = Signal()
 
-        message = Signal(config.addresslayout.payloadsize)
+        message = Signal(config.addresslayout.updatepayloadsize)
         sender = Signal(config.addresslayout.nodeidsize)
         roundpar = Signal(config.addresslayout.channel_bits)
         num_neighbors = Signal(edgeidsize)

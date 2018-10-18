@@ -70,7 +70,7 @@ class Apply(Module):
         # rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
         dest_node_id = Signal(nodeidsize)
         sender = Signal(nodeidsize)
-        payload = Signal(addresslayout.payloadsize)
+        payload = Signal(addresslayout.messagepayloadsize)
         roundpar = Signal(config.addresslayout.channel_bits)
         valid = Signal()
         barrier = Signal()
@@ -87,7 +87,7 @@ class Apply(Module):
         ## Stage 2
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
-        payload2 = Signal(addresslayout.payloadsize)
+        payload2 = Signal(addresslayout.messagepayloadsize)
         roundpar2 = Signal(config.addresslayout.channel_bits)
         barrier2 = Signal()
         valid2 = Signal()
@@ -219,7 +219,7 @@ class Apply(Module):
         ( "barrier", 1, DIR_M_TO_S ),
         ( "roundpar", config.addresslayout.channel_bits, DIR_M_TO_S ),
         ( "sender", "nodeidsize", DIR_M_TO_S ),
-        ( "msg" , addresslayout.payloadsize, DIR_M_TO_S )
+        ( "msg" , addresslayout.updatepayloadsize, DIR_M_TO_S )
         ]
         outfifo_in = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
@@ -249,7 +249,7 @@ class Apply(Module):
             self.gatherapplykernel.update_ack.eq(self.outfifo.writable)
         ]
 
-        payload4 = Signal(addresslayout.payloadsize)
+        payload4 = Signal(addresslayout.updatepayloadsize)
         sender4 = Signal(addresslayout.nodeidsize)
         roundpar4 = Signal(config.addresslayout.channel_bits)
         barrier4 = Signal()

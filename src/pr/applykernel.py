@@ -2,7 +2,7 @@ from migen import *
 from migen.genlib.record import *
 from tbsupport import convert_32b_int_to_float, convert_int_to_record
 
-from pr.interfaces import payload_layout, node_storage_layout
+from pr.interfaces import *
 from faddsub import FAddSub
 from fmul import FMul
 
@@ -27,7 +27,7 @@ class ApplyKernel(Module):
         self.state_barrier = Signal()
         self.state_ack = Signal()
 
-        self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_valid = Signal()
         self.update_round = Signal(config.addresslayout.channel_bits)
@@ -40,7 +40,7 @@ class ApplyKernel(Module):
 
         # float constants
         const_base = Signal(floatsize)
-        self.comb += const_base.eq(config.addresslayout.const_base) # init to 0.15/num_nodes
+        self.comb += const_base.eq(config.const_base) # init to 0.15/num_nodes
         const_0_85 = Signal(floatsize)
         self.comb += const_0_85.eq(0x3f59999a)
 

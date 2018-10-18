@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 
-from cc.interfaces import payload_layout, node_storage_layout
+from cc.interfaces import *
 
 import logging
 
@@ -23,7 +23,7 @@ class ApplyKernel(Module):
         self.state_barrier = Signal()
         self.state_ack = Signal()
 
-        self.update_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.update_out = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.update_sender = Signal(nodeidsize)
         self.update_round = Signal(config.addresslayout.channel_bits)
         self.barrier_out = Signal()

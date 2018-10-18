@@ -2,7 +2,7 @@ from migen import *
 from migen.genlib.record import *
 from tbsupport import convert_32b_int_to_float, convert_int_to_record
 
-from pr.interfaces import payload_layout, node_storage_layout
+from pr.interfaces import *
 from faddsub import FAddSub
 from fmul import FMul
 
@@ -16,7 +16,7 @@ class GatherKernel(Module):
         self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.sender_in = Signal(nodeidsize)
-        self.message_in = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.message_in = Record(set_layout_parameters(message_layout, **config.addresslayout.get_params()))
         self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.valid_in = Signal()
         self.ready = Signal()

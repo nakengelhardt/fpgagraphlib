@@ -4,7 +4,7 @@ from migen import *
 
 ## message payload format
 
-payload_layout = [
+message_layout = update_layout = [
     ( "weight", "floatsize", DIR_M_TO_S )
 ]
 

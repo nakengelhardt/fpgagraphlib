@@ -11,7 +11,7 @@ _msg_layout = [
     ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "dest_id", "nodeidsize", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),
-    ( "payload", "payloadsize", DIR_M_TO_S )
+    ( "payload", "messagepayloadsize", DIR_M_TO_S )
 ]
 
 class Message(Record):
@@ -39,7 +39,7 @@ _scatter_layout = [
     ( "ack", 1, DIR_S_TO_M ),
     ( "roundpar", "channel_bits", DIR_M_TO_S ),
     ( "sender", "nodeidsize", DIR_M_TO_S ),
-    ( "payload", "payloadsize", DIR_M_TO_S )
+    ( "payload", "updatepayloadsize", DIR_M_TO_S )
 ]
 
 class ScatterInterface(Record):
@@ -50,7 +50,7 @@ _neighbor_in_layout = [
     ("start_idx", "edgeidsize", DIR_M_TO_S),
     ("num_neighbors", "edgeidsize", DIR_M_TO_S),
     ("sender", "nodeidsize", DIR_M_TO_S),
-    ("message", "payloadsize", DIR_M_TO_S),
+    ("message", "updatepayloadsize", DIR_M_TO_S),
     ("round", "channel_bits", DIR_M_TO_S),
     ("barrier", 1, DIR_M_TO_S),
     ("valid", 1, DIR_M_TO_S),
@@ -61,7 +61,7 @@ _neighbor_out_layout = [
     ("neighbor", "nodeidsize", DIR_M_TO_S),
     ("num_neighbors", "nodeidsize", DIR_M_TO_S),
     ("sender", "nodeidsize", DIR_M_TO_S),
-    ("message", "payloadsize", DIR_M_TO_S),
+    ("message", "updatepayloadsize", DIR_M_TO_S),
     ("round", "channel_bits", DIR_M_TO_S),
     ("barrier", 1, DIR_M_TO_S),
     ("valid", 1, DIR_M_TO_S),

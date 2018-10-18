@@ -65,7 +65,7 @@ class Apply(Module):
         # rename some signals for easier reading, separate barrier and normal valid (for writing to state mem)
         dest_node_id = Signal(nodeidsize)
         sender = Signal(nodeidsize)
-        payload = Signal(addresslayout.payloadsize)
+        payload = Signal(addresslayout.messagepayloadsize)
         roundpar = Signal(config.addresslayout.channel_bits)
         valid = Signal()
         barrier = Signal()
@@ -82,7 +82,7 @@ class Apply(Module):
         ## Stage 2
         dest_node_id2 = Signal(nodeidsize)
         sender2 = Signal(nodeidsize)
-        payload2 = Signal(addresslayout.payloadsize)
+        payload2 = Signal(addresslayout.messagepayloadsize)
         roundpar2 = Signal(config.addresslayout.channel_bits)
         barrier2 = Signal()
         valid2 = Signal()

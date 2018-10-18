@@ -68,7 +68,7 @@ class Scatter(Module):
         ]
 
         # keep input for next stage
-        scatter_msg1 = Signal(addresslayout.payloadsize)
+        scatter_msg1 = Signal(addresslayout.updatepayloadsize)
         scatter_sender1 = Signal(addresslayout.nodeidsize)
         scatter_round1 = Signal(config.addresslayout.channel_bits)
         scatter_msg_valid1 = Signal()

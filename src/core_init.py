@@ -36,13 +36,6 @@ def parse_cmd_args(args=None):
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
     return parser.parse_args(args)
 
-def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
-    max_pe = [0 for _ in range(num_pe)]
-    for node in adj_dict:
-        pe = node >> log2_int(num_nodes_per_pe)
-        max_pe[pe] += len(adj_dict[node])
-    return max(max_pe)
-
 def init_parse(args=None, inverted=False):
     args = parse_cmd_args(args)
 
@@ -116,7 +109,7 @@ def resolve_defaults(args, config, inverted):
         logger.addHandler(logfile)
 
     # root is set up, now get logger for local logging
-    logger = logging.getLogger('config')
+    logger = logging.getLogger('init')
 
     if args.seed:
         s = args.seed
@@ -189,80 +182,41 @@ def resolve_defaults(args, config, inverted):
         logger.info("Saving graph to file {}".format(args.graphsave))
         export_graph(g, args.graphsave)
 
-    use_hmc = kwargs["use_hmc"] if "use_hmc" in kwargs else False
-    use_ddr = kwargs["use_ddr"] if "use_ddr" in kwargs else False
+    if "use_hmc" not in kwargs:
+        kwargs["use_hmc"] = False
+    if "use_ddr" not in kwargs:
+        kwargs["use_ddr"] = False
+    if "updates_in_hmc" not in kwargs:
+        kwargs["updates_in_hmc"] = False
+
+    if kwargs["use_hmc"] and kwargs["updates_in_hmc"]:
+        raise NotImplementedError("Can't use HMC for edges in 2-phase mode")
+
     updates_in_hmc = kwargs["updates_in_hmc"] if "updates_in_hmc" in kwargs else False
 
-    if "num_nodes_per_pe" in kwargs:
-        logger.warning("No longer supporting setting num_nodes_per_pe manually! Value ignored.")
+    if "num_nodes_per_pe" in kwargs or "max_edges_per_pe" in kwargs:
+        logger.warning("Setting num_nodes_per_pe or max_edges_per_pe manually is no longer supported! Value ignored.")
 
     if 'partition' in config['graph'] and config['graph'].get('partition') == "metis":
+        kwargs["partition_use_metis"] = True
         if 'partition_ufactor' in config['graph']:
-            ufactor = config['graph'].getint('partition_ufactor')
+            kwargs["partition_ufactor"] = config['graph'].getint('partition_ufactor')
         else:
-            ufactor = 20
-        g, kwargs["num_nodes_per_pe"] = partition_metis(g, kwargs["num_pe"], ufactor=ufactor)
-    else:
-        g, kwargs["num_nodes_per_pe"] = partition_random(g, kwargs["num_pe"])
-
-    adj_dict = make_adj_dict(g)
-
-    if "max_edges_per_pe" not in kwargs:
-        if not use_ddr and not use_hmc:
-            kwargs["max_edges_per_pe"] = 2**bits_for(max_edges_per_pe(adj_dict, kwargs["num_pe"], kwargs["num_nodes_per_pe"]))
-        else:
-            kwargs["max_edges_per_pe"] = 2**bits_for(num_edges-1)
+            kwargs["partition_ufactor"] = 20
 
     if "peidsize" not in kwargs:
         kwargs["peidsize"] = bits_for(kwargs["num_pe"])
 
-    if "nodeidsize" not in kwargs:
-        kwargs["nodeidsize"] = kwargs["peidsize"] + log2_int(kwargs["num_nodes_per_pe"])
-
-    if "edgeidsize" not in kwargs:
-        if use_ddr:
-            kwargs["edgeidsize"] = 33
-        elif use_hmc:
-            kwargs["edgeidsize"] = 34
-        else:
-            kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
-
     algo_config_module = "{}.config".format(config['app']['algo'])
     algo = import_module(algo_config_module)
 
-    algo_config = algo.Config(adj_dict, **kwargs)
-    algo_config.graph = g
+    algo_config = algo.Config(g, **kwargs)
 
     if config['logging'].get('disable_logfile', fallback=False):
         algo_config.vcdname = None
     else:
         algo_config.vcdname = "{}_{}".format(log_file_basename, log_file_number)
 
-    algo_config.use_hmc = use_hmc
-    algo_config.use_ddr = use_ddr
-    algo_config.updates_in_hmc = updates_in_hmc
-    algo_config.inverted = inverted
-    if inverted:
-        if use_hmc:
-            assert not algo_config.has_edgedata
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat_inverted(adj_dict, edges_per_burst=4)
-        elif use_ddr:
-            assert not algo_config.has_edgedata
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat_inverted(adj_dict, edges_per_burst=16)
-        else:
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition_inverted(adj_dict)
-    else:
-        if use_hmc:
-            assert not algo_config.has_edgedata
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=4)
-        elif use_ddr:
-            assert not algo_config.has_edgedata
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition_flat(adj_dict, edges_per_burst=16)
-        else:
-            adj_idx, adj_val = algo_config.addresslayout.generate_partition(adj_dict)
-    algo_config.adj_idx = adj_idx
-    algo_config.adj_val = adj_val
-    algo_config.start_addr = (1<<34)
     algo_config.hmc_fifo_bits = 20 if args.command=='sim' else 32-bits_for(algo_config.addresslayout.num_pe-1)
 
     for pe in range(algo_config.addresslayout.num_pe):

@@ -1,13 +1,13 @@
 from migen import *
 from migen.genlib.record import *
 
-from bfs.interfaces import payload_layout
+from bfs.interfaces import *
 
 
 class ScatterKernel(Module):
     def __init__(self, config):
 
-        self.update_in = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.update_in = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
         self.num_neighbors_in = Signal(config.addresslayout.edgeidsize)
         self.neighbor_in = Signal(config.addresslayout.nodeidsize)
         self.sender_in = Signal(config.addresslayout.nodeidsize)
@@ -16,7 +16,7 @@ class ScatterKernel(Module):
         self.valid_in = Signal()
         self.ready = Signal()
 
-        self.message_out = Record(set_layout_parameters(payload_layout, **config.addresslayout.get_params()))
+        self.message_out = Record(set_layout_parameters(message_layout, **config.addresslayout.get_params()))
         self.neighbor_out = Signal(config.addresslayout.nodeidsize)
         self.sender_out = Signal(config.addresslayout.nodeidsize)
         self.round_out = Signal(config.addresslayout.channel_bits)
