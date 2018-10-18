@@ -67,7 +67,7 @@ def init_parse(args=None, inverted=False):
 class ANSIColorFormatter(logging.Formatter):
     LOG_COLORS = {
         "DEBUG"   : "\033[36m",
-        "INFO"    : "\033[37m",
+        "INFO"    : "\033[0m",
         "WARNING" : "\033[1;33m",
         "ERROR"   : "\033[1;31m",
         "CRITICAL": "\033[1;41m",

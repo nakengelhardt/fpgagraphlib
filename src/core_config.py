@@ -93,7 +93,6 @@ class CoreConfig:
             for localid in range(max_node[pe] + 1):
                 node = self.addresslayout.global_adr(pe, localid)
                 if node in graph:
-                    print(node, graph.nodes[node])
                     self.init_nodedata[pe][localid] = convert_record_to_int(self.addresslayout.node_storage_layout, **graph.nodes[node])
 
         if has_edgedata:
