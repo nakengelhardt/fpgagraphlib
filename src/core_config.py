@@ -99,7 +99,10 @@ class CoreConfig:
             self.init_edgedata = [[0 for _ in range(len(adj_val[i]))] for i in range(self.addresslayout.num_pe)]
             for pe in range(self.addresslayout.num_pe):
                 for localid, (idx, length) in enumerate(adj_idx[pe]):
-                    node = self.addresslayout.global_adr(pe, localid)
+                    if inverted:
+                        node = localid
+                    else:
+                        node = self.addresslayout.global_adr(pe, localid)
                     for offset in range(length):
                         neighbor = adj_val[pe][idx+offset]
                         self.init_edgedata[pe][idx+offset] = convert_record_to_int(self.addresslayout.edge_storage_layout, **graph.get_edge_data(node, neighbor))

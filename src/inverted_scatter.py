@@ -141,3 +141,10 @@ class Scatter(Module):
         ]
 
         self.comb += self.scatterkerneloutfifo.dout.connect(self.apply_interface)
+
+        self.total_num_messages = Signal(32)
+        self.sync += [
+            If(self.scatterkerneloutfifo.din.valid & self.scatterkerneloutfifo.din.ack,
+                self.total_num_messages.eq(self.total_num_messages + 1)
+            )
+        ]

@@ -201,7 +201,8 @@ class Top(Module):
                 for i in range(num_pe):
                     status_regs.extend([
                         # core.scatter[i].barrierdistributor.total_num_messages_in,
-                        # core.scatter[i].barrierdistributor.total_num_messages,
+                        core.scatter[i].get_neighbors.num_updates_accepted,
+                        core.scatter[i].get_neighbors.num_neighbors_issued,
                         core.apply[i].level,
                         #core.apply[i].gatherapplykernel.num_triangles,
                         core.scatter[i].get_neighbors.num_neighbors_issued,
@@ -315,12 +316,14 @@ def main():
     if args.command=='sim':
         logger.info("Starting Simulation")
         sim(config)
-    if args.command=='export':
+    elif args.command=='export':
         filename = "top.v"
         if args.output:
             filename = args.output
         logger.info("Exporting design to file {}".format(filename))
         export(config, filename=filename)
+    else:
+        logger.error("Command should be one of: sim export")
 
 if __name__ == '__main__':
     main()

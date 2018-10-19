@@ -82,13 +82,14 @@ def resolve_defaults(args, config, inverted):
     log_file_basename = "{}_{}_{}".format(config['logging'].get('log_file_name', fallback='fpgagraphlib'), config['app']['algo'], graphfile_basename)
 
     logger = logging.getLogger()
-    logger.setLevel(config['logging'].get('console_log_level', fallback='INFO'))
+    logger.setLevel("DEBUG")
     handler = logging.StreamHandler()
     formatter_args = {"fmt": "{levelname:.1s}: {name:>20.20s}: {message:s}", "style": "{"}
     if sys.stderr.isatty() and sys.platform != 'win32':
         handler.setFormatter(ANSIColorFormatter(**formatter_args))
     else:
         handler.setFormatter(logging.Formatter(**formatter_args))
+    handler.setLevel(config['logging'].get('console_log_level', fallback='INFO'))
     logger.addHandler(handler)
 
     log_file_number = 0
@@ -96,11 +97,12 @@ def resolve_defaults(args, config, inverted):
         log_file_number += 1
 
     if not config['logging'].get('disable_logfile', fallback=False):
-        logger.info("Logging to file {}_{}.log".format(log_file_basename, log_file_number))
+        file_log_level = config['logging'].get('file_log_level', fallback='DEBUG')
+        logger.info("Logging to file {}_{}.log with level {}".format(log_file_basename, log_file_number, file_log_level))
         # define a Handler which writes INFO messages or higher to the sys.stderr
         logfile = logging.FileHandler(filename="{}_{}.log".format(log_file_basename, log_file_number),
         mode='w')
-        logfile.setLevel(config['logging'].get('file_log_level', fallback='DEBUG'))
+        logfile.setLevel(file_log_level)
         # set a format which is simpler for console use
         formatter = logging.Formatter('%(levelname)-8s: %(name)-25s: %(message)s')
         # tell the handler to use this format
@@ -188,6 +190,8 @@ def resolve_defaults(args, config, inverted):
         kwargs["use_ddr"] = False
     if "updates_in_hmc" not in kwargs:
         kwargs["updates_in_hmc"] = False
+
+    kwargs["inverted"] = inverted
 
     if kwargs["use_hmc"] and kwargs["updates_in_hmc"]:
         raise NotImplementedError("Can't use HMC for edges in 2-phase mode")
