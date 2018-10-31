@@ -131,8 +131,7 @@ class Core(Module):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
             yield
 
-
-class UnCore(Module):
+class AllInOneUnCore(Module):
     def __init__(self, config):
         self.config = config
         num_pe = config.addresslayout.num_pe
@@ -195,14 +194,14 @@ class UnCore(Module):
                 netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
                 yield
 
-class Top(Module):
+class AllInOneTop(Module):
     def __init__(self, config):
-        self.submodules.uncore = UnCore(config)
+        self.submodules.uncore = AllInOneUnCore(config)
 
-        self.submodules += config.platform
+        self.submodules.platform = config.platform
 
         if not config.use_hmc:
-            for port in config.platform.picoHMCports:
+            for port in self.platform.picoHMCports:
                 for field, _, dir in port.layout:
                     if field != "clk" and dir == DIR_M_TO_S:
                         s = getattr(port, field)
@@ -210,7 +209,7 @@ class Top(Module):
 
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
-            port = config.platform.picoHMCports[i]
+            port = self.platform.picoHMCports[i]
             self.sync += [
                 If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
                 If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
@@ -278,7 +277,7 @@ class Top(Module):
             MultiReg(self.uncore.deadlock, deadlock_pico, odomain="bus")
         ]
 
-        self.bus = config.platform.getBus()
+        self.bus = self.platform.getBus()
 
         self.sync.bus += [
             If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
@@ -301,18 +300,163 @@ class Top(Module):
             )
         ]
 
-def export(config, filename='top.v'):
+
+
+
+class UnCore(Module):
+    def __init__(self, config, fpga_id):
+        self.submodules.cores = [Core(config, fpga_id)]
+
+        self.start = self.cores[0].start
+        self.done = self.cores[0].done
+        self.kernel_error = self.cores[0].kernel_error
+        self.deadlock = self.cores[0].deadlock
+        self.global_inactive = self.cores[0].global_inactive
+        self.total_num_messages = self.cores[0].total_num_messages
+        self.cycle_count = self.cores[0].cycle_count
+
+
+class Top(Module):
+    def __init__(self, config, fpga_id):
+        self.submodules.uncore = UnCore(config, fpga_id)
+
+        self.submodules.platform = config.platform[fpga_id]
+
+        if not config.use_hmc:
+            for port in self.platform.picoHMCports:
+                for field, _, dir in port.layout:
+                    if field != "clk" and dir == DIR_M_TO_S:
+                        s = getattr(port, field)
+                        self.comb += s.eq(0)
+
+        hmc_perf_counters = [Signal(32) for _ in range(2*9)]
+        for i in range(9):
+            port = self.platform.picoHMCports[i]
+            self.sync += [
+                If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
+                If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
+            ]
+
+        hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
+        for i in range(len(hmc_perf_counters)):
+            self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
+
+        if config.use_hmc:
+            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
+        else:
+            status_regs = []
+            for core in self.uncore.cores:
+                for i in range(config.addresslayout.num_pe_per_fpga):
+                    status_regs.extend([
+                        # core.scatter[i].barrierdistributor.total_num_messages_in,
+                        # core.scatter[i].barrierdistributor.total_num_messages,
+                        core.apply[i].level,
+                        #core.apply[i].gatherapplykernel.num_triangles,
+                        core.scatter[i].get_neighbors.num_neighbors_issued,
+                        #core.apply[i].outfifo.max_level,
+                        # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
+                        # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
+                        # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
+                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
+                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
+                        # *core.network.arbiter[i].barriercounter.num_from_pe,
+                        # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
+                        # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
+                        # core.network.arbiter[i].barriercounter.round_accepting
+                    ])
+
+        status_regs_pico = [Signal(32) for _ in status_regs]
+        for i in range(len(status_regs)):
+            self.specials += MultiReg(status_regs[i], status_regs_pico[i], odomain="bus")
+
+        cycle_count_pico = Signal(len(self.uncore.cycle_count))
+        self.specials += MultiReg(self.uncore.cycle_count, cycle_count_pico, odomain="bus")
+
+        total_num_messages_pico = Signal(len(self.uncore.total_num_messages))
+        self.specials += MultiReg(self.uncore.total_num_messages, total_num_messages_pico, odomain="bus")
+
+        start_pico = Signal()
+        start_pico.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(start_pico, self.uncore.start, odomain="sys")
+        ]
+
+        done_pico = Signal()
+        self.uncore.done.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(self.uncore.done, done_pico, odomain="bus")
+        ]
+
+        kernel_error_pico = Signal()
+        self.uncore.kernel_error.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(self.uncore.kernel_error, kernel_error_pico, odomain="bus")
+        ]
+
+        deadlock_pico = Signal()
+        self.uncore.deadlock.attr.add("no_retiming")
+        self.specials += [
+            MultiReg(self.uncore.deadlock, deadlock_pico, odomain="bus")
+        ]
+
+        self.bus = self.platform.getBus()
+
+        self.sync.bus += [
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
+                self.bus.PicoDataOut.eq(cycle_count_pico)
+            ),
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
+                self.bus.PicoDataOut.eq(Cat(done_pico, kernel_error_pico, deadlock_pico))
+            ),
+            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10008),
+                self.bus.PicoDataOut.eq(total_num_messages_pico)
+            ),
+            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i*4),
+                self.bus.PicoDataOut.eq(csr)
+            ) for i, csr in enumerate(hmc_perf_counters_pico)],
+            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
+                self.bus.PicoDataOut.eq(csr)
+            ) for i, csr in enumerate(status_regs_pico)],
+            If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
+                start_pico.eq(1)
+            )
+        ]
+
+def export_one(config, filename='top'):
+    logger = logging.getLogger('config')
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
 
     m = Top(config)
+    logger.info("Exporting design to file {}".format(filename + '.v'))
 
     so = dict(migen.build.xilinx.common.xilinx_special_overrides)
     verilog.convert(m,
-                    name="top",
+                    name=filename,
                     ios=config.platform.get_ios(),
                     special_overrides=so,
                     create_clock_domains=False
-                    ).write(filename)
+                    ).write(filename + '.v')
+    if config.use_hmc:
+        with open("adj_val.data", 'wb') as f:
+            for x in config.adj_val:
+                f.write(struct.pack('=I', x))
+
+def export(config, filename='top'):
+    logger = logging.getLogger('config')
+    config.platform = [PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+
+    m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
+
+    logger.info("Exporting design to files {0}[0-{1}]/{0}.v".format(filename, config.addresslayout.num_fpga - 1))
+
+    for i in range(config.addresslayout.num_fpga):
+        iname = filename + "_" + str(i)
+        os.makedirs(iname, exist_ok=True)
+        with cd(iname):
+            verilog.convert(m[i],
+                            name=filename,
+                            ios=config.platform[i].get_ios()
+                            ).write(filename + ".v")
     if config.use_hmc:
         with open("adj_val.data", 'wb') as f:
             for x in config.adj_val:
@@ -335,19 +479,26 @@ def sim(config):
 
 
 def main():
-    args, config = init_parse(inverted=True)
+    args, config = init_parse(inverted=True, cmd_choices=("sim", "export", "export_one"))
 
     logger = logging.getLogger('config')
 
     if args.command=='sim':
         logger.info("Starting Simulation")
         sim(config)
-    if args.command=='export':
-        filename = "top.v"
+    elif args.command=='export':
+        filename = "top"
         if args.output:
             filename = args.output
-        logger.info("Exporting design to file {}".format(filename))
         export(config, filename=filename)
+    elif args.command=='export_one':
+        filename = "top"
+        if args.output:
+            filename = args.output
+        export_one(config, filename=filename)
+    else:
+        logger.error("Unrecognized command")
+        raise NotImplementedError
 
 if __name__ == '__main__':
     main()

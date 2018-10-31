@@ -18,7 +18,7 @@ def read_config_files(configfiles='config.ini'):
     config.read(configfiles)
     return config
 
-def parse_cmd_args(args=None):
+def parse_cmd_args(args, cmd_choices):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('-c', '--config-file', dest='configfiles',
                         help='filename containing configuration options')
@@ -32,12 +32,12 @@ def parse_cmd_args(args=None):
     parser.add_argument('-s', '--seed', type=int,
                         help='seed to initialise random number generator')
     parser.add_argument('--save-graph', dest='graphsave', help='save graph to a file')
-    parser.add_argument('command', help="one of 'sim' or 'export'")
+    parser.add_argument('command', choices=cmd_choices, help="operation to perform")
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
     return parser.parse_args(args)
 
-def init_parse(args=None, inverted=False):
-    args = parse_cmd_args(args)
+def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
+    args = parse_cmd_args(args, cmd_choices)
 
     if args.configfiles:
         config = read_config_files(args.configfiles)
