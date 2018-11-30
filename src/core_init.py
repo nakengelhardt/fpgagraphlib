@@ -96,6 +96,8 @@ def resolve_defaults(args, config, inverted):
     while os.path.exists("{}_{}.log".format(log_file_basename, log_file_number)):
         log_file_number += 1
 
+    alt_adj_val_data_name = None
+
     if not config['logging'].get('disable_logfile', fallback=False):
         file_log_level = config['logging'].get('file_log_level', fallback='DEBUG')
         logger.info("Logging to file {}_{}.log with level {}".format(log_file_basename, log_file_number, file_log_level))
@@ -109,6 +111,8 @@ def resolve_defaults(args, config, inverted):
         logfile.setFormatter(formatter)
         # add the handler to the root logger
         logger.addHandler(logfile)
+
+        alt_adj_val_data_name = "{}_{}.data".format(log_file_basename, log_file_number)
 
     # root is set up, now get logger for local logging
     logger = logging.getLogger('init')
@@ -220,6 +224,8 @@ def resolve_defaults(args, config, inverted):
         algo_config.vcdname = None
     else:
         algo_config.vcdname = "{}_{}".format(log_file_basename, log_file_number)
+
+    algo_config.alt_adj_val_data_name = alt_adj_val_data_name
 
     algo_config.hmc_fifo_bits = 20 if args.command=='sim' else 32-bits_for(algo_config.addresslayout.num_pe-1)
 

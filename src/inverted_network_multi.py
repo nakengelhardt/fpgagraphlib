@@ -78,7 +78,7 @@ class RecipientFilter(Module):
         self.filter_origin_pe = local_pe_adr = Signal(config.addresslayout.peidsize)
         self.comb += [
             local_pe_adr.eq(config.addresslayout.pe_adr(self.fifo.dout.msg.sender) - fpga_id*config.addresslayout.num_pe_per_fpga),
-            self.fifo.dout.connect(self.apply_interface_out, omit={'valid', 'ack', 'dest_id'}),
+            self.fifo.dout.msg.connect(self.apply_interface_out.msg, omit={'dest_id'}),
             self.apply_interface_out.msg.dest_id.eq(self.fifo.dout.msg.dest_id - self.num_messages_filtered[local_pe_adr]),
             self.apply_interface_out.valid.eq(self.fifo.dout.valid & ~self.filter),
             self.fifo.dout.ack.eq(self.apply_interface_out.ack | self.filter)
@@ -199,3 +199,13 @@ class UpdateNetwork(Module):
         # detect end of computation
         self.inactive = Signal()
         self.comb += self.inactive.eq(reduce(and_, computation_end))
+
+        self.num_messages_to = [Signal(32) for _ in range(num_fpga - 1)]
+        self.sync += [ If(self.external_network_interface_out[i].valid & self.external_network_interface_out[i].ack,
+            self.num_messages_to[i].eq(self.num_messages_to[i] + 1)
+        ) for i in range(num_fpga - 1)]
+        
+        self.num_messages_from = [Signal(32) for _ in range(num_fpga - 1)]
+        self.sync += [ If(self.external_network_interface_in[i].valid & self.external_network_interface_in[i].ack,
+            self.num_messages_from[i].eq(self.num_messages_from[i] + 1)
+        ) for i in range(num_fpga - 1)]

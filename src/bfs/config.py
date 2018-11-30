@@ -10,6 +10,8 @@ from bfs.scatterkernel import ScatterKernel
 
 class Config(CoreConfig):
     def __init__(self, graph, **kwargs):
+        logger = logging.getLogger("config.bfs")
+
         self.name = "bfs"
 
         # self.gatherapplykernel = GatherApplyKernel
@@ -27,3 +29,7 @@ class Config(CoreConfig):
             first_node = False
 
         super().__init__(graph, node_storage_layout, update_layout, message_layout, **kwargs)
+
+        for node in self.graph:
+            if self.graph.nodes[node]['active']:
+                logger.info("Initial node: {}".format(node))

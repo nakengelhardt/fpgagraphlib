@@ -14,7 +14,7 @@ import logging
 class Config(CoreConfig):
     def __init__(self, graph, **kwargs):
         self.name = "pr"
-        self.total_pr_rounds = 10
+        self.total_pr_rounds = 30
 
         logger = logging.getLogger('config')
         logger.info("total_pr_rounds = {}".format(self.total_pr_rounds))

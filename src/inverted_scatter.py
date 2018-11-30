@@ -144,7 +144,7 @@ class Scatter(Module):
 
         self.total_num_messages = Signal(32)
         self.sync += [
-            If(self.scatterkerneloutfifo.din.valid & self.scatterkerneloutfifo.din.ack,
+            If(self.scatterkerneloutfifo.din.valid & self.scatterkerneloutfifo.din.ack & ~self.scatterkerneloutfifo.din.msg.barrier,
                 self.total_num_messages.eq(self.total_num_messages + 1)
             )
         ]

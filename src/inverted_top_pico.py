@@ -67,6 +67,11 @@ class Core(Module):
         self.deadlock = Signal()
         self.comb += self.deadlock.eq(reduce(or_, [pe.deadlock for pe in self.apply]))
 
+        self.total_num_messages = Signal(32)
+        self.comb += [
+            self.total_num_messages.eq(sum(s.total_num_messages for s in self.scatter))
+        ]
+
     def gen_barrier_monitor(self, tb):
         logger = logging.getLogger('sim.barriermonitor')
         num_pe = self.config.addresslayout.num_pe
@@ -138,10 +143,7 @@ class UnCore(Module):
             )
         ]
 
-        self.total_num_messages = Signal(32)
-        self.comb += [
-            self.total_num_messages.eq(sum(a.barrierdistributor.total_num_updates for a in self.cores[0].apply))
-        ]
+        self.total_num_messages = self.cores[0].total_num_messages
 
     def gen_simulation(self, tb):
         yield self.start.eq(1)
@@ -200,6 +202,7 @@ class Top(Module):
             for core in self.uncore.cores:
                 for i in range(num_pe):
                     status_regs.extend([
+                        core.apply[i].barrierdistributor.total_num_updates,
                         # core.scatter[i].barrierdistributor.total_num_messages_in,
                         core.scatter[i].get_neighbors.num_updates_accepted,
                         core.scatter[i].get_neighbors.num_neighbors_issued,

@@ -4,6 +4,7 @@ from migen.fhdl import verilog
 import migen.build.xilinx.common
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import *
+from migen.genlib.fifo import *
 
 import logging
 
@@ -36,7 +37,7 @@ class Core(Module):
 
         self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
 
-        self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
+        self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i-pe_start)) for i in range(pe_start, pe_end)]
 
         self.submodules.network = UpdateNetwork(config, fpga_id)
 
@@ -97,7 +98,7 @@ class Core(Module):
 
         self.total_num_messages = Signal(32)
         self.comb += [
-            self.total_num_messages.eq(sum(a.barrierdistributor.total_num_updates for a in self.apply))
+            self.total_num_messages.eq(sum(s.total_num_messages for s in self.scatter))
         ]
 
         # error reporting
@@ -226,21 +227,7 @@ class AllInOneTop(Module):
             for core in self.uncore.cores:
                 for i in range(config.addresslayout.num_pe_per_fpga):
                     status_regs.extend([
-                        # core.scatter[i].barrierdistributor.total_num_messages_in,
-                        # core.scatter[i].barrierdistributor.total_num_messages,
-                        core.apply[i].level,
-                        #core.apply[i].gatherapplykernel.num_triangles,
-                        core.scatter[i].get_neighbors.num_neighbors_issued,
-                        #core.apply[i].outfifo.max_level,
-                        # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
-                        # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
-                        # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
-                        # *core.network.arbiter[i].barriercounter.num_from_pe,
-                        # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
-                        # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
-                        # core.network.arbiter[i].barriercounter.round_accepting
+                        core.apply[i].level
                     ])
 
         status_regs_pico = [Signal(32) for _ in status_regs]
@@ -307,13 +294,82 @@ class UnCore(Module):
     def __init__(self, config, fpga_id):
         self.submodules.cores = [Core(config, fpga_id)]
 
-        self.start = self.cores[0].start
+        self.start = Signal()
+
         self.done = self.cores[0].done
         self.kernel_error = self.cores[0].kernel_error
         self.deadlock = self.cores[0].deadlock
         self.global_inactive = self.cores[0].global_inactive
         self.total_num_messages = self.cores[0].total_num_messages
         self.cycle_count = self.cores[0].cycle_count
+
+        self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        # self.out_fifo_in = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        # self.in_fifo_in = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        # self.out_fifo_out = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        # self.in_fifo_out = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+
+        msg_recvd_sys = Signal()
+        self.comb += self.cores[0].start.eq(self.start | msg_recvd_sys)
+
+        msg_len = len(self.cores[0].network.external_network_interface_out[0].msg.raw_bits())
+
+        self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+        self.submodules.out_fifo = [ClockDomainsRenamer({"write":"sys", "read":"stream"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+        # self.submodules.in_fifo = [ClockDomainsRenamer("stream")(SyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+        # self.submodules.out_fifo = [ClockDomainsRenamer("stream")(SyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+
+        rx_valids = []
+        for j in range(config.addresslayout.num_fpga - 1):
+            rx, tx = config.platform[fpga_id].getStreamPair()
+
+            assert msg_len <= len(tx.data)
+
+            self.comb += [
+                self.out_fifo[j].din.eq(self.cores[0].network.external_network_interface_out[j].msg.raw_bits()),
+                self.out_fifo[j].we.eq(self.cores[0].network.external_network_interface_out[j].valid),
+                self.cores[0].network.external_network_interface_out[j].ack.eq(self.out_fifo[j].writable),
+                tx.data.eq(self.out_fifo[j].dout),
+                tx.valid.eq(self.out_fifo[j].readable),
+                self.out_fifo[j].re.eq(tx.rdy),
+                self.in_fifo[j].din.eq(rx.data),
+                self.in_fifo[j].we.eq(rx.valid),
+                rx.rdy.eq(self.in_fifo[j].writable),
+                self.cores[0].network.external_network_interface_in[j].msg.raw_bits().eq(self.in_fifo[j].dout),
+                self.cores[0].network.external_network_interface_in[j].valid.eq(self.in_fifo[j].readable),
+                self.in_fifo[j].re.eq(self.cores[0].network.external_network_interface_in[j].ack)
+            ]
+
+            self.sync.stream += [
+                # If(self.in_fifo[j].readable & self.in_fifo[j].re,
+                #     self.in_fifo_out[j].eq(self.in_fifo_out[j] + 1)
+                # ),
+                # If(self.in_fifo[j].writable & self.in_fifo[j].we,
+                #     self.in_fifo_in[j].eq(self.in_fifo_in[j] + 1)
+                # ),
+                # If(self.out_fifo[j].readable & self.out_fifo[j].re,
+                #     self.out_fifo_out[j].eq(self.out_fifo_out[j] + 1)
+                # ),
+                # If(self.out_fifo[j].writable & self.out_fifo[j].we,
+                #     self.out_fifo_in[j].eq(self.out_fifo_in[j] + 1)
+                # ),
+                If(rx.rdy & rx.valid,
+                    self.num_messages_from[j].eq(self.num_messages_from[j] + 1)
+                ),
+                If(tx.rdy & tx.valid,
+                    self.num_messages_to[j].eq(self.num_messages_from[j] + 1)
+                )
+            ]
+
+            rx_valids.append(rx.valid)
+
+        msg_recvd = Signal()
+        self.sync.stream += If(reduce(or_, rx_valids),
+            msg_recvd.eq(1)
+        )
+        self.specials += MultiReg(msg_recvd, msg_recvd_sys, odomain="sys")
+
 
 
 class Top(Module):
@@ -341,29 +397,42 @@ class Top(Module):
         for i in range(len(hmc_perf_counters)):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
+        status_regs = []
+        for core in self.uncore.cores:
+            for i in range(config.addresslayout.num_pe_per_fpga):
+                status_regs.extend([
+                    core.apply[i].barrierdistributor.total_num_updates,
+                    # core.scatter[i].barrierdistributor.total_num_messages_in,
+                    # core.scatter[i].barrierdistributor.total_num_messages,
+                    core.apply[i].level,
+                    #core.apply[i].gatherapplykernel.num_triangles,
+                    # core.scatter[i].get_neighbors.num_updates_accepted,
+                    *core.network.num_messages_to,
+                    # *self.uncore.num_messages_to,
+                    # *self.uncore.num_messages_from,
+                    # *self.uncore.out_fifo_in,
+                    # *self.uncore.out_fifo_out,
+                    # *[f.level for f in self.uncore.out_fifo],
+                    # *[Cat(f.readable, f.re, f.writable, f.we) for f in self.uncore.out_fifo],
+                    *core.network.num_messages_from,
+                    # *self.uncore.in_fifo_in,
+                    # *self.uncore.in_fifo_out,
+                    # *[f.level for f in self.uncore.in_fifo],
+                    # *[Cat(f.readable, f.re, f.writable, f.we) for f in self.uncore.in_fifo],
+                    #core.apply[i].outfifo.max_level,
+                    # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
+                    # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
+                    # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
+                    # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
+                    # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
+                    # *core.network.bc[i].num_from_pe,
+                    # *core.network.bc[i].num_expected_from_pe,
+                    Cat(*core.network.bc[i].barrier_from_pe),
+                    core.network.bc[i].round_accepting
+                ])
         if config.use_hmc:
-            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
-        else:
-            status_regs = []
-            for core in self.uncore.cores:
-                for i in range(config.addresslayout.num_pe_per_fpga):
-                    status_regs.extend([
-                        # core.scatter[i].barrierdistributor.total_num_messages_in,
-                        # core.scatter[i].barrierdistributor.total_num_messages,
-                        core.apply[i].level,
-                        #core.apply[i].gatherapplykernel.num_triangles,
-                        core.scatter[i].get_neighbors.num_neighbors_issued,
-                        #core.apply[i].outfifo.max_level,
-                        # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
-                        # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
-                        # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
-                        # *core.network.arbiter[i].barriercounter.num_from_pe,
-                        # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
-                        # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
-                        # core.network.arbiter[i].barriercounter.round_accepting
-                    ])
+            status_regs.extend([sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)])
+        
 
         status_regs_pico = [Signal(32) for _ in status_regs]
         for i in range(len(status_regs)):
@@ -437,13 +506,12 @@ def export_one(config, filename='top'):
                     create_clock_domains=False
                     ).write(filename + '.v')
     if config.use_hmc:
-        with open("adj_val.data", 'wb') as f:
-            for x in config.adj_val:
-                f.write(struct.pack('=I', x))
+        export_data(config.adj_val, "adj_val.data")
+
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = [PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
 
     m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
 
@@ -458,13 +526,11 @@ def export(config, filename='top'):
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
     if config.use_hmc:
-        with open("adj_val.data", 'wb') as f:
-            for x in config.adj_val:
-                f.write(struct.pack('=I', x))
+        export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
     config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.use_hmc else []))
-    tb = UnCore(config)
+    tb = AllInOneUnCore(config)
     tb.submodules += config.platform
 
     generators = config.platform.getSimGenerators()

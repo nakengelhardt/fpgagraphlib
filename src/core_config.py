@@ -34,7 +34,7 @@ class CoreConfig:
         self.adj_dict = make_adj_dict(graph)
 
         if use_hmc or use_ddr:
-            kwargs["max_edges_per_pe"] = 2**bits_for(num_edges-1)
+            kwargs["max_edges_per_pe"] = 2**bits_for(len(graph.edges()))
         else:
             kwargs["max_edges_per_pe"] = 2**bits_for(max_edges_per_pe(self.adj_dict, kwargs["num_pe"], kwargs["num_nodes_per_pe"]))
 

@@ -124,7 +124,7 @@ class InterfaceFIFO(Module):
         self.din = Record(layout, name= (name + "_din") if name else None)
         self.dout = Record(layout, name= (name + "_dout") if name else None)
 
-        datalayout = [field for field in layout if (field != "valid") and (field != "ack")]
+        datalayout = [field for field in layout if (field[0] != "valid") and (field[0] != "ack")]
 
         self.width = layout_len(datalayout)
 
@@ -134,7 +134,7 @@ class InterfaceFIFO(Module):
             self.din.connect(self.fifo.din, omit={"valid", "ack"}),
             self.din.ack.eq(self.fifo.writable),
             self.fifo.we.eq(self.din.valid),
-            self.fifo.dout.connect(self.dout),
+            self.fifo.dout.connect(self.dout, omit={"valid", "ack"}),
             self.dout.valid.eq(self.fifo.readable),
             self.fifo.re.eq(self.dout.ack)
         ]

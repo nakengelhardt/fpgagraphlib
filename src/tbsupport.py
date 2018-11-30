@@ -92,3 +92,12 @@ def cd(newdir):
         yield
     finally:
         os.chdir(prevdir)
+
+def export_data(adj_val, filename, backup=None):
+   with open(filename, 'wb') as f1:
+    if backup:
+        f2 = open(backup, 'wb')
+    for x in adj_val:
+        f1.write(struct.pack('=I', x))
+        if backup:
+            f2.write(struct.pack('=I', x))
