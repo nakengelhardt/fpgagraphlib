@@ -159,48 +159,49 @@ class UnCore(Module):
         msg_recvd_sys = Signal()
         self.comb += self.cores[0].start.eq(self.start | msg_recvd_sys)
 
-        msg_len = len(self.cores[0].network.external_network_interface_out[0].msg.raw_bits())
+        if config.addresslayout.num_fpga > 1:
+            msg_len = len(self.cores[0].network.external_network_interface_out[0].msg.raw_bits())
 
-        self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
-        self.submodules.out_fifo = [ClockDomainsRenamer({"write":"sys", "read":"stream"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+            self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
+            self.submodules.out_fifo = [ClockDomainsRenamer({"write":"sys", "read":"stream"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
 
-        rx_valids = []
-        for j in range(config.addresslayout.num_fpga - 1):
-            rx, tx = config.platform[fpga_id].getStreamPair()
+            rx_valids = []
+            for j in range(config.addresslayout.num_fpga - 1):
+                rx, tx = config.platform[fpga_id].getStreamPair()
 
-            assert msg_len <= len(tx.data)
+                assert msg_len <= len(tx.data)
 
-            self.comb += [
-                self.out_fifo[j].din.eq(self.cores[0].network.external_network_interface_out[j].msg.raw_bits()),
-                self.out_fifo[j].we.eq(self.cores[0].network.external_network_interface_out[j].valid),
-                self.cores[0].network.external_network_interface_out[j].ack.eq(self.out_fifo[j].writable),
-                tx.data.eq(self.out_fifo[j].dout),
-                tx.valid.eq(self.out_fifo[j].readable),
-                self.out_fifo[j].re.eq(tx.rdy),
-                self.in_fifo[j].din.eq(rx.data),
-                self.in_fifo[j].we.eq(rx.valid),
-                rx.rdy.eq(self.in_fifo[j].writable),
-                self.cores[0].network.external_network_interface_in[j].msg.raw_bits().eq(self.in_fifo[j].dout),
-                self.cores[0].network.external_network_interface_in[j].valid.eq(self.in_fifo[j].readable),
-                self.in_fifo[j].re.eq(self.cores[0].network.external_network_interface_in[j].ack)
-            ]
+                self.comb += [
+                    self.out_fifo[j].din.eq(self.cores[0].network.external_network_interface_out[j].msg.raw_bits()),
+                    self.out_fifo[j].we.eq(self.cores[0].network.external_network_interface_out[j].valid),
+                    self.cores[0].network.external_network_interface_out[j].ack.eq(self.out_fifo[j].writable),
+                    tx.data.eq(self.out_fifo[j].dout),
+                    tx.valid.eq(self.out_fifo[j].readable),
+                    self.out_fifo[j].re.eq(tx.rdy),
+                    self.in_fifo[j].din.eq(rx.data),
+                    self.in_fifo[j].we.eq(rx.valid),
+                    rx.rdy.eq(self.in_fifo[j].writable),
+                    self.cores[0].network.external_network_interface_in[j].msg.raw_bits().eq(self.in_fifo[j].dout),
+                    self.cores[0].network.external_network_interface_in[j].valid.eq(self.in_fifo[j].readable),
+                    self.in_fifo[j].re.eq(self.cores[0].network.external_network_interface_in[j].ack)
+                ]
 
-            self.sync.stream += [
-                If(rx.rdy & rx.valid,
-                    self.num_messages_from[j].eq(self.num_messages_from[j] + 1)
-                ),
-                If(tx.rdy & tx.valid,
-                    self.num_messages_to[j].eq(self.num_messages_from[j] + 1)
-                )
-            ]
+                self.sync.stream += [
+                    If(rx.rdy & rx.valid,
+                        self.num_messages_from[j].eq(self.num_messages_from[j] + 1)
+                    ),
+                    If(tx.rdy & tx.valid,
+                        self.num_messages_to[j].eq(self.num_messages_from[j] + 1)
+                    )
+                ]
 
-            rx_valids.append(rx.valid)
+                rx_valids.append(rx.valid)
 
-        msg_recvd = Signal()
-        self.sync.stream += If(reduce(or_, rx_valids, 0),
-            msg_recvd.eq(1)
-        )
-        self.specials += MultiReg(msg_recvd, msg_recvd_sys, odomain="sys")
+            msg_recvd = Signal()
+            self.sync.stream += If(reduce(or_, rx_valids, 0),
+                msg_recvd.eq(1)
+            )
+            self.specials += MultiReg(msg_recvd, msg_recvd_sys, odomain="sys")
 
 class Top(Module):
     def __init__(self, config, fpga_id):
