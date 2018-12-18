@@ -432,7 +432,7 @@ class Top(Module):
                 ])
         if config.use_hmc:
             status_regs.extend([sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)])
-        
+
 
         status_regs_pico = [Signal(32) for _ in status_regs]
         for i in range(len(status_regs)):

@@ -76,7 +76,7 @@ class NeighborsHMC(Module):
         assert(edgeidsize <= 32)
 
         if not hmc_port:
-            hmc_port = config.platform.getHMCPort(pe_id)
+            hmc_port = config.platform.getHMCPort(pe_id % config.addresslayout.num_pe_per_fpga)
 
         self.hmc_port = hmc_port
         effective_max_tag_size = self.hmc_port.effective_max_tag_size

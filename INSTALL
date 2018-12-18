@@ -82,6 +82,8 @@ $ pip install networkx-metis
 
 - If PyPI release is still broken, install from source:
 
+( prerequisite: pip install cython )
+
 $ git clone https://github.com/networkx/networkx-metis.git
 $ cd networkx-metis
 $ pyenv local 3.6.5

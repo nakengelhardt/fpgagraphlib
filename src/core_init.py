@@ -44,9 +44,7 @@ def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
     else:
         config = read_config_files()
 
-    args, algo_config = resolve_defaults(args, config, inverted)
-
-
+    args, algo_config = extract_args(args, config, inverted)
 
     logger.info("Algorithm: " + algo_config.name)
     logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
@@ -77,8 +75,56 @@ class ANSIColorFormatter(logging.Formatter):
         color = self.LOG_COLORS.get(record.levelname, "")
         return "{}{}\033[0m".format(color, super().format(record))
 
-def resolve_defaults(args, config, inverted):
-    graphfile_basename = os.path.basename(args.graphfile if args.graphfile else config['graph'].get('graphfile') if 'graphfile' in config['graph'] else args.nodes if args.nodes else config['graph'].get('nodes')).split(".", 1)[0]
+def extract_args(args, config, inverted):
+    graphfile = None
+    num_nodes = None
+    num_edges = None
+    if args.graphfile:
+        graphfile = args.graphfile
+    elif args.nodes:
+        num_nodes = args.nodes
+        if args.edges:
+            num_edges = args.edges
+        else:
+            num_edges = num_nodes - 1
+
+    if args.graphsave:
+        graphsave = args.graphsave
+    else:
+        graphsave = None
+
+    if args.seed:
+        s = args.seed
+    elif 'seed' in config['graph']:
+        s = config['graph'].getint('seed')
+    else:
+        s = 42
+    random.seed(s)
+
+    algo_config = resolve_defaults(config, inverted=inverted, graphfile=graphfile, num_nodes=num_nodes, num_edges=num_edges, digraph=args.digraph, graphsave=graphsave, sim=(args.command == 'sim'))
+
+    return args, algo_config
+
+
+def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num_edges=None, digraph=False, graphsave=None, sim=True):
+    if not graphfile and not num_nodes:
+        if 'graphfile' in config['graph']:
+            graphfile = config['graph'].get('graphfile')
+        elif 'nodes' in config['graph']:
+            num_nodes = eval(config['graph'].get('nodes'))
+            if not num_edges:
+                if 'edges' in config['graph']:
+                    num_edges = eval(config['graph'].get('edges'))
+                else:
+                    num_edges = num_nodes - 1
+        else:
+            raise ValueError("Graph not specified")
+    if 'approach' in config['graph']:
+        approach = config['graph'].get('approach')
+    else:
+        approach = "random_walk"
+
+    graphfile_basename = os.path.splitext(os.path.basename(graphfile))[0] if graphfile else str(num_nodes)
     log_file_basename = "{}_{}_{}".format(config['logging'].get('log_file_name', fallback='fpgagraphlib'), config['app']['algo'], graphfile_basename)
 
     logger = logging.getLogger()
@@ -117,14 +163,6 @@ def resolve_defaults(args, config, inverted):
     # root is set up, now get logger for local logging
     logger = logging.getLogger('init')
 
-    if args.seed:
-        s = args.seed
-    elif 'seed' in config['graph']:
-        s = config['graph'].getint('seed')
-    else:
-        s = 42
-    random.seed(s)
-
     kwargs = dict()
     for k in config['arch']:
         kwargs[k] = eval(config['arch'].get(k))
@@ -149,44 +187,18 @@ def resolve_defaults(args, config, inverted):
     if "num_pe_per_fpga" not in kwargs:
         kwargs["num_pe_per_fpga"] = (kwargs["num_pe"] + kwargs["num_fpga"] - 1)//kwargs["num_fpga"]
 
-    graphfile = None
-    if args.graphfile:
-        graphfile = args.graphfile
-    elif args.nodes:
-        num_nodes = args.nodes
-        if args.edges:
-            num_edges = args.edges
-        else:
-            num_edges = num_nodes - 1
-        approach = "random_walk"
-    elif 'graphfile' in config['graph']:
-        graphfile = config['graph'].get('graphfile')
-    elif 'nodes' in config['graph']:
-        num_nodes = eval(config['graph'].get('nodes'))
-        if 'edges' in config['graph']:
-            num_edges = eval(config['graph'].get('edges'))
-        else:
-            num_edges = num_nodes - 1
-        if 'approach' in config['graph']:
-            approach = config['graph'].get('approach')
-        else:
-            approach = "random_walk"
-    else:
-        parser.print_help()
-        exit(-1)
-
     if graphfile:
         logger.info("Reading graph from file {}".format(graphfile))
-        g = read_graph(graphfile, digraph=args.digraph, connected=True)
+        g = read_graph(graphfile, digraph=digraph, connected=True)
         num_nodes = nx.number_of_nodes(g)
         num_edges = nx.number_of_edges(g)
     else:
         logger.info("Generating graph with {} nodes and {} edges".format(num_nodes, num_edges))
-        g = generate_graph(num_nodes, num_edges, approach=approach, digraph=args.digraph)
+        g = generate_graph(num_nodes, num_edges, approach=approach, digraph=digraph)
 
-    if args.graphsave:
-        logger.info("Saving graph to file {}".format(args.graphsave))
-        export_graph(g, args.graphsave)
+    if graphsave:
+        logger.info("Saving graph to file {}".format(graphsave))
+        export_graph(g, graphsave)
 
     if "use_hmc" not in kwargs:
         kwargs["use_hmc"] = False
@@ -227,7 +239,7 @@ def resolve_defaults(args, config, inverted):
 
     algo_config.alt_adj_val_data_name = alt_adj_val_data_name
 
-    algo_config.hmc_fifo_bits = 20 if args.command=='sim' else 32-bits_for(algo_config.addresslayout.num_pe-1)
+    algo_config.hmc_fifo_bits = 20 if sim else 32-bits_for(algo_config.addresslayout.num_pe-1)
 
     for pe in range(algo_config.addresslayout.num_pe):
         if not inverted:
@@ -236,4 +248,4 @@ def resolve_defaults(args, config, inverted):
         if not algo_config.use_hmc and not algo_config.use_ddr:
             assert len(algo_config.adj_val[pe]) <= algo_config.addresslayout.max_edges_per_pe
 
-    return args, algo_config
+    return algo_config
