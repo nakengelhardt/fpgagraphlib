@@ -150,7 +150,6 @@ class UnCore(Module):
         self.deadlock = self.cores[0].deadlock
         self.total_num_messages = self.cores[0].total_num_messages
         self.cycle_count = self.cores[0].cycle_count
-        self.start = self.cores[0].start
         self.done = self.cores[0].done
 
         self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
