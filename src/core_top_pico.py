@@ -151,14 +151,16 @@ class UnCore(Module):
         self.total_num_messages = self.cores[0].total_num_messages
         self.cycle_count = self.cores[0].cycle_count
         self.done = self.cores[0].done
-
-        self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
-        self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        self.start = Signal()
 
         msg_recvd_sys = Signal()
         self.comb += self.cores[0].start.eq(self.start | msg_recvd_sys)
 
         if config.addresslayout.num_fpga > 1:
+
+            self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+            self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        
             msg_len = len(self.cores[0].network.external_network_interface_out[0].msg.raw_bits())
 
             self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
