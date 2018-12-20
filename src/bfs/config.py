@@ -22,7 +22,7 @@ class Config(CoreConfig):
         first_node = True
         for node in graph:
             if first_node:
-                graph.nodes[node]['parent'] = 1
+                graph.nodes[node]['parent'] = node
             else:
                 graph.nodes[node]['parent'] = 0
             graph.nodes[node]['active'] = 1 if first_node else 0

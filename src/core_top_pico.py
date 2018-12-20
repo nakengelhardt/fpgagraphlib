@@ -234,11 +234,14 @@ class Top(Module):
         else:
             status_regs = []
 
+        # status_regs.extend(self.uncore.num_messages_from)
+        # status_regs.extend(self.uncore.num_messages_to)
+
         for core in self.uncore.cores:
             for i in range(config.addresslayout.num_pe_per_fpga):
                 status_regs.extend([
                     # core.scatter[i].barrierdistributor.total_num_messages_in,
-                    core.scatter[i].barrierdistributor.total_num_messages,
+                    # core.scatter[i].barrierdistributor.total_num_messages,
                     core.apply[i].level,
                     #core.apply[i].gatherapplykernel.num_triangles,
                     #core.scatter[i].get_neighbors.num_neighbors_issued,
@@ -350,7 +353,7 @@ class SimTB(Module):
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = [PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
 
     m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
 
