@@ -5,6 +5,7 @@ from graph_manage import *
 from core_address import AddressLayout
 
 import logging
+import datetime
 
 def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     max_pe = [0 for _ in range(num_pe)]
@@ -14,7 +15,7 @@ def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     return max(max_pe)
 
 class CoreConfig:
-    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition_use_metis=False, partition_ufactor=20, use_hmc=False, use_ddr=False, updates_in_hmc=False, inverted=False, **kwargs):
+    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition="random", partition_ufactor=1, use_hmc=False, use_ddr=False, updates_in_hmc=False, inverted=False, disable_filter=False, **kwargs):
 
         logger = logging.getLogger('init')
 
@@ -23,15 +24,26 @@ class CoreConfig:
         self.use_hmc = use_hmc
         self.use_ddr = use_ddr
         self.updates_in_hmc = updates_in_hmc
+        self.disable_filter = disable_filter
 
-        if partition_use_metis:
-            graph, num_nodes_per_pe = partition_metis(graph, kwargs["num_pe"], ufactor=partition_ufactor)
-        else:
+        logger.info("Partition: {}".format(partition))
+        if partition == "metis":
+            assert kwargs["num_fpga"] > 1
+            graph, num_nodes_per_pe = partition_metis(graph, kwargs["num_fpga"], kwargs["num_pe_per_fpga"], ufactor=partition_ufactor)
+        elif partition == "greedy":
+
+            graph, num_nodes_per_pe = partition_greedyedge(graph, kwargs["num_pe"])
+        elif partition == "random" or partition == "robin":
             graph, num_nodes_per_pe = partition_random(graph, kwargs["num_pe"])
-        kwargs["num_nodes_per_pe"] =num_nodes_per_pe
+        else:
+            logger.warning("Unrecognized partition option {} (options: metis, greedy, robin). Using roundrobin.".format(partition))
+            graph, num_nodes_per_pe = partition_random(graph, kwargs["num_pe"])
+        kwargs["num_nodes_per_pe"] = num_nodes_per_pe
 
         self.graph = graph
         self.adj_dict = make_adj_dict(graph)
+
+        self.graph.graph['partition'] = partition
 
         if use_hmc or use_ddr:
             kwargs["max_edges_per_pe"] = 2**bits_for(len(graph.edges()))
@@ -43,9 +55,9 @@ class CoreConfig:
 
         if "edgeidsize" not in kwargs:
             if use_ddr:
-                kwargs["edgeidsize"] = 33
+                kwargs["edgeidsize"] = 32
             elif use_hmc:
-                kwargs["edgeidsize"] = 34
+                kwargs["edgeidsize"] = 32
             else:
                 kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
 
@@ -106,3 +118,14 @@ class CoreConfig:
                     for offset in range(length):
                         neighbor = adj_val[pe][idx+offset]
                         self.init_edgedata[pe][idx+offset] = convert_record_to_int(self.addresslayout.edge_storage_layout, **graph.get_edge_data(node, neighbor))
+
+    def summary(self):
+        return "{}: {}inverted {} with {} using {} FPGA/{} PE dataset {} partition {}\n".format(
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "" if self.inverted else "non-",
+            self.name,
+            "DDR" if self.use_ddr else "HMC" if self.use_hmc else "BRAM",
+            self.addresslayout.num_fpga, self.addresslayout.num_pe,
+            self.graph.name,
+            self.graph.graph['partition']
+            )

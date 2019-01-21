@@ -31,6 +31,7 @@ def parse_cmd_args(args, cmd_choices):
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-s', '--seed', type=int,
                         help='seed to initialise random number generator')
+
     parser.add_argument('--save-graph', dest='graphsave', help='save graph to a file')
     parser.add_argument('command', choices=cmd_choices, help="operation to perform")
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
@@ -217,12 +218,15 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
     if "num_nodes_per_pe" in kwargs or "max_edges_per_pe" in kwargs:
         logger.warning("Setting num_nodes_per_pe or max_edges_per_pe manually is no longer supported! Value ignored.")
 
-    if 'partition' in config['graph'] and config['graph'].get('partition') == "metis":
-        kwargs["partition_use_metis"] = True
+    if 'partition' in config['graph']:
+        kwargs["partition"] = config['graph'].get('partition')
         if 'partition_ufactor' in config['graph']:
             kwargs["partition_ufactor"] = config['graph'].getint('partition_ufactor')
         else:
-            kwargs["partition_ufactor"] = 20
+            kwargs["partition_ufactor"] = 1
+    else:
+        kwargs["partition"] = "robin"
+        
 
     if "peidsize" not in kwargs:
         kwargs["peidsize"] = bits_for(kwargs["num_pe"])

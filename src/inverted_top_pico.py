@@ -6,6 +6,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import *
 
 import logging
+import subprocess
 
 from functools import reduce
 from operator import or_, and_

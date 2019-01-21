@@ -42,7 +42,7 @@ class Core(Module):
 
 
         if config.use_hmc:
-            self.submodules.scatter = [Scatter(i, config, hmc_port=config.platform[fpga_id].getHMCPort(i % config.addresslayout.num_pe_per_fpga)) for i in range(pe_start, pe_end)]
+            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i % config.addresslayout.num_pe_per_fpga)) for i in range(pe_start, pe_end)]
         else:
             self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
 
@@ -156,12 +156,12 @@ class UnCore(Module):
         msg_recvd_sys = Signal()
         self.comb += self.cores[0].start.eq(self.start | msg_recvd_sys)
 
-        if config.addresslayout.num_fpga > 1:
 
-            self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
-            self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
-        
-            msg_len = len(self.cores[0].network.external_network_interface_out[0].msg.raw_bits())
+        self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+        self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
+
+        if config.addresslayout.num_fpga > 1:        
+            msg_len = len(self.cores[0].network.external_network_interface_out[0].raw_bits())
 
             self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
             self.submodules.out_fifo = [ClockDomainsRenamer({"write":"sys", "read":"stream"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
@@ -173,7 +173,7 @@ class UnCore(Module):
                 assert msg_len <= len(tx.data)
 
                 self.comb += [
-                    self.out_fifo[j].din.eq(self.cores[0].network.external_network_interface_out[j].msg.raw_bits()),
+                    self.out_fifo[j].din.eq(self.cores[0].network.external_network_interface_out[j].raw_bits()),
                     self.out_fifo[j].we.eq(self.cores[0].network.external_network_interface_out[j].valid),
                     self.cores[0].network.external_network_interface_out[j].ack.eq(self.out_fifo[j].writable),
                     tx.data.eq(self.out_fifo[j].dout),
@@ -182,7 +182,7 @@ class UnCore(Module):
                     self.in_fifo[j].din.eq(rx.data),
                     self.in_fifo[j].we.eq(rx.valid),
                     rx.rdy.eq(self.in_fifo[j].writable),
-                    self.cores[0].network.external_network_interface_in[j].msg.raw_bits().eq(self.in_fifo[j].dout),
+                    self.cores[0].network.external_network_interface_in[j].raw_bits().eq(self.in_fifo[j].dout),
                     self.cores[0].network.external_network_interface_in[j].valid.eq(self.in_fifo[j].readable),
                     self.in_fifo[j].re.eq(self.cores[0].network.external_network_interface_in[j].ack)
                 ]
@@ -192,7 +192,7 @@ class UnCore(Module):
                         self.num_messages_from[j].eq(self.num_messages_from[j] + 1)
                     ),
                     If(tx.rdy & tx.valid,
-                        self.num_messages_to[j].eq(self.num_messages_from[j] + 1)
+                        self.num_messages_to[j].eq(self.num_messages_to[j] + 1)
                     )
                 ]
 
@@ -234,8 +234,8 @@ class Top(Module):
         else:
             status_regs = []
 
-        # status_regs.extend(self.uncore.num_messages_from)
-        # status_regs.extend(self.uncore.num_messages_to)
+        status_regs.extend(self.uncore.num_messages_from)
+        status_regs.extend(self.uncore.num_messages_to)
 
         for core in self.uncore.cores:
             for i in range(config.addresslayout.num_pe_per_fpga):
@@ -251,10 +251,10 @@ class Top(Module):
                     # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
                     # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
                     # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
-                    # *core.network.arbiter[i].barriercounter.num_from_pe,
-                    # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
-                    # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
-                    # core.network.arbiter[i].barriercounter.round_accepting
+                    *core.network.arbiter[i].barriercounter.num_from_pe,
+                    *core.network.arbiter[i].barriercounter.num_expected_from_pe,
+                    Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
+                    core.network.arbiter[i].barriercounter.round_accepting
                 ])
 
         status_regs_pico = [Signal(32) for _ in status_regs]

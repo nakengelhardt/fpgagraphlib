@@ -163,15 +163,20 @@ class UpdateNetwork(Module):
                 computation_end[i].eq(1)
             )
 
-        other_fpgas = [x for x in range(num_fpga)]
-        other_fpgas.remove(fpga_id)
-        for i in range(num_fpga - 1):
-            filter = RecipientFilter(config, fpga_id, other_fpgas[i])
-            self.submodules += filter
-            self.comb += [
-                self.ext_fifos[i].dout.connect(filter.apply_interface_in),
-                filter.apply_interface_out.connect(self.external_network_interface_out[i])
-            ]
+        if config.disable_filter:
+            self.comb += [self.ext_fifos[i].dout.connect(self.external_network_interface_out[i]) for i in range(num_fpga - 1)]
+        else:
+            # filter fpgas that don't have neighbors
+            other_fpgas = [x for x in range(num_fpga)]
+            other_fpgas.remove(fpga_id)
+            for i in range(num_fpga - 1):
+                filter = RecipientFilter(config, fpga_id, other_fpgas[i])
+                self.submodules += filter
+                self.comb += [
+                    self.ext_fifos[i].dout.connect(filter.apply_interface_in),
+                    filter.apply_interface_out.connect(self.external_network_interface_out[i])
+                ]
+
 
         # do switchover to next round
         network_round = Signal(config.addresslayout.channel_bits)

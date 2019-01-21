@@ -4,6 +4,7 @@ import nxmetis
 import random_connected_graph
 from migen import bits_for
 import logging
+import os
 
 logger = logging.getLogger('graph_generate')
 
@@ -16,6 +17,7 @@ def read_graph(path, digraph=False, connected=True):
             g.add_edge(v,u)
     if connected:
         make_connected(g, digraph=digraph)
+    g.name = os.path.basename(path)
     return g
 
 def find_cc(g):
@@ -58,6 +60,7 @@ def generate_graph(num_nodes, num_edges, approach="random_walk", digraph=False):
     nodes = list(range(1, num_nodes+1))
     graph = fn(nodes, num_edges, digraph=digraph)
     g = convert_graph(graph, digraph=digraph)
+    g.graph['name'] = "uni_{}V_{}E.graph".format(num_nodes, num_edges)
     return g
 
 def convert_graph(graph, digraph=False):
@@ -71,19 +74,14 @@ def convert_graph(graph, digraph=False):
     return g
 
 def export_graph(g, filename):
-    write_edgelist(g, filename, data=False)
+    nx.write_edgelist(g, filename, data=False)
 
-def partition_metis(g, pe, ufactor=20):
-    logger.debug("Dividing into {} partitions, ufactor: {}".format(pe, ufactor))
-    ug = g.to_undirected()
-    objval, parts = nxmetis.partition(ug, pe, options=nxmetis.MetisOptions(contig=False, ufactor=ufactor))
-    logger.debug("Edges crossing: {}, expected from random partition: {}".format(objval , nx.number_of_edges(ug)*(pe-1)/pe))
-    logger.debug("Improvement: {}x".format((nx.number_of_edges(ug)*(pe-1)/pe)/objval))
+
+def relabel_with_parts(g, parts):
     peid_offset = 1
     for part in parts:
         if peid_offset < bits_for(len(part)):
             peid_offset = bits_for(len(part))
-
     relabel_d = {}
     for i, part in enumerate(parts):
         for j, n in enumerate(part):
@@ -96,6 +94,21 @@ def partition_metis(g, pe, ufactor=20):
     g = nx.relabel_nodes(g, relabel_d)
     log_stats(g)
     return g, 2**peid_offset
+
+def partition_metis(g, fpga, pe, ufactor=1):
+    logger.debug("Dividing into {} partitions, ufactor: {}".format(fpga, ufactor))
+    ug = g.to_undirected()
+    for node in ug.nodes():
+        ug.nodes[node]['weight'] = ug.degree(node)
+    objval, fpgaparts = nxmetis.partition(ug, fpga, options=nxmetis.MetisOptions(contig=False, ufactor=ufactor))
+    logger.debug("Edges crossing: {} , expected from random partition: {}".format(objval , nx.number_of_edges(ug)*(fpga-1)/fpga))
+    logger.debug("Improvement: {}x".format((nx.number_of_edges(ug)*(fpga-1)/fpga)/objval))
+
+    parts = []
+    for part in fpgaparts:
+        parts.extend(_partition_greedy(g, pe, part))
+
+    return relabel_with_parts(g, parts)
 
 def partition_random(g, pe):
     num_nodes = nx.number_of_nodes(g)
@@ -115,22 +128,52 @@ def partition_random(g, pe):
     log_stats(g)
     return g, 2**peid_offset
 
+def _partition_greedy(g, pe, nodes):
+    parts = [[] for _ in range(pe)]
+    edge_len = [0 for _ in range(pe)]
+    for n in nodes:
+        idx = 0
+        min_len = edge_len[0]
+        for i in range(1,pe):
+            if edge_len[i] < min_len:
+                min_len = edge_len[i]
+                idx = i
+        
+        parts[idx].append(n)
+        edge_len[idx] += g.degree(n) 
+    return parts
+
+def partition_greedyedge(g, pe):
+    parts = _partition_greedy(g, pe, g.nodes())
+    return relabel_with_parts(g, parts)
+
 def make_adj_dict(g):
     d = {}
     for node in g:
         d[node] = list(g.successors(node))
     return d
 
+def print_balance(g, pe, num_nodes_per_pe):
+    vertices = [0 for _ in range(pe)]
+    edges = [0 for _ in range(pe)]
+    for n in g.nodes():
+        pe = n//num_nodes_per_pe
+        vertices[pe] += 1
+        edges[pe] += g.degree(n)
+    print("Vertices per PE: ", vertices)
+    print("Edges per PE", edges)
+
 def print_stats(g):
     print(nx.info(g))
+
     if nx.number_of_nodes(g) < 30:
-        print("Nodes: ", sorted(g.nodes(data=True)))
+        print("Vertices: ", sorted(g.nodes(data=True)))
         print("Edges: ", sorted(g.edges()))
 
 def log_stats(g):
     logger.debug(nx.info(g))
     if nx.number_of_nodes(g) < 30:
-        logger.debug("Nodes: {}".format(sorted(g.nodes(data=True))))
+        logger.debug("Vertices: {}".format(sorted(g.nodes(data=True))))
         logger.debug("Edges: {}".format(sorted(g.edges())))
 
 def main():
@@ -138,15 +181,23 @@ def main():
     parser.add_argument('graphfile', help='filename containing graph')
     parser.add_argument('-d', '--digraph', action="store_true", help='graph is directed (default is undirected)')
     parser.add_argument('-u', '--unconnected', action="store_false", help='do not force graph to be connected (by default an edge from first encountered node to all unreachable nodes is added)')
-    parser.add_argument('-b', '--balance', type=int, default=50, help='ufactor for balancing (imbalance may not exceed (1+b)/1000)')
-    parser.add_argument('-n', '--nparts', type=int, default=4, help='number of partitions')
+    parser.add_argument('-b', '--balance', type=int, default=1, help='ufactor for balancing (imbalance may not exceed (1+b)/1000)')
+    parser.add_argument('-n', '--nparts', type=int, default=4, help='number of FPGAs')
+    parser.add_argument('-p', '--pe', type=int, default=8, help='number of PEs per FPGA')
     parser.add_argument('-m', '--metis', action="store_true", help='use metis for partitioning (default is random)')
+    parser.add_argument('-g', '--greedy', action="store_true", help='use greedy for partitioning (default is random)')
     args = parser.parse_args()
+    logging.basicConfig(level=logging.DEBUG)
 
     g = read_graph(args.graphfile, digraph=args.digraph, connected=args.unconnected)
-    pe = args.nparts
+    pe = args.pe
     if args.metis:
-        partition_metis(g, pe, args.balance)
+        fpga = args.nparts
+        g, num_nodes_per_pe = partition_metis(g, fpga, pe, args.balance)
+        print_balance(g, pe*fpga, num_nodes_per_pe)
+    elif args.greedy:
+        g, num_nodes_per_pe = partition_greedyedge(g, pe)
+        print_balance(g, pe, num_nodes_per_pe)
     else:
         partition_random(g, pe)
     print_stats(g)
