@@ -286,7 +286,7 @@ class Apply(Module):
                 p = "{} (origin={}): ".format(vertexid, tb.config.graph.node[vertexid]["origin"])
                 state = convert_int_to_record((yield self.mem[node]), tb.config.addresslayout.node_storage_layout)
                 p += str(state)
-                if node < 32:
+                if vertexid < 32:
                     logger.info(p)
                 else:
                     logger.debug(p)
