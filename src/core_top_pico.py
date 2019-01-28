@@ -211,11 +211,12 @@ class Top(Module):
         self.submodules.platform = config.platform[fpga_id]
 
         if not config.use_hmc:
-            for port in self.platform.picoHMCports:
-                for field, _, dir in port.layout:
-                    if field != "clk" and dir == DIR_M_TO_S:
-                        s = getattr(port, field)
-                        self.comb += s.eq(0)
+            # for port in self.platform.picoHMCports:
+            port = self.platform.HMCports[0]
+            for field, _, dir in port.layout:
+                if field != "clk" and dir == DIR_M_TO_S:
+                    s = getattr(port, field)
+                    self.comb += s.eq(0)
 
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
@@ -353,7 +354,7 @@ class SimTB(Module):
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga if config.use_hmc else 1, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
 
     m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
 
@@ -368,12 +369,10 @@ def export(config, filename='top'):
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
     if config.use_hmc:
-        with open("adj_val.data", 'wb') as f:
-            for x in config.adj_val:
-                f.write(struct.pack('=I', x))
+        export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = [PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128, init=(config.adj_val if config.use_hmc else []))]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, stream_width=128, init=(config.adj_val if config.use_hmc else []))]
     tb = SimTB(config)
     tb.submodules += config.platform
 
