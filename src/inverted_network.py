@@ -45,25 +45,28 @@ class UpdateNetwork(Module):
             self.srr.current_round.eq(self.bc.round_accepting)
         ]
 
+        out_fifos = [InterfaceFIFO(layout=l.layout, depth=32) for l in self.scatter_interface_out]
+
+        self.comb += [out_fifos[i].dout.connect(self.scatter_interface_out[i]) for i in range(num_pe)]
+
         transaction_ok = Signal()
         computation_end = Signal()
         self.inactive = Signal()
 
         self.comb += [
             computation_end.eq(self.bc.apply_interface_out.valid & self.bc.apply_interface_out.msg.barrier & self.bc.apply_interface_out.msg.halt),
-            transaction_ok.eq(reduce(and_, [s.ack for s in self.scatter_interface_out])),
+            transaction_ok.eq(reduce(and_, [s.din.ack for s in out_fifos])),
             self.bc.apply_interface_out.ack.eq(transaction_ok | computation_end)
         ]
 
         for i in range(num_pe):
             self.comb += [
-                self.scatter_interface_out[i].barrier.eq(self.bc.apply_interface_out.msg.barrier),
-                self.scatter_interface_out[i].roundpar.eq(self.bc.apply_interface_out.msg.roundpar),
-                self.scatter_interface_out[i].sender.eq(self.bc.apply_interface_out.msg.sender),
-                self.scatter_interface_out[i].payload.eq(self.bc.apply_interface_out.msg.payload),
-                self.scatter_interface_out[i].valid.eq(self.bc.apply_interface_out.valid & transaction_ok & ~computation_end),
+                out_fifos[i].din.barrier.eq(self.bc.apply_interface_out.msg.barrier),
+                out_fifos[i].din.roundpar.eq(self.bc.apply_interface_out.msg.roundpar),
+                out_fifos[i].din.sender.eq(self.bc.apply_interface_out.msg.sender),
+                out_fifos[i].din.payload.eq(self.bc.apply_interface_out.msg.payload),
+                out_fifos[i].din.valid.eq(self.bc.apply_interface_out.valid & transaction_ok & ~computation_end),
             ]
-
 
         self.sync += If(self.bc.apply_interface_out.valid & computation_end,
             self.inactive.eq(1)
