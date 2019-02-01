@@ -46,6 +46,7 @@ class UpdateNetwork(Module):
         ]
 
         out_fifos = [InterfaceFIFO(layout=l.layout, depth=32) for l in self.scatter_interface_out]
+        self.submodules += out_fifos
 
         self.comb += [out_fifos[i].dout.connect(self.scatter_interface_out[i]) for i in range(num_pe)]
 
