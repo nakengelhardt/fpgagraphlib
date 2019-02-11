@@ -5,7 +5,7 @@ from migen import *
 ## message payload format
 
 message_layout = update_layout = [
-    ( "weight", "floatsize", DIR_M_TO_S )
+    ( "rank", "floatsize", DIR_M_TO_S )
 ]
 
 ## node storage

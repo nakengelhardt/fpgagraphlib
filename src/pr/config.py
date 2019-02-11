@@ -29,7 +29,9 @@ class Config(CoreConfig):
         for node in graph:
             graph.nodes[node]['nneighbors'] = len(graph[node])
             graph.nodes[node]['nrecvd'] = graph.nodes[node]['nneighbors']
-            graph.nodes[node]['sum'] = self.const_base
+            graph.nodes[node]['sum'] = convert_float_to_32b_int(0.85/graph.number_of_nodes())
+            # the apply phase performs (1-d)/N + d * sum
+            # initial PR in first round should be 1/N; therefore sum must be initialized to d/N
             graph.nodes[node]['active'] = 1
 
         super().__init__(graph, node_storage_layout, update_layout, message_layout,

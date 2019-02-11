@@ -9,10 +9,15 @@ from fmul import FMul
 import logging
 
 class ApplyKernel(Module):
+    # PageRank formula:
+    # PR_(i+1)(u) = (1-d)/N + d * sum(PR_i(v)/degree(v) for v in neighbors(u))
+    # the apply phase performs (1-d)/N + d * sum
+    # initial PR in first round should be 1/N; therefore sum must be initialized to d/N
     def __init__(self, config):
         nodeidsize = config.addresslayout.nodeidsize
         floatsize = config.addresslayout.floatsize
 
+        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_in_valid = Signal()
@@ -66,26 +71,29 @@ class ApplyKernel(Module):
         dyn_rank = Signal(floatsize)
         dyn_rank_valid = Signal()
 
+        send_update = Signal()
+
         self.submodules.mul = FMul()
 
         self.comb += [
+            send_update.eq(self.state_in.active & (self.level_in < config.total_pr_rounds)),
             self.mul.a.eq(self.state_in.sum),
             self.mul.b.eq(const_0_85),
-            self.mul.valid_i.eq(self.valid_in & (self.state_in.active | self.barrier_in)),
+            self.mul.valid_i.eq(self.valid_in & (send_update | self.barrier_in)),
             dyn_rank.eq(self.mul.r),
             dyn_rank_valid.eq(self.mul.valid_o),
             self.mul.ce.eq(self.ready)
         ]
 
-        self.submodules.add2 = FAddSub()
+        self.submodules.add = FAddSub()
 
         self.comb += [
-            self.add2.a.eq(const_base),
-            self.add2.b.eq(dyn_rank),
-            self.add2.valid_i.eq(dyn_rank_valid),
-            self.update_out.weight.eq(self.add2.r),
-            self.update_valid.eq(self.add2.valid_o),
-            self.add2.ce.eq(self.ready)
+            self.add.a.eq(const_base),
+            self.add.b.eq(dyn_rank),
+            self.add.valid_i.eq(dyn_rank_valid),
+            self.update_out.rank.eq(self.add.r),
+            self.update_valid.eq(self.add.valid_o),
+            self.add.ce.eq(self.ready)
         ]
 
         m_sender = [Signal(nodeidsize) for _ in range(10)]
@@ -133,7 +141,7 @@ class ApplyKernel(Module):
                     out_level += 1
                 else:
                     num_messages_out += 1
-                    logger.debug("{}: Node {} updated in round {}. New weight: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.weight))))
+                    logger.debug("{}: Node {} updated in round {}. New rank: {}".format(num_cycles, (yield self.update_sender), out_level, convert_32b_int_to_float((yield self.update_out.rank))))
                     if out_level >= tb.config.total_pr_rounds:
                         logger.warning("{}: message sent after inactivity level reached".format(num_cycles))
             if (yield self.valid_in) and (yield self.ready):

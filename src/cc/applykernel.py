@@ -9,6 +9,7 @@ class ApplyKernel(Module):
     def __init__(self, config):
         nodeidsize = config.addresslayout.nodeidsize
 
+        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.state_in = Record(set_layout_parameters(node_storage_layout, **config.addresslayout.get_params()))
         self.state_in_valid = Signal()

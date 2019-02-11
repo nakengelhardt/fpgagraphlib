@@ -37,7 +37,7 @@ class GatherApplyWrapper(Module):
 
 
         self.comb += [
-            self.gatherkernel.level_in.eq(self.level_in),
+
             self.gatherkernel.nodeid_in.eq(self.nodeid_in),
             self.gatherkernel.sender_in.eq(self.sender_in),
             self.gatherkernel.message_in.eq(self.message_in),
@@ -45,6 +45,7 @@ class GatherApplyWrapper(Module):
             self.gatherkernel.valid_in.eq(self.valid_in & self.message_in_valid & self.state_in_valid),
             self.gatherkernel.state_ack.eq(self.state_ack),
 
+            self.applykernel.level_in.eq(self.level_in),
             self.applykernel.nodeid_in.eq(self.nodeid_in),
             self.applykernel.state_in.eq(self.state_in),
             self.applykernel.state_in_valid.eq(self.state_in_valid),

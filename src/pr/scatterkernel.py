@@ -6,6 +6,9 @@ from fidiv import FloatIntDivider
 
 
 class ScatterKernel(Module):
+    # PageRank formula:
+    # PR_(i+1)(u) = (1-d)/N + d * sum(PR_i(v)/degree(v) for v in neighbors(u))
+    # the scatter phase performs PR_i(v)/degree(v)
     def __init__(self, config):
 
         self.update_in = Record(set_layout_parameters(update_layout, **config.addresslayout.get_params()))
@@ -30,10 +33,10 @@ class ScatterKernel(Module):
         self.submodules.divider = FloatIntDivider()
 
         self.comb += [
-            self.divider.dividend_i.eq(self.update_in.weight),
+            self.divider.dividend_i.eq(self.update_in.rank),
             self.divider.divisor_i.eq(self.num_neighbors_in),
             self.divider.valid_i.eq(self.valid_in),
-            self.message_out.weight.eq(self.divider.quotient_o),
+            self.message_out.rank.eq(self.divider.quotient_o),
             self.valid_out.eq(self.divider.valid_o),
             self.divider.ce.eq(self.message_ack),
             self.ready.eq(self.message_ack)

@@ -9,7 +9,6 @@ class GatherKernel(Module):
     def __init__(self, config):
         nodeidsize = config.addresslayout.nodeidsize
 
-        self.level_in = Signal(32)
         self.nodeid_in = Signal(nodeidsize)
         self.sender_in = Signal(nodeidsize)
         self.message_in = Record(set_layout_parameters(message_layout, **config.addresslayout.get_params()))
