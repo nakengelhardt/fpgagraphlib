@@ -78,6 +78,5 @@ void Network::putMessageAt(int i, Message* message) {
 }
 
 Message* Network::getMessageAt(int i) {
-    tick();
     return arbiter[i]->getMessage();
 }

@@ -5,7 +5,7 @@
 #include <cstddef>
 
 struct VertexEntry {
-    int id;
+    vertexid_t id;
     bool in_use;
     VertexData data;
 };

@@ -138,9 +138,8 @@ def _partition_greedy(g, pe, nodes):
             if edge_len[i] < min_len:
                 min_len = edge_len[i]
                 idx = i
-        
         parts[idx].append(n)
-        edge_len[idx] += g.degree(n) 
+        edge_len[idx] += g.degree(n)
     return parts
 
 def partition_greedyedge(g, pe):
@@ -175,5 +174,3 @@ def log_stats(g):
     if nx.number_of_nodes(g) < 30:
         logger.debug("Vertices: {}".format(sorted(g.nodes(data=True))))
         logger.debug("Edges: {}".format(sorted(g.edges())))
-
-

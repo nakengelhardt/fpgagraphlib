@@ -1,6 +1,6 @@
 #include "scatterkernel.h"
 
-void ScatterKernel::setInput(ScatterKernelInput input){
+void ScatterKernel::setInput(Update* update, edge_t edge, vertexid_t num_neighbors){
 
 }
 

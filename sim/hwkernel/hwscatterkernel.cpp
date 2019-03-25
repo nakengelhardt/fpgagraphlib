@@ -32,7 +32,7 @@ Message* HWScatterKernel::tick() {
         scatter_hw->round_in = input.update->roundpar;
         scatter_hw->barrier_in = input.update->barrier;
     	scatter_hw->valid_in = !input.update->barrier;
-        setInput(input);
+        setInput(input.update, input.edge, input.num_neighbors);
     }
 
     if (scatter_hw->ready && (scatter_hw->valid_in || scatter_hw->barrier_in)) {

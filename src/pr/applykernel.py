@@ -68,20 +68,14 @@ class ApplyKernel(Module):
         # Second part: If at end, then multiply by 0.85 and add to const_base and send as message
         # 6 + 4 cycles latency
 
-        dyn_rank = Signal(floatsize)
-        dyn_rank_valid = Signal()
-
-        send_update = Signal()
+        send_update = self.state_in.active & (self.level_in < config.total_pr_rounds)
 
         self.submodules.mul = FMul()
 
         self.comb += [
-            send_update.eq(self.state_in.active & (self.level_in < config.total_pr_rounds)),
             self.mul.a.eq(self.state_in.sum),
             self.mul.b.eq(const_0_85),
             self.mul.valid_i.eq(self.valid_in & (send_update | self.barrier_in)),
-            dyn_rank.eq(self.mul.r),
-            dyn_rank_valid.eq(self.mul.valid_o),
             self.mul.ce.eq(self.ready)
         ]
 
@@ -89,10 +83,10 @@ class ApplyKernel(Module):
 
         self.comb += [
             self.add.a.eq(const_base),
-            self.add.b.eq(dyn_rank),
-            self.add.valid_i.eq(dyn_rank_valid),
+            self.add.b.eq(self.mul.r),
+            self.add.valid_i.eq(self.mul.valid_o),
             self.update_out.rank.eq(self.add.r),
-            self.update_valid.eq(self.add.valid_o),
+            self.update_valid.eq(self.add.valid_o & self.state_ack),
             self.add.ce.eq(self.ready)
         ]
 

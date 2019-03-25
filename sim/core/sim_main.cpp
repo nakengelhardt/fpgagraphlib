@@ -41,9 +41,9 @@ int main(int argc, char **argv, char **env) {
                 std::cout << graph->partition->placement(graph->get_neighbor(i,j).dest_id) << " ";
             }
             std::cout << "\n";
+            graph->print_dot("last_graph.dot");
         }
     }
-    graph->print_dot("last_graph.dot");
 
     // add 1 for bound
     max_vertices_per_pe++;
@@ -150,6 +150,7 @@ int main(int argc, char **argv, char **env) {
                 pe[i]->putMessageToReceive(message);
             }
         }
+        network->tick();
         cycles++;
     }
 
