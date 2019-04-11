@@ -6,6 +6,7 @@ from core_address import AddressLayout
 
 import logging
 import datetime
+import math
 
 def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     max_pe = [0 for _ in range(num_pe)]
@@ -85,8 +86,17 @@ class CoreConfig:
                 adj_idx, adj_val = self.addresslayout.generate_partition_inverted(self.adj_dict)
         else:
             if use_hmc:
-                assert not self.has_edgedata
-                adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=4)
+                if self.has_edgedata:
+                    edgedatasize = self.addresslayout.edgedatasize
+                else:
+                    edgedatasize = 0
+                assert (self.addresslayout.nodeidsize + edgedatasize) <= 128
+
+                vertex_size = max(8,2**math.ceil(math.log2(self.addresslayout.nodeidsize + edgedatasize)))
+                bytes_per_edge = vertex_size//8
+                edges_per_burst = 16//bytes_per_edge
+                print("vertex_size = {}, bytes_per_edge = {}, edges_per_burst = {}".format(vertex_size, bytes_per_edge, edges_per_burst))
+                adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=edges_per_burst, bytes_per_edge=bytes_per_edge, graph=graph)
             elif use_ddr:
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=16)
@@ -107,7 +117,7 @@ class CoreConfig:
                 if node in graph:
                     self.init_nodedata[pe][localid] = convert_record_to_int(self.addresslayout.node_storage_layout, **graph.nodes[node])
 
-        if has_edgedata:
+        if has_edgedata and not use_hmc and not use_ddr:
             self.init_edgedata = [[0 for _ in range(len(adj_val[i]))] for i in range(self.addresslayout.num_pe)]
             for pe in range(self.addresslayout.num_pe):
                 for localid, (idx, length) in enumerate(adj_idx[pe]):
@@ -118,6 +128,8 @@ class CoreConfig:
                     for offset in range(length):
                         neighbor = adj_val[pe][idx+offset]
                         self.init_edgedata[pe][idx+offset] = convert_record_to_int(self.addresslayout.edge_storage_layout, **graph.get_edge_data(node, neighbor))
+        else:
+            self.init_edgedata = []
 
     def summary(self):
         return "{}: {}inverted {} with {} using {} FPGA/{} PE dataset {} partition {}\n".format(

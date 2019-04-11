@@ -160,7 +160,7 @@ class UnCore(Module):
         self.num_messages_to = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
         self.num_messages_from = [Signal(32) for _ in range(config.addresslayout.num_fpga - 1)]
 
-        if config.addresslayout.num_fpga > 1:        
+        if config.addresslayout.num_fpga > 1:
             msg_len = len(self.cores[0].network.external_network_interface_out[0].raw_bits())
 
             self.submodules.in_fifo = [ClockDomainsRenamer({"write":"stream", "read":"sys"}) (AsyncFIFO(width=msg_len, depth=64)) for j in range(config.addresslayout.num_fpga - 1)]
@@ -372,7 +372,7 @@ def export(config, filename='top'):
         export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = [PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, stream_width=128, init=(config.adj_val if config.use_hmc else []))]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, stream_width=128, init=(config.adj_val if config.use_hmc else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)]
     tb = SimTB(config)
     tb.submodules += config.platform
 
