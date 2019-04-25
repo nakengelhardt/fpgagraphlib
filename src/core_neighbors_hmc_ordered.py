@@ -38,9 +38,6 @@ class Neighbors(Module):
             self.edgedata_out = Signal(config.addresslayout.edgedatasize)
         ###
 
-
-
-
         self.submodules.get_edgelist = GetEdgelistHMC(port, vertex_size_in_bits=vertex_size)
 
         _layout = [("num_neighbors", "nodeidsize", DIR_M_TO_S),
@@ -94,6 +91,20 @@ class Neighbors(Module):
             self.neighbor_out.valid.eq(self.update_fifo.readable & ~self.update_fifo.dout.barrier & self.get_edgelist.rep.valid),
             self.get_edgelist.rep.ack.eq((self.update_fifo.readable & ~self.update_fifo.dout.barrier & self.neighbor_out.ack & last) | ~self.get_edgelist.rep.valid),
             self.update_fifo.re.eq(self.neighbor_out.ack & ((self.get_edgelist.rep.valid & self.get_edgelist.rep.last & last) | self.update_fifo.dout.barrier))
+        ]
+        # stats
+        self.num_updates_accepted = Signal(32)
+        self.num_neighbors_requested = Signal(32)
+        self.num_neighbors_issued = Signal(32)
+
+        self.sync += [
+            If(self.neighbor_in.valid & self.neighbor_in.ack,
+                self.num_updates_accepted.eq(self.num_updates_accepted + 1),
+                self.num_neighbors_requested.eq(self.num_neighbors_requested + self.neighbor_in.num_neighbors)
+            ),
+            If(self.neighbor_out.valid & self.neighbor_out.ack,
+                self.num_neighbors_issued.eq(self.num_neighbors_issued + 1)
+            )
         ]
 
     def gen_selfcheck(self, tb):
