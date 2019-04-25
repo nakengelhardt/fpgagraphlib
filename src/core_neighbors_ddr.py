@@ -15,7 +15,7 @@ _data_layout = [
     ("valid", "log_edges_per_burst")
 ]
 
-class NeighborsDDR(Module):
+class Neighbors(Module):
     def __init__(self, pe_id, config, edge_data=None, port=None):
         self.pe_id = pe_id
         self.port = port

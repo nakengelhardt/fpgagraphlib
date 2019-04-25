@@ -8,8 +8,8 @@ from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 from get_edgelist import GetEdgelistHMC
 from recordfifo import RecordFIFO
 
-class NeighborsHMC(Module):
-    def __init__(self, pe_id, config, hmc_port=None):
+class Neighbors(Module):
+    def __init__(self, pe_id, config, port=None):
         self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize
@@ -18,16 +18,16 @@ class NeighborsHMC(Module):
         else:
             edgedatasize = 0
 
-        if not hmc_port:
-            hmc_port = config.platform.getHMCPort(pe_id % config.addresslayout.num_pe_per_fpga)
+        if not port:
+            port = config.platform.getHMCPort(pe_id % config.addresslayout.num_pe_per_fpga)
 
-        self.hmc_port = hmc_port
-        effective_max_tag_size = self.hmc_port.effective_max_tag_size
+        self.port = port
+        effective_max_tag_size = self.port.effective_max_tag_size
 
         vertex_size = max(8,2**math.ceil(math.log2(nodeidsize + edgedatasize)))
         # vertex_size = 32
         vtx_offset = log2_int(vertex_size//8)
-        vertices_per_flit = len(hmc_port.rd_data)//vertex_size
+        vertices_per_flit = len(port.rd_data)//vertex_size
 
         # input
         self.neighbor_in = Record(set_layout_parameters(_neighbor_in_layout, **config.addresslayout.get_params()))
@@ -41,7 +41,7 @@ class NeighborsHMC(Module):
 
 
 
-        self.submodules.get_edgelist = GetEdgelistHMC(hmc_port, vertex_size_in_bits=vertex_size)
+        self.submodules.get_edgelist = GetEdgelistHMC(port, vertex_size_in_bits=vertex_size)
 
         _layout = [("num_neighbors", "nodeidsize", DIR_M_TO_S),
             ("sender", "nodeidsize", DIR_M_TO_S),
@@ -107,7 +107,7 @@ class NeighborsHMC(Module):
             num_cycles += 1
             if (yield self.neighbor_out.barrier):
                 level += 1
-            if (yield self.hmc_port.cmd_valid) and (yield self.hmc_port.cmd_ready):
+            if (yield self.port.cmd_valid) and (yield self.port.cmd_ready):
                 num_mem_reads += 1
             if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
                 neighbor = (yield self.neighbor_out.neighbor)

@@ -59,8 +59,8 @@ class getAnswer(Module):
 
 
 
-class NeighborsHMC(Module):
-    def __init__(self, pe_id, config, edge_data=None, hmc_port=None):
+class Neighbors(Module):
+    def __init__(self, pe_id, config, edge_data=None, port=None):
         self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         edgeidsize = config.addresslayout.edgeidsize
@@ -75,15 +75,15 @@ class NeighborsHMC(Module):
 
         assert(edgeidsize <= 32)
 
-        if not hmc_port:
-            hmc_port = config.platform.getHMCPort(pe_id % config.addresslayout.num_pe_per_fpga)
+        if not port:
+            port = config.platform.getHMCPort(pe_id % config.addresslayout.num_pe_per_fpga)
 
-        self.hmc_port = hmc_port
-        effective_max_tag_size = self.hmc_port.effective_max_tag_size
+        self.port = port
+        effective_max_tag_size = self.port.effective_max_tag_size
 
         self.comb += [
-            hmc_port.wr_data.eq(0),
-            hmc_port.wr_data_valid.eq(0)
+            port.wr_data.eq(0),
+            port.wr_data_valid.eq(0)
         ]
 
         num_injected = Signal(7)
@@ -149,9 +149,9 @@ class NeighborsHMC(Module):
         )
 
         fsm.act("GET_NEIGHBORS",
-            hmc_port.cmd_valid.eq(inject | self.tags.readable),
-            self.tags.re.eq(hmc_port.cmd_ready & ~inject),
-            If(hmc_port.cmd_valid & hmc_port.cmd_ready,
+            port.cmd_valid.eq(inject | self.tags.readable),
+            self.tags.re.eq(port.cmd_ready & ~inject),
+            If(port.cmd_valid & port.cmd_ready,
                 NextValue(current_node_idx, current_node_idx + 16),
                 If(current_node_idx + 16 >= end_node_idx,
                     NextState("IDLE")
@@ -159,9 +159,9 @@ class NeighborsHMC(Module):
             )
         )
         self.comb += [
-            hmc_port.addr.eq(current_node_idx),
+            port.addr.eq(current_node_idx),
             self.update_wr_port.adr.eq(current_tag),
-            self.update_wr_port.we.eq(hmc_port.cmd_valid),
+            self.update_wr_port.we.eq(port.cmd_valid),
             update_dat_w.message.eq(message),
             update_dat_w.sender.eq(sender),
             update_dat_w.round.eq(roundpar),
@@ -171,10 +171,10 @@ class NeighborsHMC(Module):
             ).Else(
                 update_dat_w.valid.eq(end_node_idx[2:4]-1)
             ),
-            hmc_port.clk.eq(ClockSignal()),
-            hmc_port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
-            hmc_port.size.eq(1),
-            hmc_port.tag.eq(current_tag),
+            port.clk.eq(ClockSignal()),
+            port.cmd.eq(0), #`define HMC_CMD_RD 4'b0000
+            port.size.eq(1),
+            port.tag.eq(current_tag),
         ]
 
         fsm.act("BARRIER",
@@ -191,7 +191,7 @@ class NeighborsHMC(Module):
         )
 
         # tag injection
-        self.sync += If(inject & hmc_port.cmd_ready & hmc_port.cmd_valid,
+        self.sync += If(inject & port.cmd_ready & port.cmd_valid,
             num_injected.eq(num_injected + 1)
         )
         self.comb += [
@@ -202,11 +202,11 @@ class NeighborsHMC(Module):
 
         # receive bursts from HMC - save data, put tag in queue for available answers
         self.comb += [
-            self.answer_wr_port.dat_w.eq(hmc_port.rd_data),
-            self.answer_wr_port.adr.eq(hmc_port.rd_data_tag),
-            self.answer_wr_port.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv),
-            self.answers.din.eq(hmc_port.rd_data_tag),
-            self.answers.we.eq(hmc_port.rd_data_valid & ~hmc_port.dinv)
+            self.answer_wr_port.dat_w.eq(port.rd_data),
+            self.answer_wr_port.adr.eq(port.rd_data_tag),
+            self.answer_wr_port.we.eq(port.rd_data_valid & ~port.dinv),
+            self.answers.din.eq(port.rd_data_tag),
+            self.answers.we.eq(port.rd_data_valid & ~port.dinv)
         ]
 
         # look up available answer data in memories
@@ -272,9 +272,9 @@ class NeighborsHMC(Module):
         self.num_neighbors_issued = Signal(32)
 
         self.sync += [
-            If(hmc_port.cmd_valid & hmc_port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
+            If(port.cmd_valid & port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
-            If(hmc_port.rd_data_valid & ~hmc_port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
+            If(port.rd_data_valid & ~port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
             If(neighbor_in_p.valid & neighbor_in_p.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
             If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
         ]
@@ -290,7 +290,7 @@ class NeighborsHMC(Module):
             num_cycles += 1
             if (yield self.neighbor_out.barrier):
                 level += 1
-            if (yield self.hmc_port.cmd_valid) and (yield self.hmc_port.cmd_ready):
+            if (yield self.port.cmd_valid) and (yield self.port.cmd_ready):
                 num_mem_reads += 1
             if (yield self.neighbor_out.valid) and (yield self.neighbor_out.ack):
                 neighbor = (yield self.neighbor_out.neighbor)

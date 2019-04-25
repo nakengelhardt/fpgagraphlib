@@ -16,14 +16,17 @@ def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     return max(max_pe)
 
 class CoreConfig:
-    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition="random", partition_ufactor=1, use_hmc=False, use_ddr=False, updates_in_hmc=False, inverted=False, disable_filter=False, **kwargs):
+    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition="random", partition_ufactor=1, memtype="BRAM", updates_in_hmc=False, inverted=False, disable_filter=False, **kwargs):
 
         logger = logging.getLogger('init')
 
         self.has_edgedata = has_edgedata
 
-        self.use_hmc = use_hmc
-        self.use_ddr = use_ddr
+        self.memtype = memtype
+
+        if self.has_edgedata and (self.memtype == "HMC" or self.memtype == "DDR"):
+            raise NotImplementedError
+
         self.updates_in_hmc = updates_in_hmc
         self.disable_filter = disable_filter
 
@@ -46,21 +49,19 @@ class CoreConfig:
 
         self.graph.graph['partition'] = partition
 
-        if use_hmc or use_ddr:
-            kwargs["max_edges_per_pe"] = 2**bits_for(len(graph.edges()))
-        else:
+        if memtype == "BRAM":
             kwargs["max_edges_per_pe"] = 2**bits_for(max_edges_per_pe(self.adj_dict, kwargs["num_pe"], kwargs["num_nodes_per_pe"]))
+        else:
+            kwargs["max_edges_per_pe"] = 2**bits_for(len(graph.edges()))
 
         if "nodeidsize" not in kwargs:
             kwargs["nodeidsize"] = kwargs["peidsize"] + log2_int(kwargs["num_nodes_per_pe"])
 
         if "edgeidsize" not in kwargs:
-            if use_ddr:
-                kwargs["edgeidsize"] = 32
-            elif use_hmc:
-                kwargs["edgeidsize"] = 32
-            else:
+            if memtype == "BRAM":
                 kwargs["edgeidsize"] = log2_int(kwargs["max_edges_per_pe"])
+            else:
+                kwargs["edgeidsize"] = 32
 
         self.addresslayout = AddressLayout(**kwargs)
         # Define the layouts.
@@ -76,16 +77,21 @@ class CoreConfig:
         # Set up the graph structure data
         self.inverted = inverted
         if inverted:
-            if use_hmc:
+            if memtype == "HMC":
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat_inverted(self.adj_dict, edges_per_burst=4)
-            elif use_ddr:
+            elif memtype == "HMCO":
+                raise NotImplementedError
+            elif memtype == "AXI":
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat_inverted(self.adj_dict, edges_per_burst=16)
             else:
                 adj_idx, adj_val = self.addresslayout.generate_partition_inverted(self.adj_dict)
         else:
-            if use_hmc:
+            if memtype == "HMC":
+                assert not self.has_edgedata
+                adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=4, bytes_per_edge=4)
+            elif memtype == "HMCO":
                 if self.has_edgedata:
                     edgedatasize = self.addresslayout.edgedatasize
                 else:
@@ -97,7 +103,7 @@ class CoreConfig:
                 edges_per_burst = 16//bytes_per_edge
                 print("vertex_size = {}, bytes_per_edge = {}, edges_per_burst = {}".format(vertex_size, bytes_per_edge, edges_per_burst))
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=edges_per_burst, bytes_per_edge=bytes_per_edge, graph=graph)
-            elif use_ddr:
+            elif memtype == "AXI":
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=16)
             else:
@@ -117,7 +123,7 @@ class CoreConfig:
                 if node in graph:
                     self.init_nodedata[pe][localid] = convert_record_to_int(self.addresslayout.node_storage_layout, **graph.nodes[node])
 
-        if has_edgedata and not use_hmc and not use_ddr:
+        if has_edgedata and memtype == "BRAM":
             self.init_edgedata = [[0 for _ in range(len(adj_val[i]))] for i in range(self.addresslayout.num_pe)]
             for pe in range(self.addresslayout.num_pe):
                 for localid, (idx, length) in enumerate(adj_idx[pe]):
@@ -135,8 +141,7 @@ class CoreConfig:
         return "{}: {}inverted {} with {} using {} FPGA/{} PE dataset {} partition {}\n".format(
             datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
             "" if self.inverted else "non-",
-            self.name,
-            "DDR" if self.use_ddr else "HMC" if self.use_hmc else "BRAM",
+            self.name, self.memtype,
             self.addresslayout.num_fpga, self.addresslayout.num_pe,
             self.graph.name,
             self.graph.graph['partition']

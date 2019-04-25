@@ -6,7 +6,7 @@ from migen import *
 from tbsupport import convert_record_to_int, SimCase
 from pico import PicoPlatform
 
-from core_neighbors_hmc_ordered import NeighborsHMC
+from core_neighbors_hmc_ordered import Neighbors
 from core_init import resolve_defaults, parse_cmd_args
 
 
@@ -15,7 +15,7 @@ class NeighborCase(SimCase, unittest.TestCase):
         def __init__(self):
 
             config = configparser.ConfigParser()
-            config['arch'] = { "num_pe": "1", "use_hmc": True}
+            config['arch'] = { "num_pe": "1", "memtype": "HMCO"}
             config['graph'] = { "nodes": "15", "edges":"30" }
             config['app'] = { "algo": "sssp" }
             config['logging'] = {"disable_logfile" : True }
@@ -27,7 +27,7 @@ class NeighborCase(SimCase, unittest.TestCase):
 
 
             self.config.platform = PicoPlatform(1, bus_width=32, stream_width=128, init=self.config.adj_val, init_elem_size_bytes=self.config.addresslayout.adj_val_entry_size_in_bytes)
-            self.submodules.dut = NeighborsHMC(pe_id=0, config=self.config)
+            self.submodules.dut = Neighbors(pe_id=0, config=self.config)
 
 
 

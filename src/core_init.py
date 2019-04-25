@@ -48,7 +48,7 @@ def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
     args, algo_config = extract_args(args, config, inverted)
 
     logger.info("Algorithm: " + algo_config.name)
-    logger.info("Using memory: " + ("HMC" if algo_config.use_hmc else "DDR" if algo_config.use_ddr else "BRAM"))
+    logger.info("Using memory: " + algo_config.memtype)
     logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
     logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
     logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
@@ -58,7 +58,7 @@ def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
     logger.info("num_nodes_per_pe = " + str(algo_config.addresslayout.num_nodes_per_pe))
     logger.info("max_edges_per_pe = " + str(algo_config.addresslayout.max_edges_per_pe))
     logger.info("Nodes per PE: {}".format([x+1 for x in algo_config.addresslayout.max_node_per_pe(algo_config.adj_dict)]))
-    if not algo_config.use_hmc and not algo_config.use_ddr:
+    if algo_config.memtype == "BRAM":
         logger.info("Edges per PE: {}".format([(pe, len(algo_config.adj_val[pe])) for pe in range(algo_config.addresslayout.num_pe)]))
 
     return args, algo_config
@@ -166,7 +166,10 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
 
     kwargs = dict()
     for k in config['arch']:
-        kwargs[k] = eval(config['arch'].get(k))
+        try:
+            kwargs[k] = eval(config['arch'].get(k))
+        except NameError:
+            kwargs[k] = config['arch'].get(k)
 
     if "num_channels" not in kwargs:
         kwargs["num_channels"] = 3
@@ -201,16 +204,23 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
         logger.info("Saving graph to file {}".format(graphsave))
         export_graph(g, graphsave)
 
-    if "use_hmc" not in kwargs:
-        kwargs["use_hmc"] = False
-    if "use_ddr" not in kwargs:
-        kwargs["use_ddr"] = False
+    if "memtype" not in kwargs:
+        kwargs["memtype"] = "BRAM"
+        if "use_hmc" in kwargs:
+            logger.warning("\"use_hmc\" is deprecated. Use \"memtype = HMC\" instead.")
+            if kwargs["use_hmc"]:
+                kwargs["memtype"] = "HMC"
+        if "use_ddr" in kwargs:
+            logger.warning("\"use_ddr\" is deprecated. Use \"memtype = AXI\" instead.")
+            if kwargs["use_ddr"]:
+                kwargs["memtype"] = "AXI"
+
     if "updates_in_hmc" not in kwargs:
         kwargs["updates_in_hmc"] = False
 
     kwargs["inverted"] = inverted
 
-    if kwargs["use_hmc"] and kwargs["updates_in_hmc"]:
+    if kwargs["memtype"] == "HMC" and kwargs["updates_in_hmc"]:
         raise NotImplementedError("Can't use HMC for edges in 2-phase mode")
 
     updates_in_hmc = kwargs["updates_in_hmc"] if "updates_in_hmc" in kwargs else False
@@ -226,7 +236,6 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
             kwargs["partition_ufactor"] = 1
     else:
         kwargs["partition"] = "robin"
-        
 
     if "peidsize" not in kwargs:
         kwargs["peidsize"] = bits_for(kwargs["num_pe"])
@@ -249,7 +258,7 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
         if not inverted:
             assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe
             assert len(algo_config.adj_idx[pe]) <= 2**(algo_config.addresslayout.nodeidsize - algo_config.addresslayout.peidsize)
-        if not algo_config.use_hmc and not algo_config.use_ddr:
+        if algo_config.memtype == "BRAM":
             assert len(algo_config.adj_val[pe]) <= algo_config.addresslayout.max_edges_per_pe
 
     return algo_config

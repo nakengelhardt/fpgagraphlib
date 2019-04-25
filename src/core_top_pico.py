@@ -41,10 +41,10 @@ class Core(Module):
         self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
 
 
-        if config.use_hmc:
-            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i % config.addresslayout.num_pe_per_fpga)) for i in range(pe_start, pe_end)]
-        else:
+        if config.memtype == "BRAM":
             self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
+        else:
+            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i % config.addresslayout.num_pe_per_fpga)) for i in range(pe_start, pe_end)]
 
         # connect within PEs
         self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_local_pe)]
@@ -210,14 +210,6 @@ class Top(Module):
 
         self.submodules.platform = config.platform[fpga_id]
 
-        if not config.use_hmc:
-            # for port in self.platform.picoHMCports:
-            port = self.platform.HMCports[0]
-            for field, _, dir in port.layout:
-                if field != "clk" and dir == DIR_M_TO_S:
-                    s = getattr(port, field)
-                    self.comb += s.eq(0)
-
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = self.platform.picoHMCports[i]
@@ -230,10 +222,11 @@ class Top(Module):
         for i in range(len(hmc_perf_counters)):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
-        if config.use_hmc:
-            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
-        else:
-            status_regs = []
+        # if config.memtype == "HMC" or config.memtype == "HMCO":
+        #     status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
+        # else:
+
+        status_regs = []
 
         status_regs.extend(self.uncore.num_messages_from)
         status_regs.extend(self.uncore.num_messages_to)
@@ -252,10 +245,10 @@ class Top(Module):
                     # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
                     # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
                     # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
-                    *core.network.arbiter[i].barriercounter.num_from_pe,
-                    *core.network.arbiter[i].barriercounter.num_expected_from_pe,
-                    Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
-                    core.network.arbiter[i].barriercounter.round_accepting
+                    # *core.network.arbiter[i].barriercounter.num_from_pe,
+                    # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
+                    # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
+                    # core.network.arbiter[i].barriercounter.round_accepting
                 ])
 
         status_regs_pico = [Signal(32) for _ in status_regs]
@@ -354,7 +347,7 @@ class SimTB(Module):
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga if config.use_hmc else 1, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+    config.platform = [PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
 
     m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
 
@@ -368,11 +361,12 @@ def export(config, filename='top'):
                             name=filename,
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
-    if config.use_hmc:
+    if config.memtype != "BRAM":
         export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = [PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, stream_width=128, init=(config.adj_val if config.use_hmc else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)]
+    config.platform = [PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)]
+
     tb = SimTB(config)
     tb.submodules += config.platform
 

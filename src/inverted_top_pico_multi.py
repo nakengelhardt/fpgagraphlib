@@ -201,13 +201,6 @@ class AllInOneTop(Module):
 
         self.submodules.platform = config.platform
 
-        if not config.use_hmc:
-            for port in self.platform.picoHMCports:
-                for field, _, dir in port.layout:
-                    if field != "clk" and dir == DIR_M_TO_S:
-                        s = getattr(port, field)
-                        self.comb += s.eq(0)
-
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = self.platform.picoHMCports[i]
@@ -220,7 +213,7 @@ class AllInOneTop(Module):
         for i in range(len(hmc_perf_counters)):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
-        if config.use_hmc:
+        if config.memtype == "HMC" or config.memtype == "HMCO":
             status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
         else:
             status_regs = []
@@ -378,13 +371,6 @@ class Top(Module):
 
         self.submodules.platform = config.platform[fpga_id]
 
-        if not config.use_hmc:
-            for port in self.platform.picoHMCports:
-                for field, _, dir in port.layout:
-                    if field != "clk" and dir == DIR_M_TO_S:
-                        s = getattr(port, field)
-                        self.comb += s.eq(0)
-
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = self.platform.picoHMCports[i]
@@ -430,7 +416,7 @@ class Top(Module):
                     Cat(*core.network.bc[i].barrier_from_pe),
                     core.network.bc[i].round_accepting
                 ])
-        if config.use_hmc:
+        if config.memtype == "HMC" or config.memtype == "HMCO":
             status_regs.extend([sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)])
 
 
@@ -493,7 +479,7 @@ class Top(Module):
 
 def export_one(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, stream_width=128)
+    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128
 
     m = Top(config)
     logger.info("Exporting design to file {}".format(filename + '.v'))
@@ -505,13 +491,13 @@ def export_one(config, filename='top'):
                     special_overrides=so,
                     create_clock_domains=False
                     ).write(filename + '.v')
-    if config.use_hmc:
+    if not config.memtype == "BRAM":
         export_data(config.adj_val, "adj_val.data")
 
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
+    config.platform = [PicoPlatform(config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128) for _ in range(config.addresslayout.num_fpga)]
 
     m = [Top(config, i) for i in range(config.addresslayout.num_fpga)]
 
@@ -525,11 +511,11 @@ def export(config, filename='top'):
                             name=filename,
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
-    if config.use_hmc:
+    if not config.memtype == "BRAM":
         export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.use_hmc else []))
+    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []))
     tb = AllInOneUnCore(config)
     tb.submodules += config.platform
 

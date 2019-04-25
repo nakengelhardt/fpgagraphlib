@@ -3,10 +3,6 @@ from migen.genlib.record import *
 
 from core_interfaces import *
 
-from core_neighbors import Neighbors
-from core_neighbors_hmc import NeighborsHMC
-from core_neighbors_ddr import NeighborsDDR
-
 from core_address import AddressLayout
 
 from recordfifo import *
@@ -46,13 +42,19 @@ class Scatter(Module):
         # val: array of nodeids
         # resides in submodule
 
-        if config.use_hmc:
-            self.submodules.get_neighbors = NeighborsHMC(pe_id=pe_id, config=config, hmc_port=port)
-        elif config.use_ddr:
-            self.submodules.get_neighbors = NeighborsDDR(pe_id=pe_id, config=config, port=port)
+        if config.memtype == "HMC":
+            from core_neighbors_hmc import Neighbors
+        elif config.memtype == "HMCO":
+            raise NotImplementedError
+            from core_neighbors_hmc_ordered import Neighbors
+        elif config.memtype == "AXI":
+            from core_neighbors_ddr import Neighbors
+        elif config.memtype == "BRAM":
+            from core_neighbors import Neighbors
         else:
-            self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config)
+            raise NotImplementedError
 
+        self.submodules.get_neighbors = Neighbors(pe_id=pe_id, config=config, port=port)
 
         # flow control variables
         upstream_ack = Signal()

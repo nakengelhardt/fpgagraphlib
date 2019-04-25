@@ -177,14 +177,6 @@ class Top(Module):
 
         self.submodules += config.platform
 
-        if not config.use_hmc:
-            # for port in self.platform.picoHMCports:
-            port = config.platform.HMCports[0]
-            for field, _, dir in port.layout:
-                if field != "clk" and dir == DIR_M_TO_S:
-                    s = getattr(port, field)
-                    self.comb += s.eq(0)
-
         hmc_perf_counters = [Signal(32) for _ in range(2*9)]
         for i in range(9):
             port = config.platform.picoHMCports[i]
@@ -197,7 +189,7 @@ class Top(Module):
         for i in range(len(hmc_perf_counters)):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
-        if config.use_hmc:
+        if config.memtype == "HMC" or config.memtype == "HMCO":
             status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
         else:
             status_regs = []
@@ -281,7 +273,7 @@ class Top(Module):
         ]
 
 def export(config, filename='top.v'):
-    config.platform = PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, stream_width=128)
+    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128)
 
     m = Top(config)
 
@@ -292,11 +284,11 @@ def export(config, filename='top.v'):
                     special_overrides=so,
                     create_clock_domains=False
                     ).write(filename)
-    if config.use_hmc:
+    if config.memtype != "BRAM":
         export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = PicoPlatform(config.addresslayout.num_pe if config.use_hmc else 1, bus_width=32, init=(config.adj_val if config.use_hmc else []))
+    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []))
     tb = UnCore(config)
     tb.submodules += config.platform
 

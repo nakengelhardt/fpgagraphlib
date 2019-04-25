@@ -6,7 +6,7 @@ import logging
 from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 class Neighbors(Module):
-    def __init__(self, pe_id, config):
+    def __init__(self, pe_id, config, port=None):
         self.pe_id = pe_id
         nodeidsize = config.addresslayout.nodeidsize
         num_nodes_per_pe = config.addresslayout.num_nodes_per_pe
