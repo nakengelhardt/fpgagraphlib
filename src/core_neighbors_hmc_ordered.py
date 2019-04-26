@@ -60,7 +60,7 @@ class Neighbors(Module):
             self.neighbor_in.ack.eq((self.get_edgelist.req.ack | self.neighbor_in.barrier) & self.update_fifo.writable)
         ]
 
-        mux = Signal(3)
+        mux = Signal(max=vertices_per_flit)
         last = Signal()
         self.comb += [
             last.eq(mux == self.get_edgelist.rep.nvtx - 1),
