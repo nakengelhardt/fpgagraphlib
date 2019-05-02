@@ -225,7 +225,9 @@ class Apply(Module):
         outfifo_out = Record(set_layout_parameters(_layout, **addresslayout.get_params()))
 
         if config.updates_in_hmc:
-            self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=pe_id*(1<<config.hmc_fifo_bits), end_addr=(pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform.getHMCPort(pe_id))
+            fpga_id = pe_id//config.addresslayout.num_pe_per_fpga
+            local_pe_id = pe_id % config.addresslayout.num_pe_per_fpga
+            self.submodules.outfifo = HMCBackedFIFO(width=len(outfifo_in), start_addr=local_pe_id*(1<<config.hmc_fifo_bits), end_addr=(local_pe_id + 1)*(1<<config.hmc_fifo_bits), port=config.platform[fpga_id].getHMCPort(local_pe_id))
 
             self.sync += [
                 If(self.outfifo.full, self.deadlock.eq(1))

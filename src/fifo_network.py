@@ -112,12 +112,12 @@ def rconnect(self, other, keep=None, omit=None):
     return r
 
 class MuxTree(Module):
-    def __init__(self, config, in_array, round_attr="msg.roundpar"):
+    def __init__(self, config, in_array, round_attr="msg.roundpar", fifo_depth=2):
         if len(in_array) == 0:
             raise ValueError("in_array should not be empty")
 
         mux_factor = 6
-        self.submodules.fifo = InterfaceFIFO(layout=in_array[0].layout, depth=2)
+        self.submodules.fifo = InterfaceFIFO(layout=in_array[0].layout, depth=fifo_depth)
         self.current_round = Signal(config.addresslayout.channel_bits)
 
         if len(in_array) == 1:
@@ -148,8 +148,8 @@ class MuxTree(Module):
         else:
             subgroup_length = math.ceil(len(in_array)/mux_factor)
             num_submuxes = math.ceil(len(in_array)/subgroup_length)
-            self.submodules.submux = [MuxTree(config, in_array[i*subgroup_length:min(len(in_array), (i+1)*subgroup_length)]) for i in range(num_submuxes)]
-            self.submodules.mux = MuxTree(config, [self.submux[i].interface_out for i in range(num_submuxes)])
+            self.submodules.submux = [MuxTree(config, in_array[i*subgroup_length:min(len(in_array), (i+1)*subgroup_length)], fifo_depth=fifo_depth) for i in range(num_submuxes)]
+            self.submodules.mux = MuxTree(config, [self.submux[i].interface_out for i in range(num_submuxes)], fifo_depth=fifo_depth)
             self.comb += [
                 [self.submux[i].current_round.eq(self.current_round) for i in range(num_submuxes)],
                 self.mux.current_round.eq(self.current_round)
@@ -188,13 +188,13 @@ class SimpleRoundrobin(Module):
             ]
 
 class Network(Module):
-    def __init__(self, config):
+    def __init__(self, config, fifo_depth=2):
         num_pe = config.addresslayout.num_pe
 
         self.apply_interface = [ApplyInterface(name="network_out", **config.addresslayout.get_params()) for _ in range(num_pe)]
         self.network_interface = [NetworkInterface(name="network_in", **config.addresslayout.get_params()) for _ in range(num_pe)]
 
-        fifos = [[InterfaceFIFO(layout=self.apply_interface[0].layout, depth=8) for i in range(num_pe)] for j in range(num_pe)]
+        fifos = [[InterfaceFIFO(layout=self.apply_interface[0].layout, depth=fifo_depth) for i in range(num_pe)] for j in range(num_pe)]
 
         self.submodules.fifos = fifos
 
@@ -225,7 +225,7 @@ class Network(Module):
             ]
 
 class MultiNetwork(Module):
-    def __init__(self, config, fpga_id):
+    def __init__(self, config, fpga_id, fifo_depth=2):
         self.config = config
         start_pe = fpga_id*config.addresslayout.num_pe_per_fpga
         num_local_pe = min(config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe - start_pe) #TODO: test non-equally distributed amount of PEs
@@ -240,9 +240,9 @@ class MultiNetwork(Module):
 
         self.submodules.arbiter = [Arbiter(sink, config) for sink in range(num_local_pe)]
 
-        self.submodules.per_fpga_fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="ext_link_{}_{}".format(start_pe+source, sink)) for sink in range(num_fpga)] for source in range(num_local_pe)]
+        self.submodules.per_fpga_fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=fifo_depth, name="ext_link_{}_{}".format(start_pe+source, sink)) for sink in range(num_fpga)] for source in range(num_local_pe)]
 
-        self.submodules.fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=8, name="link_{}_{}".format(start_pe+source, start_pe+sink)) for sink in range(num_local_pe)] for source in range(num_local_pe + num_fpga - 1)]
+        self.submodules.fifos = [[InterfaceFIFO(layout=self.network_interface[0].layout, depth=fifo_depth, name="link_{}_{}".format(start_pe+source, start_pe+sink)) for sink in range(num_local_pe)] for source in range(num_local_pe + num_fpga - 1)]
 
         # Synchronization
         # After the local PEs all switch to the next round, the last messages
@@ -281,7 +281,7 @@ class MultiNetwork(Module):
 
         # connect PE incoming ports
 
-        self.submodules.muxtree = [MuxTree(config, [self.fifos[source][sink].dout for source in range(num_local_pe + num_fpga - 1)]) for sink in range(num_local_pe)]
+        self.submodules.muxtree = [MuxTree(config, [self.fifos[source][sink].dout for source in range(num_local_pe + num_fpga - 1)], fifo_depth=fifo_depth) for sink in range(num_local_pe)]
 
         for sink in range(num_local_pe):
             self.comb += [

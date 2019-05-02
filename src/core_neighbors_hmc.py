@@ -265,18 +265,28 @@ class Neighbors(Module):
 
 
         # stats
-        self.num_requests_accepted = Signal(32)
         self.num_hmc_commands_issued = Signal(32)
         self.num_hmc_commands_retired = Signal(32)
         self.num_hmc_responses = Signal(32)
-        self.num_neighbors_issued = Signal(32)
 
         self.sync += [
             If(port.cmd_valid & port.cmd_ready, self.num_hmc_commands_issued.eq(self.num_hmc_commands_issued + 1)),
             If(self.answers.readable & self.answers.re, self.num_hmc_commands_retired.eq(self.num_hmc_commands_retired + 1)),
             If(port.rd_data_valid & ~port.dinv, self.num_hmc_responses.eq(self.num_hmc_responses + 1)),
-            If(neighbor_in_p.valid & neighbor_in_p.ack, self.num_requests_accepted.eq(self.num_requests_accepted + 1)),
-            If(self.neighbor_out.valid & self.neighbor_out.ack, self.num_neighbors_issued.eq(self.num_neighbors_issued + 1))
+        ]
+        
+        self.num_updates_accepted = Signal(32)
+        self.num_neighbors_requested = Signal(32)
+        self.num_neighbors_issued = Signal(32)
+
+        self.sync += [
+            If(self.neighbor_in.valid & self.neighbor_in.ack,
+                self.num_updates_accepted.eq(self.num_updates_accepted + 1),
+                self.num_neighbors_requested.eq(self.num_neighbors_requested + self.neighbor_in.num_neighbors)
+            ),
+            If(self.neighbor_out.valid & self.neighbor_out.ack,
+                self.num_neighbors_issued.eq(self.num_neighbors_issued + 1)
+            )
         ]
 
     def gen_selfcheck(self, tb):

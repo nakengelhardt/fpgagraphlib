@@ -225,20 +225,19 @@ class Top(Module):
         # if config.memtype == "HMC" or config.memtype == "HMCO":
         #     status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
         # else:
-
         status_regs = []
 
-        status_regs.extend(self.uncore.num_messages_from)
-        status_regs.extend(self.uncore.num_messages_to)
+        # status_regs.extend(self.uncore.num_messages_from)
+        # status_regs.extend(self.uncore.num_messages_to)
 
         for core in self.uncore.cores:
             for i in range(config.addresslayout.num_pe_per_fpga):
                 status_regs.extend([
                     # core.scatter[i].barrierdistributor.total_num_messages_in,
                     # core.scatter[i].barrierdistributor.total_num_messages,
-                    core.apply[i].level,
+                    # core.apply[i].level,
                     #core.apply[i].gatherapplykernel.num_triangles,
-                    #core.scatter[i].get_neighbors.num_neighbors_issued,
+                    core.scatter[i].get_neighbors.num_neighbors_issued
                     #core.apply[i].outfifo.max_level,
                     # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
                     # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
@@ -362,7 +361,7 @@ def export(config, filename='top'):
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
     if config.memtype != "BRAM":
-        export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
+        export_data(config.adj_val, "adj_val.data", data_size=config.addresslayout.adj_val_entry_size_in_bytes*8, backup=config.alt_adj_val_data_name)
 
 def sim(config):
     config.platform = [PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)]

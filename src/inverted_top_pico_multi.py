@@ -387,20 +387,20 @@ class Top(Module):
         for core in self.uncore.cores:
             for i in range(config.addresslayout.num_pe_per_fpga):
                 status_regs.extend([
-                    core.apply[i].barrierdistributor.total_num_updates,
+                    # core.apply[i].barrierdistributor.total_num_updates,
                     # core.scatter[i].barrierdistributor.total_num_messages_in,
                     # core.scatter[i].barrierdistributor.total_num_messages,
                     core.apply[i].level,
                     #core.apply[i].gatherapplykernel.num_triangles,
                     # core.scatter[i].get_neighbors.num_updates_accepted,
-                    *core.network.num_messages_to,
+                    # *core.network.num_messages_to,
                     # *self.uncore.num_messages_to,
                     # *self.uncore.num_messages_from,
                     # *self.uncore.out_fifo_in,
                     # *self.uncore.out_fifo_out,
                     # *[f.level for f in self.uncore.out_fifo],
                     # *[Cat(f.readable, f.re, f.writable, f.we) for f in self.uncore.out_fifo],
-                    *core.network.num_messages_from,
+                    # *core.network.num_messages_from,
                     # *self.uncore.in_fifo_in,
                     # *self.uncore.in_fifo_out,
                     # *[f.level for f in self.uncore.in_fifo],
@@ -413,12 +413,12 @@ class Top(Module):
                     # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
                     # *core.network.bc[i].num_from_pe,
                     # *core.network.bc[i].num_expected_from_pe,
-                    Cat(*core.network.bc[i].barrier_from_pe),
-                    core.network.bc[i].round_accepting
+                    # Cat(*core.network.bc[i].barrier_from_pe),
+                    # core.network.bc[i].round_accepting
                 ])
-        if config.memtype == "HMC" or config.memtype == "HMCO":
-            status_regs.extend([sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)])
 
+        # if config.memtype == "HMC" or config.memtype == "HMCO":
+        #     status_regs.extend([sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)])
 
         status_regs_pico = [Signal(32) for _ in status_regs]
         for i in range(len(status_regs)):
@@ -479,7 +479,7 @@ class Top(Module):
 
 def export_one(config, filename='top'):
     logger = logging.getLogger('config')
-    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128
+    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128)
 
     m = Top(config)
     logger.info("Exporting design to file {}".format(filename + '.v'))

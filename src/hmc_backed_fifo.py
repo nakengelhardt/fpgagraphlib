@@ -73,12 +73,12 @@ class HMCBackedFIFO(Module):
         # issue commands
         self.comb += [
             If(do_rd,
-                self.port.cmd.eq(HMC_CMD_RD),
+                self.port.cmd.eq(port.HMC_CMD_RD),
                 self.port.addr[word_offset:].eq(word_start_addr + rd_ptr),
                 self.port.cmd_valid.eq(no_hazard),
                 self.writable.eq(0)
             ).Elif(~self.full,
-                self.port.cmd.eq(HMC_CMD_WR_NP),
+                self.port.cmd.eq(port.HMC_CMD_WR_NP),
                 self.port.addr[word_offset:].eq(word_start_addr + wr_ptr),
                 self.port.cmd_valid.eq(self.we & no_hazard),
                 self.writable.eq(no_hazard & self.port.cmd_ready)
@@ -95,7 +95,7 @@ class HMCBackedFIFO(Module):
         self.sync += [
             If(self.port.cmd_ready & self.port.cmd_valid,
                 self.tag_in_use[tag].eq(1),
-                If(self.port.cmd == HMC_CMD_RD,
+                If(self.port.cmd == port.HMC_CMD_RD,
                     _inc(rd_ptr, mem_area_size),
                     level.eq(level-1)
                 ).Else(

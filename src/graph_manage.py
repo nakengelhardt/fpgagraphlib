@@ -5,6 +5,8 @@ import random_connected_graph
 from migen import bits_for
 import logging
 import os
+import numpy
+from tabulate import tabulate
 
 logger = logging.getLogger('graph_generate')
 
@@ -164,6 +166,15 @@ def print_balance(g, pe, num_nodes_per_pe):
 
 def print_stats(g):
     print(nx.info(g))
+    # print("Diameter: {}".format(nx.diameter(g)))
+    degrees = numpy.array([g.degree(n) for n in g])
+    print("Degree range: {}-{}".format(degrees.min(), degrees.max()))
+    print("Standard deviation of degrees: {:.2f}".format(numpy.std(degrees)))
+    print("Histogram:")
+    # bins = [1 << i for i in range(1,bits_for(int(degrees.max())), 2)]
+    hist, bin_edges = numpy.histogram(degrees, bins = 6)#, bins=bins)
+    fmt_bin_edges = ["{:.1f}-{:.1f}".format(bin_edges[i], bin_edges[i+1]) for i in range(len(bin_edges)-1)]
+    print(tabulate([hist], fmt_bin_edges))
 
     if nx.number_of_nodes(g) < 30:
         print("Vertices: ", sorted(g.nodes(data=True)))

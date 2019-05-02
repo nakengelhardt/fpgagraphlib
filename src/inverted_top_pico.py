@@ -189,31 +189,31 @@ class Top(Module):
         for i in range(len(hmc_perf_counters)):
             self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
 
-        if config.memtype == "HMC" or config.memtype == "HMCO":
-            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
-        else:
-            status_regs = []
-            for core in self.uncore.cores:
-                for i in range(num_pe):
-                    status_regs.extend([
-                        core.apply[i].barrierdistributor.total_num_updates,
-                        # core.scatter[i].barrierdistributor.total_num_messages_in,
-                        core.scatter[i].get_neighbors.num_updates_accepted,
-                        core.scatter[i].get_neighbors.num_neighbors_issued,
-                        core.apply[i].level,
-                        #core.apply[i].gatherapplykernel.num_triangles,
-                        core.scatter[i].get_neighbors.num_neighbors_issued,
-                        #core.apply[i].outfifo.max_level,
-                        # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
-                        # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
-                        # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
-                        # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
-                        # *core.network.arbiter[i].barriercounter.num_from_pe,
-                        # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
-                        # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
-                        # core.network.arbiter[i].barriercounter.round_accepting
-                    ])
+        # if config.memtype == "HMC" or config.memtype == "HMCO":
+        #     status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
+        # else:
+        status_regs = []
+        for core in self.uncore.cores:
+            for i in range(num_pe):
+                status_regs.extend([
+                    # core.apply[i].barrierdistributor.total_num_updates,
+                    # core.scatter[i].barrierdistributor.total_num_messages_in,
+                    # core.scatter[i].get_neighbors.num_updates_accepted,
+                    # core.scatter[i].get_neighbors.num_neighbors_issued,
+                    core.apply[i].level,
+                    #core.apply[i].gatherapplykernel.num_triangles,
+                    # core.scatter[i].get_neighbors.num_neighbors_issued,
+                    #core.apply[i].outfifo.max_level,
+                    # *core.scatter[i].barrierdistributor.prev_num_msgs_since_last_barrier,
+                    # Cat(core.scatter[i].network_interface.valid, core.scatter[i].network_interface.ack, core.scatter[i].network_interface.msg.barrier, core.scatter[i].network_interface.msg.roundpar),
+                    # Cat(core.apply[i].apply_interface.valid, core.apply[i].apply_interface.ack, core.apply[i].apply_interface.msg.barrier, core.apply[i].apply_interface.msg.roundpar),
+                    # Cat(core.network.arbiter[i].barriercounter.apply_interface_in.valid, core.network.arbiter[i].barriercounter.apply_interface_in.ack, core.network.arbiter[i].barriercounter.apply_interface_in.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_in.msg.roundpar),
+                    # Cat(core.network.arbiter[i].barriercounter.apply_interface_out.valid, core.network.arbiter[i].barriercounter.apply_interface_out.ack, core.network.arbiter[i].barriercounter.apply_interface_out.msg.barrier, core.network.arbiter[i].barriercounter.apply_interface_out.msg.roundpar),
+                    # *core.network.arbiter[i].barriercounter.num_from_pe,
+                    # *core.network.arbiter[i].barriercounter.num_expected_from_pe,
+                    # Cat(*core.network.arbiter[i].barriercounter.barrier_from_pe),
+                    # core.network.arbiter[i].barriercounter.round_accepting
+                ])
 
         status_regs_pico = [Signal(32) for _ in status_regs]
         for i in range(len(status_regs)):

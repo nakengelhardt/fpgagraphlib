@@ -4,6 +4,7 @@ from migen.fhdl import verilog
 import struct
 import os
 from contextlib import contextmanager
+from misc import pack
 
 class SimCase:
     def setUp(self, *args, **kwargs):
@@ -93,11 +94,25 @@ def cd(newdir):
     finally:
         os.chdir(prevdir)
 
-def export_data(adj_val, filename, backup=None):
-   with open(filename, 'wb') as f1:
-    if backup:
-        f2 = open(backup, 'wb')
-    for x in adj_val:
-        f1.write(struct.pack('=I', x))
+def export_data(adj_val, filename, data_size=32, backup=None):
+    data = []
+    if data_size > 32:
+        assert data_size % 32 == 0
+        word_per_vtx = data_size//32
+        for x in adj_val:
+            for i in word_per_vtx:
+                data.append(x & 0xFFFFFFFF)
+                x >>= 32
+    if data_size < 32:
+        assert 32 % data_size == 0
+        vtx_per_word = 32//data_size
+        for i in range(len(adj_val)//vtx_per_word):
+            data.append(pack(adj_val[i*vtx_per_word:(i+1)*vtx_per_word], wordsize=data_size))
+
+    with open(filename, 'wb') as f1:
         if backup:
-            f2.write(struct.pack('=I', x))
+            f2 = open(backup, 'wb')
+        for x in data:
+            f1.write(struct.pack('=I', x))
+            if backup:
+                f2.write(struct.pack('=I', x))
