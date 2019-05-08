@@ -108,6 +108,8 @@ def export_data(adj_val, filename, data_size=32, backup=None):
         vtx_per_word = 32//data_size
         for i in range(len(adj_val)//vtx_per_word):
             data.append(pack(adj_val[i*vtx_per_word:(i+1)*vtx_per_word], wordsize=data_size))
+    if data_size == 32:
+        data = adj_val
 
     with open(filename, 'wb') as f1:
         if backup:
