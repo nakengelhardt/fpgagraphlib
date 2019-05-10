@@ -16,7 +16,7 @@ def max_edges_per_pe(adj_dict, num_pe, num_nodes_per_pe):
     return max(max_pe)
 
 class CoreConfig:
-    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition="random", partition_ufactor=1, memtype="BRAM", updates_in_hmc=False, inverted=False, disable_filter=False, **kwargs):
+    def __init__(self, graph, node_storage_layout, update_layout, message_layout, edge_storage_layout=None, has_edgedata=False, partition="random", partition_ufactor=1, memtype="BRAM", updates_in_hmc=False, inverted=False, filter=False, **kwargs):
 
         logger = logging.getLogger('init')
 
@@ -28,7 +28,7 @@ class CoreConfig:
             raise NotImplementedError
 
         self.updates_in_hmc = updates_in_hmc
-        self.disable_filter = disable_filter
+        self.filter = filter
 
         logger.info("Partition: {}".format(partition))
         if partition == "metis":
@@ -81,7 +81,17 @@ class CoreConfig:
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat_inverted(self.adj_dict, edges_per_burst=4)
             elif memtype == "HMCO":
-                raise NotImplementedError
+                if self.has_edgedata:
+                    edgedatasize = self.addresslayout.edgedatasize
+                else:
+                    edgedatasize = 0
+                assert (self.addresslayout.nodeidsize + edgedatasize) <= 128
+
+                vertex_size = max(8,2**math.ceil(math.log2(self.addresslayout.nodeidsize + edgedatasize)))
+                bytes_per_edge = vertex_size//8
+                edges_per_burst = 8*16//bytes_per_edge
+                print("vertex_size = {}, bytes_per_edge = {}, edges_per_burst = {}".format(vertex_size, bytes_per_edge, edges_per_burst))
+                adj_idx, adj_val = self.addresslayout.generate_partition_flat_inverted(self.adj_dict, edges_per_burst=edges_per_burst, bytes_per_edge=bytes_per_edge, graph=graph)
             elif memtype == "AXI":
                 assert not self.has_edgedata
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat_inverted(self.adj_dict, edges_per_burst=16)
@@ -100,7 +110,7 @@ class CoreConfig:
 
                 vertex_size = max(8,2**math.ceil(math.log2(self.addresslayout.nodeidsize + edgedatasize)))
                 bytes_per_edge = vertex_size//8
-                edges_per_burst = 16//bytes_per_edge
+                edges_per_burst = 8*16//bytes_per_edge
                 print("vertex_size = {}, bytes_per_edge = {}, edges_per_burst = {}".format(vertex_size, bytes_per_edge, edges_per_burst))
                 adj_idx, adj_val = self.addresslayout.generate_partition_flat(self.adj_dict, edges_per_burst=edges_per_burst, bytes_per_edge=bytes_per_edge, graph=graph)
             elif memtype == "AXI":

@@ -133,10 +133,17 @@ class AddressLayout:
 
         return adj_idx, adj_val
 
-    def generate_partition_flat_inverted(self, adj_dict, edges_per_burst=1, bytes_per_edge=4):
+    def generate_partition_flat_inverted(self, adj_dict, edges_per_burst=1, bytes_per_edge=4, graph=None):
+        if hasattr(self, "edgedatasize"):
+            edgedatasize = self.edgedatasize
+        else:
+            edgedatasize = 0
+        assert (self.nodeidsize + edgedatasize) <= bytes_per_edge*8
         len_nodes = self.max_node(adj_dict) + 1
         adj_idx = [[(0,0) for _ in range(len_nodes)] for pe in range(self.num_pe)]
         adj_val = []
+
+        self.adj_val_entry_size_in_bytes = bytes_per_edge
 
         for node, neighbors in adj_dict.items():
             subneighbors = [list() for _ in range(self.num_pe)]
@@ -147,7 +154,10 @@ class AddressLayout:
                 idx = len(adj_val)
                 n = len(subneighbors[pe])
                 adj_idx[pe][node] = (idx*bytes_per_edge, n)
-                adj_val.extend(subneighbors[pe])
+                if edgedatasize > 0:
+                    adj_val.extend([convert_record_to_int([('vtx', self.nodeidsize), ('data', edgedatasize)], vtx=v, data=convert_record_to_int(self.edge_storage_layout, **graph.get_edge_data(node, v))) for v in subneighbors[pe]])
+                else:
+                    adj_val.extend(subneighbors[pe])
                 if len(subneighbors[pe]) % edges_per_burst != 0:
                     adj_val.extend(0 for _ in range(edges_per_burst-(len(subneighbors[pe]) % edges_per_burst)))
         return adj_idx, adj_val

@@ -16,10 +16,8 @@ from pico import PicoPlatform
 from core_init import init_parse
 
 from recordfifo import RecordFIFO
-from core_interfaces import Message
-from fifo_network import Network, MultiNetwork
-from core_apply import Apply
-from core_scatter import Scatter
+from core_interfaces import Message, ApplyInterface
+
 
 class Core(Module):
     def __init__(self, config, fpga_id):
@@ -28,34 +26,58 @@ class Core(Module):
         self.pe_end = pe_end = min((fpga_id+1)*config.addresslayout.num_pe_per_fpga, config.addresslayout.num_pe)
         num_local_pe = pe_end - pe_start
 
-        if config.has_edgedata:
-            init_edgedata = config.init_edgedata
+        if config.inverted:
+            from inverted_apply import Apply
+            from inverted_scatter import Scatter
         else:
-            init_edgedata = [None for _ in range(num_local_pe)]
-
-        if config.addresslayout.num_fpga == 1:
-            self.submodules.network = Network(config)
-        else:
-            self.submodules.network = MultiNetwork(config, fpga_id)
+            from core_apply import Apply
+            from core_scatter import Scatter
 
         self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
-
 
         if config.memtype == "BRAM":
             self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
         else:
-            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i % config.addresslayout.num_pe_per_fpga)) for i in range(pe_start, pe_end)]
+            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i-pe_start)) for i in range(pe_start, pe_end)]
 
-        # connect within PEs
-        self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_local_pe)]
 
-        # connect to network
-        self.comb += [self.network.apply_interface[i].connect(self.apply[i].apply_interface) for i in range(num_local_pe)]
-        self.comb += [self.scatter[i].network_interface.connect(self.network.network_interface[i]) for i in range(num_local_pe)]
+        if config.inverted:
+            if config.addresslayout.num_fpga == 1:
+                from inverted_network import UpdateNetwork
+                self.submodules.network = UpdateNetwork(config)
+            else:
+                from inverted_network_multi import UpdateNetwork
+                self.submodules.network = UpdateNetwork(config, fpga_id)
+
+            # connect among PEs
+
+            for i in range(num_local_pe):
+                self.comb += [
+                    self.apply[i].scatter_interface.connect(self.network.apply_interface_in[i]),
+                    self.network.scatter_interface_out[i].connect(self.scatter[i].scatter_interface)
+                ]
+        else:
+            from core_apply import Apply
+            from core_scatter import Scatter
+            from fifo_network import Network, MultiNetwork
+            if config.addresslayout.num_fpga == 1:
+                self.submodules.network = Network(config)
+            else:
+                self.submodules.network = MultiNetwork(config, fpga_id)
+
+            # connect within PEs
+            self.comb += [self.apply[i].scatter_interface.connect(self.scatter[i].scatter_interface) for i in range(num_local_pe)]
+
+            # connect to network
+            self.comb += [self.network.apply_interface[i].connect(self.apply[i].apply_interface) for i in range(num_local_pe)]
+            self.comb += [self.scatter[i].network_interface.connect(self.network.network_interface[i]) for i in range(num_local_pe)]
 
         # state of calculation
         self.global_inactive = Signal()
-        self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
+        if config.inverted:
+            self.comb += self.global_inactive.eq(self.network.inactive)
+        else:
+            self.comb += self.global_inactive.eq(reduce(and_, [pe.inactive for pe in self.apply]))
 
         self.kernel_error = Signal()
         self.comb += self.kernel_error.eq(reduce(or_, [pe.gatherapplykernel.kernel_error for pe in self.apply]))
@@ -65,10 +87,21 @@ class Core(Module):
 
         self.total_num_messages = Signal(32)
         self.comb += [
-            self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
+            self.total_num_messages.eq(sum(s.total_num_messages for s in self.scatter))
         ]
-
-        start_message = [a.start_message for a in self.network.arbiter]
+        if config.inverted:
+            start_message = [ApplyInterface(name="start_message", **config.addresslayout.get_params()) for i in range(num_local_pe)]
+            for i in range(num_local_pe):
+                start_message[i].select = Signal()
+                self.comb += [
+                    If(start_message[i].select,
+                        start_message[i].connect(self.apply[i].apply_interface)
+                    ).Else(
+                        self.scatter[i].apply_interface.connect(self.apply[i].apply_interface)
+                    )
+                ]
+        else:
+            start_message = [a.start_message for a in self.network.arbiter]
         assert len(start_message) == num_local_pe
 
         injected = [Signal() for i in range(num_local_pe)]
@@ -107,36 +140,57 @@ class Core(Module):
         logger = logging.getLogger('sim.barriermonitor')
         num_pe = self.pe_end - self.pe_start
         num_cycles = 0
-        while not (yield self.global_inactive):
-            num_cycles += 1
-            for i in range(num_pe):
-                if ((yield self.apply[i].apply_interface.valid)
-                    and (yield self.apply[i].apply_interface.ack)):
-                    if (yield self.apply[i].apply_interface.msg.barrier):
-                        logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(i))
-                    # else:
-                    #     logger.debug(str(num_cycles) + ": Message for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
-                if ((yield self.apply[i].gatherapplykernel.valid_in)
-                    and (yield self.apply[i].gatherapplykernel.ready)):
-                    if (yield self.apply[i].level) % self.config.addresslayout.num_channels != (yield self.apply[i].gatherapplykernel.round_in):
-                        logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].gatherapplykernel.round_in), (yield self.apply[i].level)))
-                if ((yield self.apply[i].scatter_interface.barrier)
-                    and (yield self.apply[i].scatter_interface.valid)
-                    and (yield self.apply[i].scatter_interface.ack)):
-                    logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(i))
-                if ((yield self.scatter[i].scatter_interface.valid)
-                    and (yield self.scatter[i].scatter_interface.ack)):
-                    if (yield self.scatter[i].scatter_interface.barrier):
-                        logger.debug(str(num_cycles) + ": Barrier enters Scatter on PE " + str(i))
-                    # else:
-                    #     logger.debug(str(num_cycles) + ": Scatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
-                if ((yield self.scatter[i].barrierdistributor.network_interface_in.valid)
-                    and (yield self.scatter[i].barrierdistributor.network_interface_in.ack)):
-                    if (yield self.scatter[i].barrierdistributor.network_interface_in.msg.barrier):
-                        logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(i))
-                    # else:
-                    #     logger.debug(str(num_cycles) + ": Message for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
-            yield
+        if tb.config.inverted:
+            while not (yield tb.global_inactive):
+                num_cycles += 1
+                for a in self.apply:
+                    if ((yield a.apply_interface.valid) and (yield a.apply_interface.ack)):
+                        if (yield a.apply_interface.msg.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(a.pe_id))
+                    if (yield a.gatherapplykernel.valid_in) and (yield a.gatherapplykernel.ready):
+                        if (yield a.level) % self.config.addresslayout.num_channels != (yield a.gatherapplykernel.round_in):
+                            logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield a.gatherapplykernel.round_in), (yield a.level)))
+                    if ((yield a.scatter_interface.msg.barrier) and (yield a.scatter_interface.valid) and (yield a.scatter_interface.ack)):
+                        logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(a.pe_id))
+                for s in self.scatter:
+                    if ((yield s.scatter_interface.valid) and (yield s.scatter_interface.ack)):
+                        if (yield s.scatter_interface.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier enters Scatter on PE " + str(s.pe_id))
+                    if ((yield s.apply_interface.valid) and (yield s.apply_interface.ack)):
+                        if (yield s.apply_interface.msg.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
+                yield
+        else:
+            while not (yield self.global_inactive):
+                num_cycles += 1
+                for i in range(num_pe):
+                    if ((yield self.apply[i].apply_interface.valid)
+                        and (yield self.apply[i].apply_interface.ack)):
+                        if (yield self.apply[i].apply_interface.msg.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier enters Apply on PE " + str(i))
+                        # else:
+                        #     logger.debug(str(num_cycles) + ": Message for node {} (apply)".format((yield self.apply[i].apply_interface.msg.dest_id)))
+                    if ((yield self.apply[i].gatherapplykernel.valid_in)
+                        and (yield self.apply[i].gatherapplykernel.ready)):
+                        if (yield self.apply[i].level) % self.config.addresslayout.num_channels != (yield self.apply[i].gatherapplykernel.round_in):
+                            logger.warning("{}: received message's parity ({}) does not match current round ({})".format(num_cycles, (yield self.apply[i].gatherapplykernel.round_in), (yield self.apply[i].level)))
+                    if ((yield self.apply[i].scatter_interface.barrier)
+                        and (yield self.apply[i].scatter_interface.valid)
+                        and (yield self.apply[i].scatter_interface.ack)):
+                        logger.debug(str(num_cycles) + ": Barrier exits Apply on PE " + str(i))
+                    if ((yield self.scatter[i].scatter_interface.valid)
+                        and (yield self.scatter[i].scatter_interface.ack)):
+                        if (yield self.scatter[i].scatter_interface.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier enters Scatter on PE " + str(i))
+                        # else:
+                        #     logger.debug(str(num_cycles) + ": Scatter from node {}".format((yield self.scatter[i].scatter_interface.sender)))
+                    if ((yield self.scatter[i].barrierdistributor.network_interface_in.valid)
+                        and (yield self.scatter[i].barrierdistributor.network_interface_in.ack)):
+                        if (yield self.scatter[i].barrierdistributor.network_interface_in.msg.barrier):
+                            logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(i))
+                        # else:
+                        #     logger.debug(str(num_cycles) + ": Message for node {} (scatter)".format((yield self.scatter[i].network_interface.msg.dest_id)))
+                yield
 
 
 class UnCore(Module):
@@ -364,10 +418,10 @@ def export(config, filename='top'):
         export_data(config.adj_val, "adj_val.data", data_size=config.addresslayout.adj_val_entry_size_in_bytes*8, backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = [PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)]
+    config.platform = [PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes) for _ in range(config.addresslayout.num_fpga)]
 
     tb = SimTB(config)
-    tb.submodules += config.platform
+    tb.submodules += [p.logic for p in config.platform]
 
     generators = config.platform[0].getSimGenerators()
     for i in range(1, len(config.platform)):
@@ -385,7 +439,7 @@ def sim(config):
 
 
 def main():
-    args, config = init_parse(cmd_choices=("sim", "export", "export_one"))
+    args, config = init_parse(cmd_choices=("sim", "export"))
 
     logger = logging.getLogger('config')
 
@@ -397,11 +451,6 @@ def main():
         if args.output:
             filename = args.output
         export(config, filename=filename)
-    elif args.command=='export_one':
-        filename = "top"
-        if args.output:
-            filename = args.output
-        export_one(config, filename=filename)
     else:
         logger.error("Unrecognized command")
         raise NotImplementedError

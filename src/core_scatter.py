@@ -154,3 +154,5 @@ class Scatter(Module):
             self.barrierdistributor.network_interface_out.connect(self.outfifo.din),
             self.outfifo.dout.connect(self.network_interface)
         ]
+
+        self.total_num_messages = self.barrierdistributor.total_num_messages

@@ -285,10 +285,10 @@ def export(config, filename='top.v'):
                     create_clock_domains=False
                     ).write(filename)
     if config.memtype != "BRAM":
-        export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
+        export_data(config.adj_val, "adj_val.data", data_size=config.addresslayout.adj_val_entry_size_in_bytes*8, backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []))
+    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes)
     tb = UnCore(config)
     tb.submodules += config.platform
 

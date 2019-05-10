@@ -37,7 +37,7 @@ def parse_cmd_args(args, cmd_choices):
     parser.add_argument('-o', '--output', help="output file name to save verilog export (valid with command 'export' only)")
     return parser.parse_args(args)
 
-def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
+def init_parse(args=None, cmd_choices=("sim", "export"), inverted=None):
     args = parse_cmd_args(args, cmd_choices)
 
     if args.configfiles:
@@ -45,10 +45,11 @@ def init_parse(args=None, cmd_choices=("sim", "export"), inverted=False):
     else:
         config = read_config_files()
 
-    args, algo_config = extract_args(args, config, inverted)
+    args, algo_config = extract_args(args, config, inverted=inverted)
 
     logger.info("Algorithm: " + algo_config.name)
     logger.info("Using memory: " + algo_config.memtype)
+    logger.info("Using architecture: " + "M" if algo_config.inverted else "S")
     logger.info("nodeidsize = {}".format(algo_config.addresslayout.nodeidsize))
     logger.info("edgeidsize = {}".format(algo_config.addresslayout.edgeidsize))
     logger.info("peidsize = {}".format(algo_config.addresslayout.peidsize))
@@ -76,7 +77,7 @@ class ANSIColorFormatter(logging.Formatter):
         color = self.LOG_COLORS.get(record.levelname, "")
         return "{}{}\033[0m".format(color, super().format(record))
 
-def extract_args(args, config, inverted):
+def extract_args(args, config, inverted=None):
     graphfile = None
     num_nodes = None
     num_edges = None
@@ -102,12 +103,12 @@ def extract_args(args, config, inverted):
         s = 42
     random.seed(s)
 
-    algo_config = resolve_defaults(config, inverted=inverted, graphfile=graphfile, num_nodes=num_nodes, num_edges=num_edges, digraph=args.digraph, graphsave=graphsave, sim=(args.command == 'sim'))
+    algo_config = resolve_defaults(config, graphfile=graphfile, num_nodes=num_nodes, num_edges=num_edges, digraph=args.digraph, graphsave=graphsave, sim=(args.command == 'sim'), inverted=inverted)
 
     return args, algo_config
 
 
-def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num_edges=None, digraph=False, graphsave=None, sim=True):
+def resolve_defaults(config, graphfile=None, num_nodes=None, num_edges=None, digraph=False, graphsave=None, sim=True, inverted=None):
     if not graphfile and not num_nodes:
         if 'graphfile' in config['graph']:
             graphfile = config['graph'].get('graphfile')
@@ -218,7 +219,17 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
     if "updates_in_hmc" not in kwargs:
         kwargs["updates_in_hmc"] = False
 
-    kwargs["inverted"] = inverted
+    if inverted != None:
+        kwargs["inverted"] = inverted
+    elif "arch" in kwargs:
+        if kwargs["arch"] == "S":
+            kwargs["inverted"] = False
+        elif kwargs["arch"] == "M":
+            kwargs["inverted"] = True
+        else:
+            ValueError("Unknown architecture \"{}\"".format(kwargs["arch"]))
+    else:
+        kwargs["inverted"] = (kwargs["num_fpga"] > 1)
 
     if kwargs["memtype"] == "HMC" and kwargs["updates_in_hmc"]:
         raise NotImplementedError("Can't use HMC for edges in 2-phase mode")
@@ -255,7 +266,7 @@ def resolve_defaults(config, inverted=False, graphfile=None, num_nodes=None, num
     algo_config.hmc_fifo_bits = 20 if sim else 32-bits_for(algo_config.addresslayout.num_pe-1)
 
     for pe in range(algo_config.addresslayout.num_pe):
-        if not inverted:
+        if not kwargs["inverted"]:
             assert len(algo_config.adj_idx[pe]) <= algo_config.addresslayout.num_nodes_per_pe
             assert len(algo_config.adj_idx[pe]) <= 2**(algo_config.addresslayout.nodeidsize - algo_config.addresslayout.peidsize)
         if algo_config.memtype == "BRAM":

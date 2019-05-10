@@ -45,7 +45,6 @@ class Scatter(Module):
         if config.memtype == "HMC":
             from core_neighbors_hmc import Neighbors
         elif config.memtype == "HMCO":
-            raise NotImplementedError
             from core_neighbors_hmc_ordered import Neighbors
         elif config.memtype == "AXI":
             from core_neighbors_ddr import Neighbors

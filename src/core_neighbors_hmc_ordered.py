@@ -48,6 +48,7 @@ class Neighbors(Module):
         self.submodules.update_fifo = RecordFIFO(layout=set_layout_parameters(_layout, **config.addresslayout.get_params()), depth=64)
 
         self.comb += [
+
             self.get_edgelist.req.start_address.eq(self.neighbor_in.start_idx),
             self.get_edgelist.req.end_address.eq(self.neighbor_in.start_idx + (self.neighbor_in.num_neighbors << vtx_offset)),
             self.update_fifo.din.num_neighbors.eq(self.neighbor_in.num_neighbors),
@@ -55,9 +56,9 @@ class Neighbors(Module):
             self.update_fifo.din.message.eq(self.neighbor_in.message),
             self.update_fifo.din.round.eq(self.neighbor_in.round),
             self.update_fifo.din.barrier.eq(self.neighbor_in.barrier),
-            self.update_fifo.we.eq((self.neighbor_in.valid & self.get_edgelist.req.ack) | self.neighbor_in.barrier),
-            self.get_edgelist.req.valid.eq(self.neighbor_in.valid & self.update_fifo.writable),
-            self.neighbor_in.ack.eq((self.get_edgelist.req.ack | self.neighbor_in.barrier) & self.update_fifo.writable)
+            self.update_fifo.we.eq(((self.neighbor_in.valid & self.neighbor_in.num_neighbors > 0) & self.get_edgelist.req.ack) | self.neighbor_in.barrier),
+            self.get_edgelist.req.valid.eq((self.neighbor_in.valid & self.neighbor_in.num_neighbors > 0) & self.update_fifo.writable),
+            self.neighbor_in.ack.eq((self.get_edgelist.req.ack | (self.neighbor_in.num_neighbors == 0) | self.neighbor_in.barrier) & self.update_fifo.writable)
         ]
 
         mux = Signal(max=vertices_per_flit)

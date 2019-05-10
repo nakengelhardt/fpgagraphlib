@@ -29,15 +29,13 @@ class Core(Module):
         self.pe_start = pe_start
         num_local_pe = pe_end - pe_start
 
-        if config.has_edgedata:
-            init_edgedata = config.init_edgedata
-        else:
-            init_edgedata = [None for _ in range(num_local_pe)]
-
 
         self.submodules.apply = [Apply(config, i) for i in range(pe_start, pe_end)]
 
-        self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i-pe_start)) for i in range(pe_start, pe_end)]
+        if config.memtype == "BRAM":
+            self.submodules.scatter = [Scatter(i, config) for i in range(pe_start, pe_end)]
+        else:
+            self.submodules.scatter = [Scatter(i, config, port=config.platform[fpga_id].getHMCPort(i-pe_start)) for i in range(pe_start, pe_end)]
 
         self.submodules.network = UpdateNetwork(config, fpga_id)
 
@@ -131,157 +129,6 @@ class Core(Module):
                     if (yield s.apply_interface.msg.barrier):
                         logger.debug(str(num_cycles) + ": Barrier exits Scatter on PE " + str(s.pe_id))
             yield
-
-class AllInOneUnCore(Module):
-    def __init__(self, config):
-        self.config = config
-        num_pe = config.addresslayout.num_pe
-
-        self.submodules.cores = [Core(config, i) for i in range(config.addresslayout.num_fpga)]
-
-        self.start = Signal()
-        self.done = Signal()
-        self.kernel_error = Signal()
-        self.deadlock = Signal()
-        self.global_inactive = Signal()
-        self.total_num_messages = Signal(32)
-        self.cycle_count = Signal(64)
-
-        self.comb += [
-            self.global_inactive.eq(reduce(and_, (core.global_inactive for core in self.cores))),
-            self.done.eq(reduce(and_, (core.done for core in self.cores))),
-            [core.start.eq(self.start) for core in self.cores],
-            self.kernel_error.eq(reduce(or_, (core.kernel_error for core in self.cores))),
-            self.deadlock.eq(reduce(or_, (core.deadlock for core in self.cores))),
-            self.total_num_messages.eq(sum(core.total_num_messages for core in self.cores)),
-            self.cycle_count.eq(self.cores[0].cycle_count)
-        ]
-
-        # inter-core communication
-        for i in range(config.addresslayout.num_fpga):
-            core_idx = 0
-            for j in range(config.addresslayout.num_fpga - 1):
-                if i == j:
-                    core_idx += 1
-                if j < i:
-                    if_idx = i - 1
-                else:
-                    if_idx = i
-                # print("Connecting core {} out {} to core {} in {}".format(i, j, core_idx, if_idx))
-                self.comb += self.cores[i].network.external_network_interface_out[j].connect(self.cores[core_idx].network.external_network_interface_in[if_idx])
-                core_idx += 1
-
-
-    def gen_simulation(self, tb):
-        yield self.start.eq(1)
-        while not (yield self.global_inactive):
-            yield
-        logger = logging.getLogger('sim.start')
-        logger.info("Total number of messages: {}".format((yield self.total_num_messages)))
-        logger.info("Kernel error: {}".format((yield self.kernel_error)))
-
-
-    def gen_network_stats(self):
-        num_cycles = 0
-        with open("{}.net_stats.{}pe.{}groups.{}delay.log".format(self.config.name, self.config.addresslayout.num_pe, self.config.addresslayout.pe_groups, self.config.addresslayout.inter_pe_delay), 'w') as netstatsfile:
-            netstatsfile.write("Cycle\tNumber of messages sent\n")
-            while not (yield self.global_inactive):
-                num_cycles += 1
-                num_msgs = 0
-                for core in self.cores:
-                    for scatter in core.scatter:
-                        if (yield scatter.network_interface.valid) and (yield scatter.network_interface.ack):
-                            num_msgs += 1
-                netstatsfile.write("{}\t{}\n".format(num_cycles, num_msgs))
-                yield
-
-class AllInOneTop(Module):
-    def __init__(self, config):
-        self.submodules.uncore = AllInOneUnCore(config)
-
-        self.submodules.platform = config.platform
-
-        hmc_perf_counters = [Signal(32) for _ in range(2*9)]
-        for i in range(9):
-            port = self.platform.picoHMCports[i]
-            self.sync += [
-                If(port.cmd_valid & port.cmd_ready, hmc_perf_counters[i].eq(hmc_perf_counters[i]+1)),
-                If(port.rd_data_valid & ~port.dinv, hmc_perf_counters[i+9].eq(hmc_perf_counters[i+9]+1))
-            ]
-
-        hmc_perf_counters_pico = [Signal(32) for _ in hmc_perf_counters]
-        for i in range(len(hmc_perf_counters)):
-            self.specials += MultiReg(hmc_perf_counters[i], hmc_perf_counters_pico[i], odomain="bus")
-
-        if config.memtype == "HMC" or config.memtype == "HMCO":
-            status_regs = [sr for core in self.uncore.cores for n in core.scatter for sr in (n.get_neighbors.num_requests_accepted, n.get_neighbors.num_hmc_commands_issued, n.get_neighbors.num_hmc_responses, n.get_neighbors.num_hmc_commands_retired)]
-        else:
-            status_regs = []
-            for core in self.uncore.cores:
-                for i in range(config.addresslayout.num_pe_per_fpga):
-                    status_regs.extend([
-                        core.apply[i].level
-                    ])
-
-        status_regs_pico = [Signal(32) for _ in status_regs]
-        for i in range(len(status_regs)):
-            self.specials += MultiReg(status_regs[i], status_regs_pico[i], odomain="bus")
-
-        cycle_count_pico = Signal(len(self.uncore.cycle_count))
-        self.specials += MultiReg(self.uncore.cycle_count, cycle_count_pico, odomain="bus")
-
-        total_num_messages_pico = Signal(len(self.uncore.total_num_messages))
-        self.specials += MultiReg(self.uncore.total_num_messages, total_num_messages_pico, odomain="bus")
-
-        start_pico = Signal()
-        start_pico.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(start_pico, self.uncore.start, odomain="sys")
-        ]
-
-        done_pico = Signal()
-        self.uncore.done.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(self.uncore.done, done_pico, odomain="bus")
-        ]
-
-        kernel_error_pico = Signal()
-        self.uncore.kernel_error.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(self.uncore.kernel_error, kernel_error_pico, odomain="bus")
-        ]
-
-        deadlock_pico = Signal()
-        self.uncore.deadlock.attr.add("no_retiming")
-        self.specials += [
-            MultiReg(self.uncore.deadlock, deadlock_pico, odomain="bus")
-        ]
-
-        self.bus = self.platform.getBus()
-
-        self.sync.bus += [
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10000),
-                self.bus.PicoDataOut.eq(cycle_count_pico)
-            ),
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10004),
-                self.bus.PicoDataOut.eq(Cat(done_pico, kernel_error_pico, deadlock_pico))
-            ),
-            If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10008),
-                self.bus.PicoDataOut.eq(total_num_messages_pico)
-            ),
-            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10010 + i*4),
-                self.bus.PicoDataOut.eq(csr)
-            ) for i, csr in enumerate(hmc_perf_counters_pico)],
-            [If( self.bus.PicoRd & (self.bus.PicoAddr == 0x10100 + i*4),
-                self.bus.PicoDataOut.eq(csr)
-            ) for i, csr in enumerate(status_regs_pico)],
-            If( self.bus.PicoWr & (self.bus.PicoAddr == 0x20000),
-                start_pico.eq(1)
-            )
-        ]
-
-
-
 
 class UnCore(Module):
     def __init__(self, config, fpga_id):
@@ -477,23 +324,42 @@ class Top(Module):
             )
         ]
 
-def export_one(config, filename='top'):
-    logger = logging.getLogger('config')
-    config.platform = PicoPlatform(0 if config.memtype == "BRAM" else config.addresslayout.num_pe_per_fpga, create_hmc_ios=True, bus_width=32, stream_width=128)
+class SimTB(Module):
+    def __init__(self, config):
+        self.config = config
 
-    m = Top(config)
-    logger.info("Exporting design to file {}".format(filename + '.v'))
+        self.submodules.cores = [Core(config, i) for i in range(config.addresslayout.num_fpga)]
 
-    so = dict(migen.build.xilinx.common.xilinx_special_overrides)
-    verilog.convert(m,
-                    name=filename,
-                    ios=config.platform.get_ios(),
-                    special_overrides=so,
-                    create_clock_domains=False
-                    ).write(filename + '.v')
-    if not config.memtype == "BRAM":
-        export_data(config.adj_val, "adj_val.data")
+        self.global_inactive = reduce(and_, (core.global_inactive for core in self.cores))
+        self.kernel_error = reduce(and_, [core.kernel_error for core in self.cores])
+        self.deadlock = reduce(and_, [core.deadlock for core in self.cores])
+        self.total_num_messages = sum(core.total_num_messages for core in self.cores)
+        self.start = Signal()
 
+        self.comb += [core.start.eq(self.start) for core in self.cores]
+
+        # inter-core communication
+        for i in range(config.addresslayout.num_fpga):
+            core_idx = 0
+            for j in range(config.addresslayout.num_fpga - 1):
+                if i == j:
+                    core_idx += 1
+                if j < i:
+                    if_idx = i - 1
+                else:
+                    if_idx = i
+                # print("Connecting core {} out {} to core {} in {}".format(i, j, core_idx, if_idx))
+                self.comb += self.cores[i].network.external_network_interface_out[j].connect(self.cores[core_idx].network.external_network_interface_in[if_idx])
+                core_idx += 1
+
+
+    def gen_simulation(self, tb):
+        yield self.start.eq(1)
+        while not (yield self.global_inactive):
+            yield
+        logger = logging.getLogger('sim.start')
+        logger.info("Total number of messages: {}".format((yield self.total_num_messages)))
+        logger.info("Kernel error: {}".format((yield self.kernel_error)))
 
 def export(config, filename='top'):
     logger = logging.getLogger('config')
@@ -512,14 +378,19 @@ def export(config, filename='top'):
                             ios=config.platform[i].get_ios()
                             ).write(filename + ".v")
     if not config.memtype == "BRAM":
-        export_data(config.adj_val, "adj_val.data", backup=config.alt_adj_val_data_name)
+        export_data(config.adj_val, "adj_val.data", data_size=config.addresslayout.adj_val_entry_size_in_bytes*8, backup=config.alt_adj_val_data_name)
 
 def sim(config):
-    config.platform = PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []))
-    tb = AllInOneUnCore(config)
-    tb.submodules += config.platform
+    config.platform = [PicoPlatform(config.addresslayout.num_pe, bus_width=32, init=(config.adj_val if config.memtype != "BRAM" else []), init_elem_size_bytes=config.addresslayout.adj_val_entry_size_in_bytes) for _ in range(config.addresslayout.num_fpga)]
 
-    generators = config.platform.getSimGenerators()
+    tb = SimTB(config)
+    tb.submodules += [p.logic for p in config.platform]
+
+    generators = config.platform[0].getSimGenerators()
+    for i in range(1, len(config.platform)):
+        g = config.platform[i].getSimGenerators()
+        for cd in generators:
+            generators[cd].extend(g[cd])
 
     generators["sys"].extend([core.gen_barrier_monitor(tb) for core in tb.cores])
     generators["sys"].extend(get_simulators(tb, 'gen_selfcheck', tb))
@@ -531,7 +402,7 @@ def sim(config):
 
 
 def main():
-    args, config = init_parse(inverted=True, cmd_choices=("sim", "export", "export_one"))
+    args, config = init_parse(inverted=True, cmd_choices=("sim", "export"))
 
     logger = logging.getLogger('config')
 
@@ -543,11 +414,6 @@ def main():
         if args.output:
             filename = args.output
         export(config, filename=filename)
-    elif args.command=='export_one':
-        filename = "top"
-        if args.output:
-            filename = args.output
-        export_one(config, filename=filename)
     else:
         logger.error("Unrecognized command")
         raise NotImplementedError
