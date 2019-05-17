@@ -50,12 +50,12 @@ class Core(Module):
                 self.submodules.network = UpdateNetwork(config, fpga_id)
 
             # connect among PEs
-
             for i in range(num_local_pe):
                 self.comb += [
                     self.apply[i].scatter_interface.connect(self.network.apply_interface_in[i]),
                     self.network.scatter_interface_out[i].connect(self.scatter[i].scatter_interface)
                 ]
+            # connection within PEs is done at start_message
         else:
             from core_apply import Apply
             from core_scatter import Scatter
