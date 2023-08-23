@@ -4,7 +4,7 @@ from migen.genlib.fifo import *
 
 import logging
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 
 _data_layout = [

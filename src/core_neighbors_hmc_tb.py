@@ -5,7 +5,7 @@ import migen.build.xilinx.common
 from migen.genlib.fifo import SyncFIFO, AsyncFIFO
 from migen.genlib.cdc import *
 
-from pico import PicoPlatform
+from util.pico import PicoPlatform
 
 from core_neighbors_hmc import NeighborsHMC
 

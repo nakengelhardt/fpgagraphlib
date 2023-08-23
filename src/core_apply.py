@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 from migen.genlib.fifo import SyncFIFO
-from recordfifo import InterfaceFIFO
+from util.recordfifo import InterfaceFIFO
 from tbsupport import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
@@ -37,7 +37,11 @@ class Apply(Module):
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
         # local node data storage
-        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), num_valid_nodes, init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
+        mem_size = num_valid_nodes
+        mem_init = config.init_nodedata[pe_id]
+        # mem_size = num_nodes_per_pe
+        # mem_init.extend([0] * (num_nodes_per_pe - len(config.init_nodedata[pe_id])))
+        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), mem_size, init=mem_init if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 
@@ -233,7 +237,7 @@ class Apply(Module):
                 If(self.outfifo.full, self.deadlock.eq(1))
             ]
         else:
-            self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=num_valid_nodes)
+            self.submodules.outfifo = SyncFIFO(width=len(outfifo_in), depth=mem_size)
             self.comb += self.deadlock.eq(~self.outfifo.writable)
 
         self.comb += [

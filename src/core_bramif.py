@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 from migen.genlib.fifo import *
-from recordfifo import *
+from util.recordfifo import *
 from tbsupport import *
 
 from collections import Iterable

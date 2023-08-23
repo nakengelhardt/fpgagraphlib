@@ -1,6 +1,5 @@
 
 import networkx as nx
-import nxmetis
 import random_connected_graph
 from migen import bits_for
 import logging
@@ -98,6 +97,7 @@ def relabel_with_parts(g, parts):
     return g, 2**peid_offset
 
 def partition_metis(g, fpga, pe, ufactor=1):
+    import nxmetis
     logger.debug("Dividing into {} partitions, ufactor: {}".format(fpga, ufactor))
     ug = g.to_undirected()
     for node in ug.nodes():

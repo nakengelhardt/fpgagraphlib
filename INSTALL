@@ -1,12 +1,16 @@
 GraVF requires:
- - Python 3.6
- - Migen (https://github.com/m-labs/migen)
- - NetworkX (https://networkx.github.io/)
- - Metis (http://glaros.dtc.umn.edu/gkhome/metis/metis/overview)
- - NetworkX-METIS (https://networkx-metis.readthedocs.io)
- - repository 'util' (https://github.com/nakengelhardt/util)
+ - Python 3.6 with:
+    - Migen (https://github.com/m-labs/migen)
+    - NetworkX (https://networkx.github.io/)
+    And optionally:
+    - Metis (http://glaros.dtc.umn.edu/gkhome/metis/metis/overview)
+    - NetworkX-METIS (https://networkx-metis.readthedocs.io)
+
+ - repository 'util' (https://github.com/nakengelhardt/util) (now a git submodule)
 
 It is recommended to use pyenv to manage python environments. (https://github.com/pyenv/pyenv)
+
+Quick solution: pip install -r requirements.txt
 
 Detailed installation instructions for Ubuntu:
 
@@ -34,12 +38,12 @@ $ exec "$SHELL"
 
 - get python version
 
-$ pyenv install 3.6.5
+$ pyenv install 3.6.15
 
 - set local python version for GraVF
 
 $ cd <...>/fpgagraphlib
-$ pyenv local 3.6.5
+$ pyenv local 3.6
 
 Migen:
 
@@ -53,7 +57,7 @@ $ echo 'export PYTHONPATH="$HOME/migen:$PYTHONPATH"' >> ~/.bashrc
 
 NetworkX:
 
-- use pip within a folder where python-version is declared to be 3.6.5 (e.g. fpgagraphlib)
+- use pip within a folder where python-version is declared to be 3.6 (e.g. fpgagraphlib)
 - (to check, type pyenv version)
 
 $ pip install networkx
@@ -75,7 +79,7 @@ $ sudo make install
 
 NetworkX-METIS:
 
-- If it works, use pip within a folder where python-version is declared to be 3.6.5 (e.g. fpgagraphlib)
+- If it works, use pip within a folder where python-version is declared to be 3.6 (e.g. fpgagraphlib)
 - (to check, type pyenv version)
 
 $ pip install networkx-metis
@@ -86,12 +90,14 @@ $ pip install networkx-metis
 
 $ git clone https://github.com/networkx/networkx-metis.git
 $ cd networkx-metis
-$ pyenv local 3.6.5
-$ python setup.py install
+$ pyenv local 3.6
+$ pip install -e .
 
+other dependencies:
+
+$ pip install numpy
+$ pip install tabulate
 
 util:
 
-$ git clone https://github.com/nakengelhardt/util.git ~/util
-
-$ echo 'export PYTHONPATH="$HOME/util:$PYTHONPATH"' >> ~/.bashrc
+$ git submodule update --init --recursive

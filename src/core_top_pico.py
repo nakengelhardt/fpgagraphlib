@@ -11,11 +11,11 @@ import logging
 from functools import reduce
 from operator import or_, and_
 
-from pico import PicoPlatform
+from util.pico import PicoPlatform
 
 from core_init import init_parse
 
-from recordfifo import RecordFIFO
+from util.recordfifo import RecordFIFO
 from core_interfaces import Message, ApplyInterface
 
 

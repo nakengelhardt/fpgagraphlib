@@ -13,7 +13,7 @@ import os
 
 from core_init import init_parse
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import Message
 from tkb_alt_network import Network
 from core_apply import Apply

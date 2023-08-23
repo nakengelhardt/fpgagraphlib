@@ -7,7 +7,7 @@ from operator import and_
 import logging
 import math
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import *
 from core_barriercounter import Barriercounter
 

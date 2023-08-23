@@ -5,7 +5,7 @@ import migen.build.xilinx.common
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import *
 
-from pico import PicoPlatform
+from util.pico import PicoPlatform
 
 from hmc_backed_fifo import HMCBackedFIFO
 

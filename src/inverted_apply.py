@@ -1,7 +1,7 @@
 from migen import *
 from migen.genlib.record import *
 from migen.genlib.fifo import SyncFIFO
-from recordfifo import InterfaceFIFO
+from util.recordfifo import InterfaceFIFO
 from tbsupport import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message

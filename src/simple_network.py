@@ -1,7 +1,7 @@
 from migen import *
 
 from migen.genlib.roundrobin import *
-from recordfifo import RecordFIFO
+from util.recordfifo import RecordFIFO
 
 from core_interfaces import ApplyInterface, Message, NetworkInterface
 

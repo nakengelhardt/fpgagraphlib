@@ -6,7 +6,7 @@ import math
 
 from core_interfaces import _neighbor_in_layout, _neighbor_out_layout
 from get_edgelist import GetEdgelistHMC
-from recordfifo import RecordFIFO
+from util.recordfifo import RecordFIFO
 
 class Neighbors(Module):
     def __init__(self, pe_id, config, port=None):

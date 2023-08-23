@@ -10,7 +10,7 @@ from functools import reduce
 from operator import and_
 
 from core_init import init_parse
-from recordfifo import RecordFIFO
+from util.recordfifo import RecordFIFO
 from core_interfaces import Message
 
 from core_interfaces import Message
@@ -49,11 +49,11 @@ class Core(Module):
             self.total_num_messages.eq(sum(scatter.barrierdistributor.total_num_messages for scatter in self.scatter))
         ]
 
-        # I/O interface
-        internal_mem_ports = [a.external_wr_port for a in self.apply]
-        internal_mem_ports.extend([s.wr_port_idx for s in self.scatter])
-        internal_mem_ports.extend([s.get_neighbors.wr_port_val for s in self.scatter])
-        self.submodules.bramio = BRAMIO(start_addr=config.start_addr, endpoints=internal_mem_ports)
+        # # I/O interface
+        # internal_mem_ports = [a.external_wr_port for a in self.apply]
+        # internal_mem_ports.extend([s.wr_port_idx for s in self.scatter])
+        # internal_mem_ports.extend([s.get_neighbors.wr_port_val for s in self.scatter])
+        # self.submodules.bramio = BRAMIO(start_addr=config.start_addr, endpoints=internal_mem_ports)
         self.init_complete = Signal()
 
     def gen_barrier_monitor(self, tb):

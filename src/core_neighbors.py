@@ -24,13 +24,17 @@ class Neighbors(Module):
 
         # adjacency list storage (second half of CSR storage, index comes from input)
         # val: array of nodeids
-        self.specials.mem_val = Memory(nodeidsize, len(config.adj_val[pe_id]) + 2, name="edge_csr_val", init=config.adj_val[pe_id])
+        mem_size = len(config.adj_val[pe_id]) + 2
+        mem_init = config.adj_val[pe_id]
+        # mem_size = 1 << (mem_size - 1).bit_length()
+        # mem_init.extend([0] * (mem_size - len(mem_init)))
+        self.specials.mem_val = Memory(nodeidsize, mem_size, name="edge_csr_val", init=config.adj_val[pe_id])
         # self.specials.mem_val = Memory(nodeidsize, max_edges_per_pe, init=adj_val)
         self.specials.rd_port_val = rd_port_val = self.mem_val.get_port(has_re=True)
         self.specials.wr_port_val = self.mem_val.get_port(write_capable=True)
 
         if config.has_edgedata:
-            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, len(config.adj_val[pe_id]) + 2, init=config.init_edgedata[pe_id])
+            self.specials.mem_edge = Memory(config.addresslayout.edgedatasize, mem_size, init=config.init_edgedata[pe_id].extend([0] * (mem_size - len(mem_init))))
             self.specials.rd_port_edge = rd_port_edge = self.mem_edge.get_port(has_re=True)
             self.specials.wr_port_edge = self.mem_edge.get_port(write_capable=True)
 

@@ -16,7 +16,7 @@ import random
 
 from core_init import init_parse
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import *
 from fifo_plus_network import Network
 from core_apply import Apply

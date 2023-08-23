@@ -4,7 +4,7 @@ import configparser
 
 from migen import *
 from tbsupport import convert_record_to_int, SimCase
-from pico import PicoPlatform
+from util.pico import PicoPlatform
 
 from core_neighbors_hmc_ordered import Neighbors
 from core_init import resolve_defaults, parse_cmd_args

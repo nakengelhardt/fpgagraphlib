@@ -6,7 +6,7 @@ from functools import reduce
 from operator import and_
 import logging
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import _network_layout, ApplyInterface, NetworkInterface
 from core_barriercounter import Barriercounter
 

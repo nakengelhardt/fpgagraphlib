@@ -1,7 +1,7 @@
 from migen import *
 
 from core_interfaces import *
-from recordfifo import *
+from util.recordfifo import *
 
 class BarrierDistributorApply(Module):
     def __init__(self, config):

@@ -4,7 +4,7 @@ from migen.fhdl import verilog
 import struct
 import os
 from contextlib import contextmanager
-from misc import pack
+from util.misc import pack
 
 class SimCase:
     def setUp(self, *args, **kwargs):

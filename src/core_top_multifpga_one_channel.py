@@ -14,7 +14,7 @@ import os
 
 from core_init import init_parse
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import Message
 from one_channel_network import Network
 from core_apply import Apply

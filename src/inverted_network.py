@@ -4,7 +4,7 @@ from migen.genlib.roundrobin import *
 from functools import reduce
 from operator import and_
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import *
 from inverted_barriercounter import Barriercounter
 

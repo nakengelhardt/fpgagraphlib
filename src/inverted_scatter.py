@@ -5,7 +5,7 @@ from core_interfaces import *
 
 from core_address import AddressLayout
 
-from recordfifo import *
+from util.recordfifo import *
 from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):

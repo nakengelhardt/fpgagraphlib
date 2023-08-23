@@ -4,7 +4,7 @@ from migen.genlib.fifo import *
 from migen.genlib.fsm import *
 
 from core_interfaces import ApplyInterface, Message, _msg_layout
-from recordfifo import *
+from util.recordfifo import *
 
 from functools import reduce
 from operator import and_

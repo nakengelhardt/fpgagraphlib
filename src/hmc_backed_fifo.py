@@ -2,7 +2,7 @@ from migen import *
 from tbsupport import *
 from migen.genlib.fifo import SyncFIFO, _inc
 
-from pico import *
+from util.pico import *
 
 class HMCBackedFIFO(Module):
     def __init__(self, width, start_addr, end_addr, port):

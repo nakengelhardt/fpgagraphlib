@@ -2,9 +2,9 @@ from migen import *
 from tbsupport import *
 from migen.fhdl import verilog
 
-from recordfifo import *
+from util.recordfifo import *
 
-from pico import *
+from util.pico import *
 
 from hmc_backed_fifo import HMCBackedFIFO
 

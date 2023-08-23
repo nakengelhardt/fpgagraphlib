@@ -5,7 +5,7 @@ from functools import reduce
 from operator import and_
 import logging
 
-from recordfifo import *
+from util.recordfifo import *
 from core_interfaces import *
 from inverted_barriercounter import Barriercounter
 

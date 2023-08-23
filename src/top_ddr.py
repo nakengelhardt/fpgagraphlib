@@ -11,7 +11,7 @@ from functools import reduce
 from operator import and_, or_
 
 from core_init import init_parse
-from recordfifo import RecordFIFO
+from util.recordfifo import RecordFIFO
 from core_interfaces import Message
 
 from core_interfaces import Message, ApplyInterface
