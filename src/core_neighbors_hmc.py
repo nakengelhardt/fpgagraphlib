@@ -2,6 +2,8 @@ from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 
+from util.mem import FullyInitMemory
+
 import logging
 
 _data_layout = [
@@ -95,10 +97,10 @@ class Neighbors(Module):
 
         self.submodules.tags = SyncFIFO(6, 2**effective_max_tag_size)
         self.submodules.answers = SyncFIFO(6, 2**effective_max_tag_size)
-        self.specials.answerbuffer = Memory(128, 2**effective_max_tag_size)
+        self.specials.answerbuffer = FullyInitMemory(128, 2**effective_max_tag_size)
         self.specials.answer_rd_port = self.answerbuffer.get_port(has_re=True)
         self.specials.answer_wr_port = self.answerbuffer.get_port(write_capable=True)
-        self.specials.updatebuffer = Memory(len(update_dat_w), 2**effective_max_tag_size)
+        self.specials.updatebuffer = FullyInitMemory(len(update_dat_w), 2**effective_max_tag_size)
         self.specials.update_rd_port = self.updatebuffer.get_port(has_re=True)
         self.specials.update_wr_port = self.updatebuffer.get_port(write_capable=True)
 

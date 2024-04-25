@@ -4,6 +4,8 @@ from migen.genlib.fifo import SyncFIFO, _inc
 
 from util.pico import *
 
+from util.mem import FullyInitMemory
+
 class HMCBackedFIFO(Module):
     def __init__(self, width, start_addr, end_addr, port):
         self.submodules.port = HMCPortWriteUnifier(port)
@@ -56,7 +58,7 @@ class HMCBackedFIFO(Module):
         self.comb += tag.eq(self.port.addr[word_offset:word_offset+tag_sz])
 
         # reorder buffer for returned results
-        self.specials.reorder_buffer = Memory(width, num_tags)
+        self.specials.reorder_buffer = FullyInitMemory(width, num_tags)
         self.specials.wr_port = wr_port = self.reorder_buffer.get_port(write_capable=True, mode=READ_FIRST)
         self.specials.rd_port = rd_port = self.reorder_buffer.get_port(async_read=True, mode=READ_FIRST)
         reorderbuffer_valid = Array(Signal() for _ in range(num_tags))

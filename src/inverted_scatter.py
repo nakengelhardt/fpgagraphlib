@@ -6,6 +6,7 @@ from core_interfaces import *
 from core_address import AddressLayout
 
 from util.recordfifo import *
+from util.mem import FullyInitMemory
 from core_barrierdistributor import BarrierDistributor
 
 class Scatter(Module):
@@ -35,7 +36,7 @@ class Scatter(Module):
 
         # CSR edge storage: (idx, val) tuple of arrays
         # idx: array of (start_adr, num_neighbors)
-        self.specials.mem_idx = Memory(edgeidsize*2, max(2, len(config.adj_idx[pe_id])), name="edge_csr_idx", init=_pack_adj_idx(config.adj_idx[pe_id]))
+        self.specials.mem_idx = FullyInitMemory(edgeidsize*2, max(2, len(config.adj_idx[pe_id])), name="edge_csr_idx", init=_pack_adj_idx(config.adj_idx[pe_id]))
         self.specials.rd_port_idx = rd_port_idx = self.mem_idx.get_port(has_re=True)
         self.specials.wr_port_idx = wr_port_idx = self.mem_idx.get_port(write_capable=True)
 

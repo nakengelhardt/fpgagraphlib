@@ -4,6 +4,8 @@ from migen.genlib.record import *
 from migen.genlib.roundrobin import *
 from migen.genlib.fifo import *
 
+from util.mem import FullyInitMemory
+
 import logging
 import random
 
@@ -29,7 +31,7 @@ class FakeDDR(Module):
             init.append(data)
         depth = len(init)
 
-        self.specials.mem = Memory(width=len(port.rdata), depth=depth, init=init)
+        self.specials.mem = FullyInitMemory(width=len(port.rdata), depth=depth, init=init)
         self.specials.rd_port = self.mem.get_port(has_re=True)
 
         self.comb += [

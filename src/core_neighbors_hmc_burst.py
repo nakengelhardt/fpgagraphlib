@@ -2,6 +2,8 @@ from migen import *
 from migen.genlib.fsm import FSM, NextState, NextValue
 from migen.genlib.fifo import SyncFIFO
 
+from util.mem import FullyInitMemory
+
 import logging
 import math
 
@@ -180,8 +182,8 @@ class NeighborsHMC(Module):
         ]
 
         # buffers
-        self.specials.answerbuffer = Memory(flit_size, max_flit_in_burst*2**effective_max_tag_size)
+        self.specials.answerbuffer = FullyInitMemory(flit_size, max_flit_in_burst*2**effective_max_tag_size)
         self.specials.answer_rd_port = self.answerbuffer.get_port(async_read=True, mode=READ_FIRST)
         self.specials.answer_wr_port = self.answerbuffer.get_port(write_capable=True, mode=READ_FIRST)
-        self.specials.updatebuffer = Memory(len(update_dat_w), 2**effective_max_tag_size)
+        self.specials.updatebuffer = FullyInitMemory(len(update_dat_w), 2**effective_max_tag_size)
         self.specials.update_rd_port = self.updatebuffer.get_port(async_read=True, mode=READ_FIRST)

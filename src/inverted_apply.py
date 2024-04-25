@@ -2,6 +2,7 @@ from migen import *
 from migen.genlib.record import *
 from migen.genlib.fifo import SyncFIFO
 from util.recordfifo import InterfaceFIFO
+from util.mem import FullyInitMemory
 from tbsupport import *
 
 from core_interfaces import ApplyInterface, ScatterInterface, Message
@@ -38,7 +39,7 @@ class Apply(Module):
         self.comb += self.apply_interface.connect(apply_interface_in_fifo.din)
 
         # local node data storage
-        self.specials.mem = Memory(layout_len(addresslayout.node_storage_layout), num_valid_nodes, init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
+        self.specials.mem = FullyInitMemory(layout_len(addresslayout.node_storage_layout), num_valid_nodes, init=config.init_nodedata[pe_id] if config.init_nodedata else None, name="vertex_data_{}".format(self.pe_id))
         rd_port = self.specials.rd_port = self.mem.get_port(has_re=True)
         wr_port = self.specials.wr_port = self.mem.get_port(write_capable=True)
 

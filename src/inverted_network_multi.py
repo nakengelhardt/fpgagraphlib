@@ -6,6 +6,7 @@ from operator import and_
 import logging
 
 from util.recordfifo import *
+from util.mem import FullyInitMemory
 from core_interfaces import *
 from inverted_barriercounter import Barriercounter
 
@@ -65,7 +66,7 @@ class RecipientFilter(Module):
                 if config.addresslayout.fpga_adr(neighbor) == dest_fpga:
                     neighbor_filter[node] = 0
 
-        self.specials.filter_store = Memory(width=1, depth=max_node + 1, init=neighbor_filter)
+        self.specials.filter_store = FullyInitMemory(width=1, depth=max_node + 1, init=neighbor_filter)
         self.specials.rd_port = self.filter_store.get_port(async_read=True)
 
         self.filter = Signal()
